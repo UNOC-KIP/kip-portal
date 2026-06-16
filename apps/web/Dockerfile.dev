@@ -1,0 +1,23 @@
+FROM node:20-alpine
+WORKDIR /repo
+
+RUN apk add --no-cache openssl
+
+RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
+
+# Install deps first (better layer caching)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+COPY packages/db/package.json ./packages/db/
+COPY packages/shared/package.json ./packages/shared/
+
+RUN pnpm install --frozen-lockfile
+
+# Copy source (apps/web is volume-mounted in dev for hot reload)
+COPY packages/ ./packages/
+COPY apps/web/ ./apps/web/
+
+RUN pnpm --filter @kip/db generate
+
+CMD ["pnpm", "--filter", "@kip/web", "dev"]

@@ -1,0 +1,17 @@
+node_modules/
+.pnpm-store/
+.next/
+dist/
+build/
+*.log
+.env
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
+.turbo/
+coverage/
+.vscode/
+.idea/
+*.tsbuildinfo
+.pnpm-debug.log*

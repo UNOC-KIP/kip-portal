@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 4%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+
+    /* primary = brand-400 #facc15 yellow */
+    --primary: 48 96% 53%;
+    --primary-foreground: 0 0% 0%;
+
+    /* secondary = ink-100 #f3f3f3 */
+    --secondary: 0 0% 95%;
+    --secondary-foreground: 0 0% 4%;
+
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 42%;
+
+    /* accent = brand-100 */
+    --accent: 55 97% 88%;
+    --accent-foreground: 0 0% 4%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* border = ink-300 #bdbdbd */
+    --border: 0 0% 74%;
+    --input: 0 0% 74%;
+    --ring: 48 96% 53%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar width tokens */
+    --sidebar-width: 14rem;
+    --sidebar-width-icon: 4rem;
+
+    /* --font-sans is injected by next/font at the body level — do not define here */
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 48 96% 53%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 65%;
+    --accent: 0 0% 15%;
+    --accent-foreground: 0 0% 95%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 95%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 48 96% 53%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}

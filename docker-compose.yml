@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kip-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kip_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-kip_portal}
+    ports:
+      - "5433:5432"
+    volumes:
+      - kip-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kip} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    working_dir: /repo
+    command: sh -c "pnpm --filter @kip/db generate && pnpm db:migrate && pnpm db:seed"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kip}:${POSTGRES_PASSWORD:-kip_dev_password}@postgres:5432/${POSTGRES_DB:-kip_portal}?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile.dev
+    working_dir: /repo
+    volumes:
+      - ./apps/api/src:/repo/apps/api/src
+      - ./packages/db/prisma:/repo/packages/db/prisma
+      - ./packages/shared/src:/repo/packages/shared/src
+    ports:
+      - "4000:4000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kip}:${POSTGRES_PASSWORD:-kip_dev_password}@postgres:5432/${POSTGRES_DB:-kip_portal}?schema=public
+      NODE_ENV: development
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile.dev
+    working_dir: /repo
+    volumes:
+      - ./apps/web:/repo/apps/web
+      - web_node_modules:/repo/apps/web/node_modules
+      - web_next_cache:/repo/apps/web/.next
+      - ./packages/shared/src:/repo/packages/shared/src
+    ports:
+      - "3000:3000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kip}:${POSTGRES_PASSWORD:-kip_dev_password}@postgres:5432/${POSTGRES_DB:-kip_portal}?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      EMAIL_SERVER_HOST: mailhog
+      EMAIL_SERVER_PORT: "1025"
+      NODE_ENV: development
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mailhog:
+        condition: service_started
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: kip-n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=development
+      - GENERIC_TIMEZONE=Africa/Kampala
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - kip-n8n-data:/home/node/.n8n
+      - ./n8n/workflows:/workflows:ro
+
+  mailhog:
+    image: wyga/mailhog
+    container_name: kip-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP
+      - "8025:8025"  # Web UI — open http://localhost:8025
+
+volumes:
+  kip-postgres-data:
+  kip-n8n-data:   
+  web_node_modules:
+  web_next_cache:
