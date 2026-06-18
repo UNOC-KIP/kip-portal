@@ -20,6 +20,12 @@ import {
   ReviewAction,
   User,
 } from "@kip/db";
+import {
+  ApplicationStatus,
+  ApplicationWindowStatus,
+  PaymentMethod,
+  PaymentStatus,
+} from "@kip/shared";
 import { formatMoney, formatDateTime, formatShortDate } from "../format";
 import { SECTION_ORDER, SECTION_LABELS } from "../investor-data";
 import {
@@ -38,8 +44,8 @@ import {
   type WindowRow,
 } from "./mappers";
 
-const PENDING_TRANSFER_STATUSES = ["PENDING", "PROOF_UPLOADED"];
-const DRAFT_STATUSES = ["DRAFT", "DRAFT_PAYMENT_PENDING"];
+const PENDING_TRANSFER_STATUSES = [PaymentStatus.PENDING, PaymentStatus.PROOF_UPLOADED];
+const DRAFT_STATUSES = [ApplicationStatus.DRAFT, ApplicationStatus.DRAFT_PAYMENT_PENDING];
 
 function landSizeSqm(sections: { section: string; payload: unknown }[]): number | null {
   const land = sections.find((s) => s.section === "LAND_BUSINESS_PROFILE");
@@ -75,7 +81,7 @@ export async function listApplications(): Promise<ApplicationRow[]> {
 
 export async function listPendingBankTransfers(now: Date = new Date()): Promise<TransferRow[]> {
   const payments = await Payment.findAll({
-    where: { method: "STANBIC_TRANSFER", status: PENDING_TRANSFER_STATUSES },
+    where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
     include: [
       {
         model: Application,
@@ -184,7 +190,7 @@ export type TcQueueView = {
 export async function getTcQueueView(now: Date = new Date()): Promise<TcQueueView> {
   const [apps, activeWindow] = await Promise.all([
     getTcQueue(now),
-    ApplicationWindow.findOne({ where: { status: "OPEN" }, order: [["openAt", "DESC"]] }),
+    ApplicationWindow.findOne({ where: { status: ApplicationWindowStatus.OPEN }, order: [["openAt", "DESC"]] }),
   ]);
   const windowOpenInFuture = activeWindow
     ? new Date(activeWindow.closeAt).getTime() > now.getTime()
@@ -231,7 +237,7 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       Application.count(),
       Application.count({ where: { status: [...SUBMITTED_STATUSES] } }),
       Application.count({ where: { status: DRAFT_STATUSES } }),
-      Payment.findAll({ where: { status: "CONFIRMED" }, attributes: ["method", "currency", "amount"] }),
+      Payment.findAll({ where: { status: PaymentStatus.CONFIRMED }, attributes: ["method", "currency", "amount"] }),
       ReviewAction.findAll({
         attributes: ["type", "createdAt"],
         include: [{ model: Application, attributes: ["reference"] }],
@@ -241,7 +247,7 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
     ]);
 
   const bankTransfersPending = await Payment.count({
-    where: { method: "STANBIC_TRANSFER", status: PENDING_TRANSFER_STATUSES },
+    where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
   });
 
   // Amount collected (seed is all USD; sum per the dominant currency).

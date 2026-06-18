@@ -1,3 +1,4 @@
+import "server-only";
 import {
   User,
   InvestorOrg,
@@ -7,6 +8,7 @@ import {
   Payment,
   ReviewAction,
 } from "@kip/db";
+import { ApplicationWindowStatus } from "@kip/shared";
 import type { StatusVariant } from "@/components/status-badge";
 
 // ─── Section metadata ─────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
       include: [{ model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] }],
     }),
     ApplicationWindow.findOne({
-      where: { status: "OPEN" },
+      where: { status: ApplicationWindowStatus.OPEN },
       order: [["openAt", "DESC"]],
       attributes: ["name", "closeAt"],
     }),
