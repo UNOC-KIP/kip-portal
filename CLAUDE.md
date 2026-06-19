@@ -412,7 +412,7 @@ await fireWebhook('lac-decision', {
 
 - `fireWebhook` is non-blocking — if n8n is down, the DB write already committed
 - Payloads are HMAC-SHA256 signed with `N8N_WEBHOOK_SECRET`; n8n validates `X-KIP-Signature`
-- Set `N8N_WEBHOOK_SECRET=''` in test environments — `fireWebhook` becomes a no-op
+- **Omit** `N8N_WEBHOOK_SECRET` from test `.env` entirely — once `fireWebhook` is implemented (Phase 3), it will be a no-op when the var is absent. Setting it to `''` causes a startup failure because the Zod schema requires `min(8)` when the key is present.
 
 **Webhook events:**
 `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`

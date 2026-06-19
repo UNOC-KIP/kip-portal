@@ -55,13 +55,15 @@ function landSizeSqm(sections: { section: string; payload: unknown }[]): number 
 
 // ─── Applications list ───────────────────────────────────────────────────────
 
-export async function listApplications(): Promise<ApplicationRow[]> {
+export async function listApplications(opts: { limit?: number; offset?: number } = {}): Promise<ApplicationRow[]> {
   const apps = await Application.findAll({
     include: [
       { model: InvestorOrg, as: "investorOrg", attributes: ["legalName", "countryOfIncorporation"] },
       { model: Payment, as: "payments", attributes: ["status"] },
     ],
     order: [["createdAt", "DESC"]],
+    limit: opts.limit ?? 200,
+    offset: opts.offset ?? 0,
   });
 
   return apps.map((row) => {
@@ -108,7 +110,7 @@ export async function listPendingBankTransfers(now: Date = new Date()): Promise<
 
 // ─── Users ───────────────────────────────────────────────────────────────────
 
-export async function listUsers(): Promise<UserRow[]> {
+export async function listUsers(opts: { limit?: number; offset?: number } = {}): Promise<UserRow[]> {
   const users = await User.findAll({
     // passwordHash is read only to derive a boolean below — never returned.
     attributes: ["email", "name", "role", "emailVerified", "passwordHash"],
@@ -117,6 +119,8 @@ export async function listUsers(): Promise<UserRow[]> {
       { model: Application, as: "applications", attributes: ["reference"], required: false },
     ],
     order: [["createdAt", "ASC"]],
+    limit: opts.limit ?? 500,
+    offset: opts.offset ?? 0,
   });
 
   return users.map((row) => {
