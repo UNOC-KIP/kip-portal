@@ -182,6 +182,8 @@ export type TcQueueView = {
   apps: TcAppRow[];
   locked: boolean;
   windowCloseLabel: string;
+  /** Window close date + 21 days — TC pre-screening deadline. */
+  tcDeadlineLabel: string;
 };
 
 /**
@@ -199,10 +201,19 @@ export async function getTcQueueView(now: Date = new Date()): Promise<TcQueueVie
   const windowOpenInFuture = activeWindow
     ? new Date(activeWindow.closeAt).getTime() > now.getTime()
     : false;
+
+  let tcDeadlineLabel = "—";
+  if (activeWindow) {
+    const deadline = new Date(activeWindow.closeAt);
+    deadline.setUTCDate(deadline.getUTCDate() + 21);
+    tcDeadlineLabel = formatShortDate(deadline);
+  }
+
   return {
     apps,
     locked: windowOpenInFuture && apps.length === 0,
     windowCloseLabel: activeWindow ? formatShortDate(activeWindow.closeAt) : "—",
+    tcDeadlineLabel,
   };
 }
 

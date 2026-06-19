@@ -59,6 +59,17 @@ export function tcStatusLabel(appStatus: string): "Approved" | "Rejected" | "In 
   }
 }
 
+/**
+ * Display labels produced by `tcStatusLabel` — import these constants instead
+ * of raw strings so a rename in `tcStatusLabel` breaks at the import site rather
+ * than silently breaking filter counts.
+ */
+export const TC_STATUS_LABELS = {
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+  IN_PROGRESS: "In progress",
+} as const;
+
 export function roleLabel(role: string): string {
   switch (role) {
     case "INVESTOR":

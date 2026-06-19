@@ -1,7 +1,7 @@
 # CLAUDE.md — KIP Investor Portal
 > Single source of truth for every agent working in this repo.
 > **Keep this file accurate.** Update it in the same task/PR as any architectural change — new files, schema migrations, new modules, env var additions, pattern changes. An outdated CLAUDE.md is worse than none.
-> Last updated: 16 June 2026
+> Last updated: 19 June 2026
 
 ---
 
@@ -466,6 +466,10 @@ S3_FORCE_PATH_STYLE=true     # default: "true"
 
 # AI
 ANTHROPIC_API_KEY=          # optional
+
+# Fee amounts — server-side business rule; never trust the client amount
+EOI_APPLICATION_FEE_USD=1000     # default: 1000 (USD cents are whole francs here — no subunit)
+EOI_APPLICATION_FEE_UGX=3700000  # default: 3700000 (UGX)
 ```
 
 ### Web / NextAuth — consumed by the Next.js app (not in the API schema)
@@ -473,6 +477,11 @@ ANTHROPIC_API_KEY=          # optional
 ```env
 NEXTAUTH_URL=http://localhost:3000
 NEXTAUTH_SECRET=            # min 32 chars random string
+
+# Express API base URL — used by client components (e.g. BankTransferForm) to reach the API.
+# Must have NEXT_PUBLIC_ prefix to be available in the browser bundle.
+# Code falls back to http://localhost:4000 when unset.
+NEXT_PUBLIC_API_URL=http://localhost:4000
 
 # Email (MailHog local)
 EMAIL_SERVER_HOST=localhost
@@ -487,13 +496,10 @@ EMAIL_FROM=noreply@kip.local
 These appear in roadmap/design but are **not** read by `env.ts` or any current code. Don't assume they're live; add to `env.ts` when the consuming feature lands.
 
 ```env
-API_PUBLIC_URL=http://localhost:4000
 N8N_BASE_URL=http://localhost:5678
 PAYMENT_GATEWAY_PUBLIC_KEY=
 PAYMENT_GATEWAY_SECRET_KEY=
 PAYMENT_GATEWAY_WEBHOOK_SECRET=
-EOI_APPLICATION_FEE_USD=1000
-EOI_APPLICATION_FEE_UGX=3700000
 ```
 
 > `SKIP_AUTH_DEV` was removed (it bypassed all RBAC — see "Access control"). Don't reintroduce a global auth-bypass flag.
@@ -638,3 +644,6 @@ docker compose logs -f           # tail all service logs
 - **Never assign an application `reference` outside the submit transaction** — it must come from `formatReference()` + the window's `sequenceCounter`, at the SUBMITTED transition only
 - **Never add an unauthenticated/owner-unaware API mutation** — every API route runs `requireAuth`; mutations add `requireRole(...)` AND an ownership check (investor acts only on their own application; ADMIN may act on any)
 - **Never let `apps/web` and `apps/api` `NEXTAUTH_SECRET` drift apart** — the API can't verify the web's session tokens if they differ
+- **Never hardcode TC deadlines or date offsets in pages** — compute them in the query layer (e.g. `tcDeadlineLabel = closeAt + 21 days` in `getTcQueueView`) so they stay in sync with the active window. See `lib/admin/queries.ts`.
+- **Never compare `TcAppRow.status` against raw string literals** — import `TC_STATUS_LABELS` from `lib/admin/mappers.ts` so a rename in `tcStatusLabel()` breaks at the import site rather than silently breaking stat counts.
+- **Client components calling the Express API use `NEXT_PUBLIC_API_URL`** (fallback: `http://localhost:4000`). Always pass `credentials: "include"` so the `next-auth.session-token` cookie is forwarded. Do not hardcode the API base URL in client components.

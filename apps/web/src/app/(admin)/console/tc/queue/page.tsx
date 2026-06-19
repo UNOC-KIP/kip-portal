@@ -5,15 +5,21 @@ import { StatCard } from "@/components/stat-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TcQueueTable } from "./tc-queue-table";
 import { getTcQueueView } from "@/lib/admin/queries";
+import { TC_STATUS_LABELS } from "@/lib/admin/mappers";
 
 // Access (TC_MEMBER / TC_CHAIR / ADMIN) is enforced by the tc/ layout guard.
 export default async function TcQueuePage() {
-  const { apps, locked: WINDOW_OPEN, windowCloseLabel: WINDOW_CLOSE_DATE } = await getTcQueueView();
+  const {
+    apps,
+    locked: WINDOW_OPEN,
+    windowCloseLabel: WINDOW_CLOSE_DATE,
+    tcDeadlineLabel: TC_DEADLINE,
+  } = await getTcQueueView();
 
   const total    = apps.length;
-  const approved = apps.filter((a) => a.status === "Approved").length;
-  const rejected = apps.filter((a) => a.status === "Rejected").length;
-  const pending  = apps.filter((a) => a.status === "In progress").length;
+  const approved = apps.filter((a) => a.status === TC_STATUS_LABELS.APPROVED).length;
+  const rejected = apps.filter((a) => a.status === TC_STATUS_LABELS.REJECTED).length;
+  const pending  = apps.filter((a) => a.status === TC_STATUS_LABELS.IN_PROGRESS).length;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -47,7 +53,7 @@ export default async function TcQueuePage() {
               <AlertDescription>
                 The application window closed on {WINDOW_CLOSE_DATE}. You now have access
                 to all {total} submitted EOIs. Pre-screening must be completed within
-                3 weeks (deadline: <strong>21 Jul 2026</strong>).{" "}
+                3 weeks (deadline: <strong>{TC_DEADLINE}</strong>).{" "}
                 <strong>{pending} application{pending !== 1 ? "s" : ""}</strong> still
                 require a TC decision.
               </AlertDescription>
