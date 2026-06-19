@@ -1,12 +1,18 @@
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
+import { decode } from "next-auth/jwt";
 import type { UserRole } from "@kip/shared";
+import { env } from "../env.js";
 import { Forbidden, Unauthorized } from "../errors.js";
 
 /**
- * Stub auth middleware.
- * v1 plan: Next.js web sends an Authorization header with a session-derived
- * token (NextAuth JWT) that we verify here. Until that's wired, we read
- * x-debug-user-id + x-debug-role headers in development.
+ * Verifies the NextAuth session JWT minted by the web app and attaches the
+ * authenticated user to the request. The token may arrive either as
+ * `Authorization: Bearer <token>` (server-to-server calls from the web's API
+ * client — preferred) or as the NextAuth session cookie (if cookies are
+ * forwarded). Verification uses `NEXTAUTH_SECRET`, shared with the web app.
+ *
+ * There is deliberately NO dev header bypass — a global auth-skip is a leak risk
+ * on a role-segregated platform.
  */
 declare global {
   namespace Express {
@@ -19,18 +25,46 @@ declare global {
   }
 }
 
-export const requireAuth: RequestHandler = (req, _res, next) => {
-  if (process.env.NODE_ENV === "development") {
-    const id = req.header("x-debug-user-id");
-    const role = req.header("x-debug-role") as UserRole | undefined;
-    if (id && role) {
-      req.user = { id, role };
-      return next();
-    }
+const SESSION_COOKIE_NAMES = [
+  "next-auth.session-token",
+  "__Secure-next-auth.session-token",
+];
+
+function extractToken(req: Request): string | null {
+  const authHeader = req.header("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    return authHeader.slice("Bearer ".length).trim();
   }
 
-  // TODO: verify NextAuth session token
-  return next(Unauthorized());
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    for (const part of cookieHeader.split(";")) {
+      const eq = part.indexOf("=");
+      if (eq === -1) continue;
+      const name = part.slice(0, eq).trim();
+      if (SESSION_COOKIE_NAMES.includes(name)) {
+        return decodeURIComponent(part.slice(eq + 1).trim());
+      }
+    }
+  }
+  return null;
+}
+
+export const requireAuth: RequestHandler = async (req, _res, next) => {
+  try {
+    const token = extractToken(req);
+    if (!token) return next(Unauthorized("Missing session token"));
+
+    const payload = await decode({ token, secret: env.NEXTAUTH_SECRET });
+    const id = payload?.id ?? payload?.sub;
+    const role = payload?.role;
+    if (!id || !role) return next(Unauthorized("Invalid session"));
+
+    req.user = { id: String(id), role: role as UserRole };
+    return next();
+  } catch {
+    return next(Unauthorized("Invalid session token"));
+  }
 };
 
 export const requireRole =

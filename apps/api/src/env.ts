@@ -12,6 +12,9 @@ const schema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace"])
     .default("info"),
   N8N_WEBHOOK_SECRET: z.string().min(8).optional(),
+  // Must match the web app's NEXTAUTH_SECRET — the API verifies NextAuth session
+  // JWTs minted by the web app with this key.
+  NEXTAUTH_SECRET: z.string().min(16),
 
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default("auto"),
@@ -24,6 +27,9 @@ const schema = z.object({
     .transform((v) => v === "true"),
 
   ANTHROPIC_API_KEY: z.string().optional(),
+
+  EOI_APPLICATION_FEE_USD: z.coerce.number().int().positive().default(1000),
+  EOI_APPLICATION_FEE_UGX: z.coerce.number().int().positive().default(3700000),
 });
 
 const parsed = schema.safeParse(process.env);

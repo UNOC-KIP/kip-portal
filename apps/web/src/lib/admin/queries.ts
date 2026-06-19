@@ -226,41 +226,51 @@ const ACTIVITY_TEXT: Record<string, string> = {
   CLARIFICATION_PROVIDED: "clarification provided",
 };
 
-const METHOD_LABELS: Record<string, string> = {
-  CARD: "Card",
-  STANBIC_TRANSFER: "Stanbic Transfer",
-};
-
 export async function getAdminDashboard(): Promise<AdminDashboard> {
-  const [totalApplications, eoisSubmitted, draftsInProgress, confirmedPayments, recentActions] =
-    await Promise.all([
-      Application.count(),
-      Application.count({ where: { status: [...SUBMITTED_STATUSES] } }),
-      Application.count({ where: { status: DRAFT_STATUSES } }),
-      Payment.findAll({ where: { status: PaymentStatus.CONFIRMED }, attributes: ["method", "currency", "amount"] }),
-      ReviewAction.findAll({
-        attributes: ["type", "createdAt"],
-        include: [{ model: Application, attributes: ["reference"] }],
-        order: [["createdAt", "DESC"]],
-        limit: 6,
-      }),
-    ]);
+  const [
+    totalApplications,
+    eoisSubmitted,
+    draftsInProgress,
+    paymentsConfirmed,
+    confirmedAmountSum,
+    dominantCurrencyRow,
+    cardCount,
+    bankCount,
+    recentActions,
+    bankTransfersPending,
+  ] = await Promise.all([
+    Application.count(),
+    Application.count({ where: { status: [...SUBMITTED_STATUSES] } }),
+    Application.count({ where: { status: DRAFT_STATUSES } }),
+    Payment.count({ where: { status: PaymentStatus.CONFIRMED } }),
+    // sum() avoids loading all rows; returns null when no confirmed payments exist
+    Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
+    // fetch just the currency of the first confirmed payment (USD is dominant, but be explicit)
+    Payment.findOne({
+      where: { status: PaymentStatus.CONFIRMED },
+      attributes: ["currency"],
+      order: [["createdAt", "ASC"]],
+    }),
+    Payment.count({ where: { status: PaymentStatus.CONFIRMED, method: PaymentMethod.CARD } }),
+    Payment.count({ where: { status: PaymentStatus.CONFIRMED, method: PaymentMethod.STANBIC_TRANSFER } }),
+    ReviewAction.findAll({
+      attributes: ["type", "createdAt"],
+      include: [{ model: Application, attributes: ["reference"] }],
+      order: [["createdAt", "DESC"]],
+      limit: 6,
+    }),
+    Payment.count({
+      where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
+    }),
+  ]);
 
-  const bankTransfersPending = await Payment.count({
-    where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
-  });
+  const currency = dominantCurrencyRow?.currency ?? "USD";
+  const total = confirmedAmountSum ?? 0;
 
-  // Amount collected (seed is all USD; sum per the dominant currency).
-  const currency = confirmedPayments[0]?.currency ?? "USD";
-  const total = confirmedPayments.reduce((sum, p) => sum + Number(p.amount), 0);
-
-  // Payment method split among confirmed payments.
-  const counts = new Map<string, number>();
-  for (const p of confirmedPayments) counts.set(p.method, (counts.get(p.method) ?? 0) + 1);
-  const methodSplit = [...counts.entries()].map(([method, count]) => ({
-    label: METHOD_LABELS[method] ?? method,
-    count,
-  }));
+  const methodSplit = [
+    { label: "Card", count: cardCount },
+    { label: "Stanbic Transfer", count: bankCount },
+  ].filter((m) => m.count > 0);
 
   const activity = recentActions.map((row) => {
     const ra = row as ReviewAction & { Application?: Application };
@@ -271,7 +281,7 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
 
   return {
     totalApplications,
-    paymentsConfirmed: confirmedPayments.length,
+    paymentsConfirmed,
     amountCollectedLabel: `${formatMoney(total, currency)} collected`,
     eoisSubmitted,
     draftsInProgress,

@@ -31,11 +31,11 @@ export const BadRequest = (message: string, details?: unknown) =>
     details,
   });
 
-export const Unauthorized = () =>
+export const Unauthorized = (message = "Authentication required") =>
   new AppError({
     statusCode: 401,
     code: "UNAUTHORIZED",
-    message: "Authentication required",
+    message,
   });
 
 export const Forbidden = (message = "Forbidden") =>

@@ -8,17 +8,20 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'lint api'"
+    "lint": "echo 'lint api'",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@kip/db": "workspace:*",
-    "@kip/shared": "workspace:*",
     "@aws-sdk/client-s3": "^3.600.0",
     "@aws-sdk/s3-request-presigner": "^3.600.0",
+    "@kip/db": "workspace:*",
+    "@kip/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "helmet": "^7.1.0",
+    "next-auth": "^4.24.7",
     "pino": "^9.0.0",
     "pino-http": "^9.0.0",
     "pino-pretty": "^11.0.0",
@@ -29,6 +32,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
     "tsx": "^4.16.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.9"
   }
 }

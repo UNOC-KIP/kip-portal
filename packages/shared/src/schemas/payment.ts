@@ -5,7 +5,7 @@ export const initiatePaymentSchema = z.object({
   applicationId: z.string().uuid(),
   method: z.nativeEnum(PaymentMethod),
   currency: z.nativeEnum(Currency),
-  amount: z.number().positive(),
+  // amount is intentionally omitted — the server reads EOI_APPLICATION_FEE_USD/UGX from env
 });
 export type InitiatePaymentInput = z.infer<typeof initiatePaymentSchema>;
 

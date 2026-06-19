@@ -102,7 +102,7 @@ Prisma 6 has no `windows-arm64` query engine binary. Node.js v24 on this ARM64 W
 
 ## Authentication — NextAuth (current implementation)
 
-Auth is handled entirely by **NextAuth.js** in the web app. The Express API currently uses a **stub** auth middleware that reads `x-debug-user-id` and `x-debug-role` headers in development. Real API auth (verifying NextAuth JWTs) is a pending TODO.
+Auth is handled by **NextAuth.js** in the web app. The Express API **verifies the same NextAuth session JWT** — there is no stub/bypass. The web app mints a JWT session (signed/encrypted with `NEXTAUTH_SECRET`); the API decodes it with the same secret.
 
 **NextAuth config:** `apps/web/src/lib/auth.ts`
 - Providers: `EmailProvider` (magic link) + `CredentialsProvider` (email + bcrypt password)
@@ -112,16 +112,13 @@ Auth is handled entirely by **NextAuth.js** in the web app. The Express API curr
 
 **Web pages:** `/sign-in`, `/sign-up`, `/verify` — in `apps/web/src/app/(auth)/`
 
-**API middleware (current stub):**
-```typescript
-// apps/api/src/middleware/auth.ts
-// In dev: reads x-debug-user-id + x-debug-role headers
-// TODO: verify NextAuth JWT from Authorization header
-export const requireAuth: RequestHandler = ...
-export const requireRole = (...allowed: UserRole[]) => ...
-```
+**API middleware:** `apps/api/src/middleware/auth.ts`
+- `requireAuth` reads the token from `Authorization: Bearer <token>` (preferred, for server-to-server calls) or the `next-auth.session-token` cookie, then `decode({ token, secret: NEXTAUTH_SECRET })` (from `next-auth/jwt`). Populates `req.user = { id, role }`. Invalid/absent → 401.
+- `requireRole(...allowed)` → 403 if `req.user.role` isn't allowed.
+- **`NEXTAUTH_SECRET` must be identical in `apps/web` and `apps/api`** (the API can't verify tokens otherwise). It's required in `apps/api/src/env.ts`.
+- Mutating routes also enforce **ownership** in the handler/service (an investor may only act on their own application; ADMIN may act on any).
 
-**ADMIN can access all role-gated routes** — always include `'ADMIN'` in `requireRole(...)` calls.
+**ADMIN can access all role-gated routes** — always include `UserRole.ADMIN` in `requireRole(...)` calls.
 
 ---
 
@@ -235,6 +232,8 @@ WITHDRAWN               → terminal — investor can withdraw before SUBMITTED
 - `NNNN` = zero-padded 4-digit sequence, incremented atomically via `ApplicationWindow.sequenceCounter` inside a Sequelize transaction
 - `reference` is nullable until submission; unique once set
 
+**Implemented** (`apps/api/src/modules/applications/`): `POST /applications` creates a draft with `reference = null`; `POST /applications/:id/submit` (service: `applications.service.ts → submitApplication`) does the DRAFT→SUBMITTED transition — ownership + completeness (all 6 sections) + window-open guards, then increments `sequenceCounter` and assigns the reference in one transaction. Formatter: `formatReference(year, seq)` in `@kip/shared` (unit-tested). Do not assign references anywhere else.
+
 ---
 
 ## Database schema
@@ -314,8 +313,8 @@ src/modules/lac/
 
 | Module | File | Status |
 |---|---|---|
-| applications | `src/modules/applications/route.ts` | Partial — create, get, update section |
-| payments | `src/modules/payments/route.ts` | Partial — initiate only |
+| applications | `src/modules/applications/route.ts` + `applications.service.ts` | create draft, get (owner/staff), update section, **submit** (DRAFT→SUBMITTED, assigns reference). Role + ownership enforced. |
+| payments | `src/modules/payments/route.ts` | Partial — initiate only (role + ownership enforced) |
 | health | `src/modules/health/route.ts` | Complete |
 | webhooks | `src/modules/webhooks/n8n.ts` | Stub |
 
@@ -454,6 +453,7 @@ DATABASE_URL=postgresql://kip:kip_dev_password@localhost:5433/kip_portal?schema=
 API_PORT=4000               # default: 4000
 WEB_PUBLIC_URL=http://localhost:3000   # default
 LOG_LEVEL=info              # fatal|error|warn|info|debug|trace (default: info)
+NEXTAUTH_SECRET=            # REQUIRED; must equal apps/web NEXTAUTH_SECRET (API verifies web-minted JWTs)
 N8N_WEBHOOK_SECRET=         # optional; empty/unset = webhooks are no-ops (good for tests)
 
 # S3 / R2
@@ -596,7 +596,7 @@ docker compose logs -f           # tail all service logs
 
 ## Testing
 
-**Runner: Vitest.** Currently wired in `apps/web` (`pnpm --filter @kip/web test`, watch: `test:watch`). `pnpm test` at the root runs every package's `test` script. Config: `apps/web/vitest.config.ts` (`environment: "node"`, `include: ["src/**/*.test.ts"]`).
+**Runner: Vitest.** Wired in `apps/web` and `apps/api` (`pnpm --filter @kip/web test` / `--filter @kip/api test`, watch: `test:watch`). `pnpm test` at the root runs every package's `test` script. Config: each app's `vitest.config.ts` (`environment: "node"`, `include: ["src/**/*.test.ts"]`). API unit tests so far cover the reference formatter (`modules/applications/reference.test.ts`).
 
 **What we unit-test today:** the **pure** layer — formatters (`lib/format.ts`) and view-model mappers (`lib/admin/mappers.ts`). These have no `@kip/db` import, so they run with no database. Tests live next to source as `*.test.ts` (e.g. `lib/format.test.ts`, `lib/admin/mappers.test.ts`).
 
@@ -635,3 +635,6 @@ docker compose logs -f           # tail all service logs
 - **Never protect a route with only one layer** — a sensitive page needs both a `middleware.ts` policy entry AND a `requireRole(...)` guard (or a guarding layout). See "Access control (RBAC)"
 - **Never add a global auth-bypass flag** (the removed `SKIP_AUTH_DEV`) — it disables RBAC for every role; sign in with a seed account to preview instead
 - **Never hardcode role strings in pages** — import the role sets (`ADMIN_ONLY`, `TC_ROLES`, …) from `lib/rbac.ts` so the policy stays in one place
+- **Never assign an application `reference` outside the submit transaction** — it must come from `formatReference()` + the window's `sequenceCounter`, at the SUBMITTED transition only
+- **Never add an unauthenticated/owner-unaware API mutation** — every API route runs `requireAuth`; mutations add `requireRole(...)` AND an ownership check (investor acts only on their own application; ADMIN may act on any)
+- **Never let `apps/web` and `apps/api` `NEXTAUTH_SECRET` drift apart** — the API can't verify the web's session tokens if they differ
