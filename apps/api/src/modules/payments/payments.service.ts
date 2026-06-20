@@ -43,22 +43,26 @@ export async function initiatePayment(
     );
   }
 
-  // Idempotency: return the existing PENDING payment rather than creating a
-  // duplicate. This covers the case where the investor refreshes the page
-  // after step 1 completes but before step 4 succeeds.
-  const existing = await Payment.findOne({
-    where: { applicationId: input.applicationId, status: PaymentStatus.PENDING },
-  });
-  if (existing) return existing;
-
   // Fee is server-configured, not client-supplied.
   const amount =
     input.currency === Currency.UGX
       ? env.EOI_APPLICATION_FEE_UGX
       : env.EOI_APPLICATION_FEE_USD;
 
+  // Idempotency: re-check inside the transaction so concurrent calls don't
+  // both slip through before either commits. lock:true issues SELECT FOR UPDATE,
+  // serialising concurrent requests on the found rows. A DB-level unique partial
+  // index on (applicationId) WHERE status='PENDING' would be the complete fix —
+  // tracked as a future migration.
   return sequelize.transaction(async (t) => {
-    const payment = await Payment.create(
+    const existing = await Payment.findOne({
+      where: { applicationId: input.applicationId, status: PaymentStatus.PENDING },
+      lock: true,
+      transaction: t,
+    });
+    if (existing) return existing;
+
+    return Payment.create(
       {
         applicationId: input.applicationId,
         method: input.method,
@@ -68,7 +72,6 @@ export async function initiatePayment(
       },
       { transaction: t },
     );
-    return payment;
   });
 }
 
@@ -158,5 +161,63 @@ export async function submitProof(
       },
       { transaction: t },
     );
+  });
+}
+
+/**
+ * ADMIN confirms a bank-transfer proof, setting payment→CONFIRMED and
+ * transitioning the application from DRAFT_PAYMENT_PENDING→DRAFT so the
+ * investor can fill in their EOI.
+ */
+export async function confirmPayment(
+  paymentId: string,
+  actor: { id: string; role: string },
+): Promise<void> {
+  if (actor.role !== UserRole.ADMIN) {
+    throw Forbidden("Only ADMIN can confirm payments");
+  }
+
+  const payment = await Payment.findByPk(paymentId);
+  if (!payment) throw NotFound("Payment");
+
+  if (payment.status !== PaymentStatus.PROOF_UPLOADED) {
+    throw Conflict(`Cannot confirm payment with status ${payment.status}`);
+  }
+
+  const app = await Application.findByPk(payment.applicationId);
+  if (!app) throw NotFound("Application");
+
+  await sequelize.transaction(async (t) => {
+    await payment.update(
+      { status: PaymentStatus.CONFIRMED, confirmedAt: new Date() },
+      { transaction: t },
+    );
+    if (app.status === ApplicationStatus.DRAFT_PAYMENT_PENDING) {
+      await app.update({ status: ApplicationStatus.DRAFT }, { transaction: t });
+    }
+  });
+
+  // fireWebhook('payment-confirmed', { applicationId: payment.applicationId }) — Phase 3
+}
+
+/**
+ * Returns all payments for an application.
+ * Ownership enforced: investors see only their own; staff see any.
+ */
+export async function getPaymentsByApplicationId(
+  applicationId: string,
+  actor: { id: string; role: string },
+): Promise<Payment[]> {
+  const app = await Application.findByPk(applicationId, { attributes: ["ownerUserId"] });
+  if (!app) throw NotFound("Application");
+
+  if (!ownerOrAdmin(app.ownerUserId, actor)) {
+    throw Forbidden("You can only view payments for your own application");
+  }
+
+  return Payment.findAll({
+    where: { applicationId },
+    order: [["createdAt", "DESC"]],
+    limit: 20,
   });
 }

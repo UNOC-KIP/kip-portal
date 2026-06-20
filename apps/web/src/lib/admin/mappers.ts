@@ -8,22 +8,23 @@
  * and calls these functions. Row shapes mirror the `*-table.tsx` client props.
  */
 
+import { ApplicationStatus, ApplicationWindowStatus, PaymentStatus } from "@kip/shared";
 import { formatShortDate } from "../format";
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
 /** Statuses at or beyond SUBMITTED — i.e. the EOI has been submitted. */
 export const SUBMITTED_STATUSES = [
-  "SUBMITTED",
-  "UNDER_TC_REVIEW",
-  "TC_CLARIFICATION_REQUESTED",
-  "SHORTLISTED",
-  "NOT_SHORTLISTED",
-  "LAC_REVIEW",
-  "LAC_APPROVED",
-  "LAC_REJECTED",
-  "EXCO_REVIEW",
-  "ALLOCATED",
+  ApplicationStatus.SUBMITTED,
+  ApplicationStatus.UNDER_TC_REVIEW,
+  ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ApplicationStatus.SHORTLISTED,
+  ApplicationStatus.NOT_SHORTLISTED,
+  ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_APPROVED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.EXCO_REVIEW,
+  ApplicationStatus.ALLOCATED,
 ] as const;
 
 const SUBMITTED_SET = new Set<string>(SUBMITTED_STATUSES);
@@ -38,7 +39,7 @@ export function eoiLabel(status: string): "Submitted" | "Draft" {
 
 /** Payment column label from an application's payments. */
 export function paymentLabel(payments: { status: string }[]): "Confirmed" | "Pending" | "Not Paid" {
-  if (payments.some((p) => p.status === "CONFIRMED")) return "Confirmed";
+  if (payments.some((p) => p.status === PaymentStatus.CONFIRMED)) return "Confirmed";
   if (payments.length > 0) return "Pending";
   return "Not Paid";
 }
@@ -46,13 +47,13 @@ export function paymentLabel(payments: { status: string }[]): "Confirmed" | "Pen
 /** TC-queue status from application status (shortlisted-or-beyond = TC approved). */
 export function tcStatusLabel(appStatus: string): "Approved" | "Rejected" | "In progress" {
   switch (appStatus) {
-    case "SHORTLISTED":
-    case "LAC_REVIEW":
-    case "LAC_APPROVED":
-    case "EXCO_REVIEW":
-    case "ALLOCATED":
+    case ApplicationStatus.SHORTLISTED:
+    case ApplicationStatus.LAC_REVIEW:
+    case ApplicationStatus.LAC_APPROVED:
+    case ApplicationStatus.EXCO_REVIEW:
+    case ApplicationStatus.ALLOCATED:
       return "Approved";
-    case "NOT_SHORTLISTED":
+    case ApplicationStatus.NOT_SHORTLISTED:
       return "Rejected";
     default:
       return "In progress";
@@ -266,14 +267,14 @@ export function toWindowRow(w: {
   const span = `Open: ${formatShortDate(w.openAt)} · Closes: ${formatShortDate(w.closeAt)}`;
   const received = `${w.sequenceCounter} reference${w.sequenceCounter === 1 ? "" : "s"} assigned`;
   switch (w.status) {
-    case "OPEN":
-      return { name: w.name, statusVariant: "window-active", statusLabel: "Active", detail: `${span} · ${received}` };
-    case "DRAFT":
+    case ApplicationWindowStatus.OPEN:
+      return { name: w.name, statusVariant: "window-active",    statusLabel: "Active",    detail: `${span} · ${received}` };
+    case ApplicationWindowStatus.DRAFT:
       return { name: w.name, statusVariant: "window-scheduled", statusLabel: "Scheduled", detail: `${span} · Not yet open` };
-    case "CLOSED":
-      return { name: w.name, statusVariant: "window-closed", statusLabel: "Closed", detail: `${span} · ${received}` };
-    case "ARCHIVED":
-      return { name: w.name, statusVariant: "window-closed", statusLabel: "Archived", detail: `${span} · ${received}` };
+    case ApplicationWindowStatus.CLOSED:
+      return { name: w.name, statusVariant: "window-closed",    statusLabel: "Closed",    detail: `${span} · ${received}` };
+    case ApplicationWindowStatus.ARCHIVED:
+      return { name: w.name, statusVariant: "window-closed",    statusLabel: "Archived",  detail: `${span} · ${received}` };
     default:
       return { name: w.name, statusVariant: null, statusLabel: null, detail: span };
   }

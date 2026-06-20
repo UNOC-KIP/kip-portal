@@ -25,6 +25,7 @@ import {
   ApplicationWindowStatus,
   PaymentMethod,
   PaymentStatus,
+  ReviewActionType,
 } from "@kip/shared";
 import { formatMoney, formatDateTime, formatShortDate } from "../format";
 import { SECTION_ORDER, SECTION_LABELS } from "../investor-data";
@@ -92,6 +93,7 @@ export async function listPendingBankTransfers(now: Date = new Date()): Promise<
       },
     ],
     order: [["createdAt", "ASC"]],
+    limit: 200,
   });
 
   return payments.map((row) => {
@@ -141,7 +143,7 @@ export async function listUsers(opts: { limit?: number; offset?: number } = {}):
 // ─── Application windows ─────────────────────────────────────────────────────
 
 export async function listWindows(): Promise<WindowRow[]> {
-  const windows = await ApplicationWindow.findAll({ order: [["openAt", "DESC"]] });
+  const windows = await ApplicationWindow.findAll({ order: [["openAt", "DESC"]], limit: 1000 });
   return windows.map((w) =>
     toWindowRow({
       name: w.name,
@@ -160,9 +162,11 @@ export async function getTcQueue(now: Date = new Date()): Promise<TcAppRow[]> {
     where: { status: [...SUBMITTED_STATUSES] },
     include: [
       { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] },
-      { model: ApplicationSection, as: "sections", attributes: ["section", "payload"] },
+      { model: ApplicationSection, as: "sections", attributes: ["section", "payload"],
+        where: { section: "LAND_BUSINESS_PROFILE" }, required: false },
     ],
     order: [["submittedAt", "ASC"]],
+    limit: 500,
   });
 
   return apps.map((row) => {
@@ -230,15 +234,15 @@ export type AdminDashboard = {
   activity: { time: string; text: string }[];
 };
 
-const ACTIVITY_TEXT: Record<string, string> = {
-  ASSIGNED: "assigned for review",
-  SHORTLISTED: "shortlisted by TC",
-  NOT_SHORTLISTED: "not shortlisted",
-  LAC_APPROVED: "approved by LAC",
-  LAC_REJECTED: "rejected by LAC",
-  ALLOCATED: "land allocated by ExCo",
-  REQUESTED_CLARIFICATION: "clarification requested",
-  CLARIFICATION_PROVIDED: "clarification provided",
+const ACTIVITY_TEXT: Partial<Record<ReviewActionType, string>> = {
+  [ReviewActionType.ASSIGNED]:                "assigned for review",
+  [ReviewActionType.SHORTLISTED]:             "shortlisted by TC",
+  [ReviewActionType.NOT_SHORTLISTED]:         "not shortlisted",
+  [ReviewActionType.LAC_APPROVED]:            "approved by LAC",
+  [ReviewActionType.LAC_REJECTED]:            "rejected by LAC",
+  [ReviewActionType.ALLOCATED]:               "land allocated by ExCo",
+  [ReviewActionType.REQUESTED_CLARIFICATION]: "clarification requested",
+  [ReviewActionType.CLARIFICATION_PROVIDED]:  "clarification provided",
 };
 
 export async function getAdminDashboard(): Promise<AdminDashboard> {
@@ -290,7 +294,7 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
   const activity = recentActions.map((row) => {
     const ra = row as ReviewAction & { Application?: Application };
     const ref = ra.Application?.reference ?? "Application";
-    const what = ACTIVITY_TEXT[ra.type] ?? ra.type.toLowerCase().replace(/_/g, " ");
+    const what = ACTIVITY_TEXT[ra.type as ReviewActionType] ?? ra.type.toLowerCase().replace(/_/g, " ");
     return { time: formatDateTime(ra.createdAt), text: `${ref} — ${what}` };
   });
 
@@ -366,7 +370,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     events.push({ ts: a.submittedAt.getTime(), text: "EOI submitted", actor: "Investor" });
   }
   for (const ra of a.reviewActions ?? []) {
-    const text = ACTIVITY_TEXT[ra.type];
+    const text = ACTIVITY_TEXT[ra.type as ReviewActionType];
     if (!text || !ra.createdAt) continue;
     events.push({
       ts: ra.createdAt.getTime(),
@@ -388,7 +392,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     sections: sectionList,
     payment: payment
       ? {
-          method: payment.method === "STANBIC_TRANSFER" ? "Stanbic Bank Transfer" : "Card",
+          method: payment.method === PaymentMethod.STANBIC_TRANSFER ? "Stanbic Bank Transfer" : "Card",
           amountLabel: formatMoney(payment.amount, payment.currency),
           ref: payment.transferRef ?? payment.gatewayRef ?? "—",
           confirmedAt: payment.confirmedAt ? formatDateTime(payment.confirmedAt) : "Not confirmed",

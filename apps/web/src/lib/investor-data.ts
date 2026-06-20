@@ -8,7 +8,7 @@ import {
   Payment,
   ReviewAction,
 } from "@kip/db";
-import { ApplicationWindowStatus } from "@kip/shared";
+import { ApplicationWindowStatus, ReviewActionType, UserRole } from "@kip/shared";
 import type { StatusVariant } from "@/components/status-badge";
 
 // ─── Section metadata ─────────────────────────────────────────────────────────
@@ -56,24 +56,24 @@ export function statusBadgeProps(status: string): { variant: StatusVariant; labe
 
 // ─── Review action labels (investor-facing, anonymised) ──────────────────────
 
-const ACTION_TEXT: Partial<Record<string, string>> = {
-  ASSIGNED:               "Application assigned for review",
-  SHORTLISTED:            "Shortlisted by Technical Committee",
-  NOT_SHORTLISTED:        "Not shortlisted by Technical Committee",
-  LAC_APPROVED:           "Approved by Land Allocation Committee",
-  LAC_REJECTED:           "Rejected by Land Allocation Committee",
-  ALLOCATED:              "Land plot allocated — welcome to KIP",
-  REQUESTED_CLARIFICATION: "Clarification requested",
-  CLARIFICATION_PROVIDED: "Clarification submitted",
+const ACTION_TEXT: Partial<Record<ReviewActionType, string>> = {
+  [ReviewActionType.ASSIGNED]:               "Application assigned for review",
+  [ReviewActionType.SHORTLISTED]:            "Shortlisted by Technical Committee",
+  [ReviewActionType.NOT_SHORTLISTED]:        "Not shortlisted by Technical Committee",
+  [ReviewActionType.LAC_APPROVED]:           "Approved by Land Allocation Committee",
+  [ReviewActionType.LAC_REJECTED]:           "Rejected by Land Allocation Committee",
+  [ReviewActionType.ALLOCATED]:              "Land plot allocated — welcome to KIP",
+  [ReviewActionType.REQUESTED_CLARIFICATION]: "Clarification requested",
+  [ReviewActionType.CLARIFICATION_PROVIDED]: "Clarification submitted",
 };
 
-const ACTOR_TEXT: Partial<Record<string, string>> = {
-  TC_MEMBER:   "TC Committee",
-  TC_CHAIR:    "TC Committee",
-  LAC_MEMBER:  "LAC Committee",
-  EXCO_MEMBER: "ExCo",
-  ADMIN:       "KIP Admin",
-  INVESTOR:    "You",
+const ACTOR_TEXT: Partial<Record<UserRole, string>> = {
+  [UserRole.TC_MEMBER]:   "TC Committee",
+  [UserRole.TC_CHAIR]:    "TC Committee",
+  [UserRole.LAC_MEMBER]:  "LAC Committee",
+  [UserRole.EXCO_MEMBER]: "ExCo",
+  [UserRole.ADMIN]:       "KIP Admin",
+  [UserRole.INVESTOR]:    "You",
 };
 
 // ─── Return types ─────────────────────────────────────────────────────────────
@@ -227,12 +227,12 @@ export async function getApplicationDetail(userId: string, ref: string): Promise
   }
 
   for (const action of a.reviewActions) {
-    const text = ACTION_TEXT[action.type];
+    const text = ACTION_TEXT[action.type as ReviewActionType];
     if (!text) continue;
     auditTrail.push({
       time:  action.createdAt!.toISOString(),
       text,
-      actor: ACTOR_TEXT[action.actor.role] ?? "KIP Admin",
+      actor: ACTOR_TEXT[action.actor.role as UserRole] ?? "KIP Admin",
     });
   }
 
