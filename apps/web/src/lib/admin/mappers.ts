@@ -137,6 +137,8 @@ export type ApplicationRow = {
 };
 
 export type TransferRow = {
+  paymentId: string;
+  paymentStatus: string;
   ref: string;
   company: string;
   txRef: string;
@@ -193,6 +195,8 @@ export function toApplicationRow(a: {
 }
 
 export function toTransferRow(t: {
+  id: string;
+  status: string;
   reference: string | null;
   orgName: string;
   transferRef: string | null;
@@ -201,6 +205,8 @@ export function toTransferRow(t: {
 }): TransferRow {
   const sla = computeTransferSla(t.uploadedAt, t.now);
   return {
+    paymentId: t.id,
+    paymentStatus: t.status,
     ref: t.reference ?? NO_REF,
     company: t.orgName,
     txRef: t.transferRef ?? DASH,

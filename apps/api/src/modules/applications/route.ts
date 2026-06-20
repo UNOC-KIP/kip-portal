@@ -21,13 +21,9 @@ export const applicationsRouter: Router = Router();
 
 applicationsRouter.use(requireAuth);
 
-const STAFF_ROLES = new Set<string>([
-  UserRole.ADMIN,
-  UserRole.TC_MEMBER,
-  UserRole.TC_CHAIR,
-  UserRole.LAC_MEMBER,
-  UserRole.EXCO_MEMBER,
-]);
+function isStaff(role: string): boolean {
+  return role !== UserRole.INVESTOR;
+}
 
 /** POST /applications — create a new draft. (Investors create their own.) */
 applicationsRouter.post(
@@ -75,7 +71,7 @@ applicationsRouter.get("/:id", async (req, res, next) => {
     if (!app) throw NotFound("Application");
 
     const user = req.user!;
-    if (app.ownerUserId !== user.id && !STAFF_ROLES.has(user.role)) {
+    if (app.ownerUserId !== user.id && !isStaff(user.role)) {
       throw Forbidden("You can only view your own application");
     }
 

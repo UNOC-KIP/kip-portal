@@ -120,6 +120,8 @@ describe("row mappers", () => {
   it("toTransferRow", () => {
     expect(
       toTransferRow({
+        id: "pay-uuid-1",
+        status: "PROOF_UPLOADED",
         reference: "KIP-EOI-2026-0002",
         orgName: "Hoima Energy Corp",
         transferRef: "STB-TXN-1",
@@ -127,6 +129,8 @@ describe("row mappers", () => {
         now: new Date("2026-01-01T00:00:00Z"),
       }),
     ).toEqual({
+      paymentId: "pay-uuid-1",
+      paymentStatus: "PROOF_UPLOADED",
       ref: "KIP-EOI-2026-0002",
       company: "Hoima Energy Corp",
       txRef: "STB-TXN-1",

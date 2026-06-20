@@ -207,7 +207,7 @@ export async function getApplicationDetail(userId: string, ref: string): Promise
   });
 
   type AppWithIncludes = Application & {
-    investorOrg: InvestorOrg;
+    investorOrg?: InvestorOrg;
     sections: ApplicationSection[];
     reviewActions: (ReviewAction & { actor: User })[];
   };
@@ -242,7 +242,7 @@ export async function getApplicationDetail(userId: string, ref: string): Promise
     reference:   app.reference,
     status:      app.status,
     lotReference: app.lotReference,
-    orgName:     a.investorOrg.legalName,
+    orgName:     a.investorOrg?.legalName ?? "—",
     submittedAt: app.submittedAt?.toISOString() ?? null,
     sections: SECTION_ORDER.map((key) => ({
       key,

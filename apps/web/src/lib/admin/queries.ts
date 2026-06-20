@@ -101,6 +101,8 @@ export async function listPendingBankTransfers(now: Date = new Date()): Promise<
       Application?: Application & { investorOrg?: InvestorOrg };
     };
     return toTransferRow({
+      id: p.id,
+      status: p.status,
       reference: p.Application?.reference ?? null,
       orgName: p.Application?.investorOrg?.legalName ?? "—",
       transferRef: p.transferRef,
