@@ -43,6 +43,14 @@ export async function initiatePayment(
     );
   }
 
+  // Idempotency: return the existing PENDING payment rather than creating a
+  // duplicate. This covers the case where the investor refreshes the page
+  // after step 1 completes but before step 4 succeeds.
+  const existing = await Payment.findOne({
+    where: { applicationId: input.applicationId, status: PaymentStatus.PENDING },
+  });
+  if (existing) return existing;
+
   // Fee is server-configured, not client-supplied.
   const amount =
     input.currency === Currency.UGX

@@ -99,7 +99,7 @@ export function BankTransferForm({ applicationId, paymentRef, bankDetails }: Ban
         throw new Error(body?.error?.message ?? "Failed to submit proof. Please try again.");
       }
 
-      router.push("/dashboard");
+      router.push("/dashboard/payment/pending");
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : "An unexpected error occurred.");
       setLoading(false);
