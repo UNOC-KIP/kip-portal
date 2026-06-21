@@ -2,7 +2,7 @@ import { Router } from "express";
 import { UserRole, initiatePaymentSchema, presignProofSchema, submitTransferProofSchema } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { BadRequest } from "../../errors.js";
-import { initiatePayment, presignProof, submitProof, confirmPayment, getPaymentsByApplicationId } from "./payments.service.js";
+import { initiatePayment, presignProof, submitProof, confirmPayment, rejectPayment, getProofDownloadUrl, getPaymentsByApplicationId } from "./payments.service.js";
 import { getPaymentsQuerySchema } from "./payments.schema.js";
 
 export const paymentsRouter: Router = Router();
@@ -68,6 +68,37 @@ paymentsRouter.post(
       if (!id) throw BadRequest("id required");
       await confirmPayment(id, req.user!);
       res.json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** POST /payments/:id/reject — ADMIN rejects a bank-transfer proof (PROOF_UPLOADED → FAILED). */
+paymentsRouter.post(
+  "/:id/reject",
+  requireRole(UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      await rejectPayment(id, req.user!);
+      res.json({ ok: true });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** GET /payments/:id/proof — presigned S3 URL to download the payment proof (owner or ADMIN). */
+paymentsRouter.get(
+  "/:id/proof",
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const result = await getProofDownloadUrl(id, req.user!);
+      res.json(result);
     } catch (e) {
       next(e);
     }

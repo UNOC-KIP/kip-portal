@@ -544,6 +544,7 @@ Seed password for all accounts: **`KipPortal2025!`** (bcrypt-hashed, works with 
 | `packages/db/src/models/` | 13 model files: user, account, session, verification-token, investor-org, application-window, application, application-section, document, payment, review-action, clarification-request, notification |
 | `packages/db/migrations/20260526060720-initial.ts` | Full initial schema — all tables, enums, indexes, foreign keys |
 | `packages/db/migrations/20260608120000-lac-committee-pipeline.ts` | LAC pipeline migration — updated enums, ClarificationRequest, sequenceCounter, nullable reference |
+| `packages/db/migrations/20260621000000-payment-pending-unique-index.ts` | Partial unique index `payments_pending_per_app` on `Payment(applicationId) WHERE status='PENDING'` — closes the concurrent-creation race |
 | `packages/db/seed.ts` | Full seed — 9 accounts, 4 orgs, 4 apps (LAC_REVIEW / ALLOCATED / NOT_SHORTLISTED / DRAFT), payments, sections, review history |
 | `packages/shared/src/enums.ts` | All enums (`as const` objects + union types, not TS `enum`) — source of truth; keep Sequelize model strings in sync |
 | `packages/shared/src/schemas/` | Zod schemas for application sections, documents, payments |

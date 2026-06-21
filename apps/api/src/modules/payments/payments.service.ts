@@ -12,7 +12,7 @@ import {
   type SubmitTransferProofInput,
 } from "@kip/shared";
 import { env } from "../../env.js";
-import { presignUpload } from "../../storage/index.js";
+import { presignUpload, presignDownload } from "../../storage/index.js";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
 function ownerOrAdmin(resourceOwnerId: string, actor: { id: string; role: string }): boolean {
@@ -198,6 +198,61 @@ export async function confirmPayment(
   });
 
   // fireWebhook('payment-confirmed', { applicationId: payment.applicationId }) — Phase 3
+}
+
+/**
+ * ADMIN rejects a bank-transfer proof.
+ * Sets payment→FAILED; application stays DRAFT_PAYMENT_PENDING so the investor can retry.
+ */
+export async function rejectPayment(
+  paymentId: string,
+  actor: { id: string; role: string },
+): Promise<void> {
+  if (actor.role !== UserRole.ADMIN) {
+    throw Forbidden("Only ADMIN can reject payments");
+  }
+
+  const payment = await Payment.findByPk(paymentId);
+  if (!payment) throw NotFound("Payment");
+
+  if (payment.status !== PaymentStatus.PROOF_UPLOADED) {
+    throw Conflict(`Cannot reject payment with status ${payment.status}`);
+  }
+
+  await sequelize.transaction(async (t) => {
+    await payment.update({ status: PaymentStatus.FAILED }, { transaction: t });
+  });
+
+  // fireWebhook('payment-rejected', { applicationId: payment.applicationId }) — Phase 3
+}
+
+/**
+ * Returns a short-lived presigned GET URL for the payment proof document.
+ * ADMIN or the owning investor can fetch this.
+ */
+export async function getProofDownloadUrl(
+  paymentId: string,
+  actor: { id: string; role: string },
+): Promise<{ url: string }> {
+  const payment = await Payment.findByPk(paymentId);
+  if (!payment) throw NotFound("Payment");
+
+  const app = await Application.findByPk(payment.applicationId, { attributes: ["ownerUserId"] });
+  if (!app) throw NotFound("Application");
+
+  if (!ownerOrAdmin(app.ownerUserId, actor)) {
+    throw Forbidden("You can only view proof for your own payment");
+  }
+
+  if (!payment.proofDocumentId) {
+    throw BadRequest("No proof document has been uploaded for this payment");
+  }
+
+  const doc = await Document.findByPk(payment.proofDocumentId);
+  if (!doc) throw NotFound("Document");
+
+  const url = await presignDownload({ key: doc.storageKey, expiresInSeconds: 300 });
+  return { url };
 }
 
 /**

@@ -19,11 +19,13 @@ const SLA_CLASSES: Record<TransferRow["slaUrgency"], string> = {
 
 export function BankTransfersTable({ data }: { data: TransferRow[] }) {
   const router = useRouter();
-  const [pending, setPending] = useState<Set<string>>(new Set());
+  const [confirming, setConfirming] = useState<Set<string>>(new Set());
+  const [rejecting, setRejecting] = useState<Set<string>>(new Set());
+  const [viewing, setViewing] = useState<Set<string>>(new Set());
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function handleConfirm(paymentId: string) {
-    setPending((prev) => new Set(prev).add(paymentId));
+    setConfirming((prev) => new Set(prev).add(paymentId));
     setErrors((prev) => { const next = { ...prev }; delete next[paymentId]; return next; });
 
     try {
@@ -41,7 +43,53 @@ export function BankTransfersTable({ data }: { data: TransferRow[] }) {
     } catch {
       setErrors((prev) => ({ ...prev, [paymentId]: "Network error — please try again" }));
     } finally {
-      setPending((prev) => { const next = new Set(prev); next.delete(paymentId); return next; });
+      setConfirming((prev) => { const next = new Set(prev); next.delete(paymentId); return next; });
+    }
+  }
+
+  async function handleReject(paymentId: string) {
+    setRejecting((prev) => new Set(prev).add(paymentId));
+    setErrors((prev) => { const next = { ...prev }; delete next[paymentId]; return next; });
+
+    try {
+      const res = await fetch(`${API_BASE}/payments/${paymentId}/reject`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const message = (body as { error?: { message?: string } }).error?.message ?? `Error ${res.status}`;
+        setErrors((prev) => ({ ...prev, [paymentId]: message }));
+        return;
+      }
+      router.refresh();
+    } catch {
+      setErrors((prev) => ({ ...prev, [paymentId]: "Network error — please try again" }));
+    } finally {
+      setRejecting((prev) => { const next = new Set(prev); next.delete(paymentId); return next; });
+    }
+  }
+
+  async function handleView(paymentId: string) {
+    setViewing((prev) => new Set(prev).add(paymentId));
+    setErrors((prev) => { const next = { ...prev }; delete next[paymentId]; return next; });
+
+    try {
+      const res = await fetch(`${API_BASE}/payments/${paymentId}/proof`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const message = (body as { error?: { message?: string } }).error?.message ?? `Error ${res.status}`;
+        setErrors((prev) => ({ ...prev, [paymentId]: message }));
+        return;
+      }
+      const { url } = await res.json() as { url: string };
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      setErrors((prev) => ({ ...prev, [paymentId]: "Network error — please try again" }));
+    } finally {
+      setViewing((prev) => { const next = new Set(prev); next.delete(paymentId); return next; });
     }
   }
 
@@ -93,17 +141,24 @@ export function BankTransfersTable({ data }: { data: TransferRow[] }) {
     {
       key: "proof",
       header: "Proof",
-      render: () => (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 border-green-200 bg-green-50 text-xs text-green-700 hover:bg-green-100"
-          disabled
-          title="Proof download not yet wired (Phase 3)"
-        >
-          View
-        </Button>
-      ),
+      render: (row) => {
+        const paymentId = String(row.paymentId);
+        const paymentStatus = String(row.paymentStatus);
+        const hasProof = paymentStatus === PaymentStatus.PROOF_UPLOADED || paymentStatus === PaymentStatus.CONFIRMED || paymentStatus === PaymentStatus.FAILED;
+        const isViewLoading = viewing.has(paymentId);
+        return (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 border-green-200 bg-green-50 text-xs text-green-700 hover:bg-green-100"
+            disabled={!hasProof || isViewLoading}
+            title={hasProof ? "Download payment proof" : "No proof uploaded yet"}
+            onClick={() => handleView(paymentId)}
+          >
+            {isViewLoading ? "Loading…" : "View"}
+          </Button>
+        );
+      },
     },
     {
       key: "actions",
@@ -111,8 +166,10 @@ export function BankTransfersTable({ data }: { data: TransferRow[] }) {
       render: (row) => {
         const paymentId = String(row.paymentId);
         const paymentStatus = String(row.paymentStatus);
-        const isLoading = pending.has(paymentId);
-        const canConfirm = paymentStatus === PaymentStatus.PROOF_UPLOADED;
+        const isConfirming = confirming.has(paymentId);
+        const isRejecting = rejecting.has(paymentId);
+        const isBusy = isConfirming || isRejecting;
+        const canActOnProof = paymentStatus === PaymentStatus.PROOF_UPLOADED;
         const errorMsg = errors[paymentId];
         return (
           <div className="flex flex-col gap-1">
@@ -120,26 +177,33 @@ export function BankTransfersTable({ data }: { data: TransferRow[] }) {
               <Button
                 size="sm"
                 className="h-7 bg-green-500 text-xs hover:bg-green-600"
-                disabled={!canConfirm || isLoading}
+                disabled={!canActOnProof || isBusy}
                 title={
-                  !canConfirm
+                  !canActOnProof
                     ? "Proof has not been uploaded yet"
-                    : isLoading
+                    : isConfirming
                     ? "Confirming…"
                     : "Confirm this bank transfer"
                 }
                 onClick={() => handleConfirm(paymentId)}
               >
-                {isLoading ? "Confirming…" : "Confirm"}
+                {isConfirming ? "Confirming…" : "Confirm"}
               </Button>
               <Button
                 variant="destructive"
                 size="sm"
                 className="h-7 text-xs"
-                disabled
-                title="Reject is not yet implemented"
+                disabled={!canActOnProof || isBusy}
+                title={
+                  !canActOnProof
+                    ? "Proof has not been uploaded yet"
+                    : isRejecting
+                    ? "Rejecting…"
+                    : "Reject this bank transfer proof"
+                }
+                onClick={() => handleReject(paymentId)}
               >
-                Reject
+                {isRejecting ? "Rejecting…" : "Reject"}
               </Button>
             </div>
             {errorMsg && (
