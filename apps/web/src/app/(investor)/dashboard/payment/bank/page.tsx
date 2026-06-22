@@ -4,16 +4,17 @@ import { authOptions } from "@/lib/auth";
 import { getInvestorDashboardData } from "@/lib/investor-data";
 import { BankTransferForm } from "./bank-transfer-form";
 
-// Bank account details — update via UNOC Finance when account changes.
-// These are intentionally server-side: they are injected at render time
-// so they never need to be committed to env or leaked to the client bundle.
-const BANK_DETAILS = [
-  { label: "Bank",         value: "Stanbic Bank Uganda Ltd" },
-  { label: "Account Name", value: "Uganda National Oil Company Ltd" },
-  { label: "Account No.",  value: "9030011896005" },
-  { label: "Currency",     value: "USD" },
-  { label: "Swift / BIC",  value: "SBICUGKX" },
-] as const;
+// Bank account details — set via STANBIC_* env vars; hardcoded values are
+// fallbacks only. Server-only: rendered at request time, never in client bundle.
+function getBankDetails() {
+  return [
+    { label: "Bank",         value: process.env.STANBIC_BANK_NAME        ?? "Stanbic Bank Uganda Ltd" },
+    { label: "Account Name", value: process.env.STANBIC_ACCOUNT_NAME     ?? "Uganda National Oil Company Ltd" },
+    { label: "Account No.",  value: process.env.STANBIC_ACCOUNT_NUMBER   ?? "9030011896005" },
+    { label: "Currency",     value: "USD" },
+    { label: "Swift / BIC",  value: process.env.STANBIC_SWIFT            ?? "SBICUGKX" },
+  ];
+}
 
 export default async function BankTransferPage() {
   const session = await getServerSession(authOptions);
@@ -30,12 +31,13 @@ export default async function BankTransferPage() {
   // payment is confirmed), so we use the application UUID prefix as the
   // investor-side reference the UNOC Finance team can match against.
   const paymentRef = `KIP-APP-${app.id.slice(0, 8).toUpperCase()}`;
+  const bankDetails = getBankDetails();
 
   return (
     <BankTransferForm
       applicationId={app.id}
       paymentRef={paymentRef}
-      bankDetails={[...BANK_DETAILS, { label: "Payment Reference", value: paymentRef }]}
+      bankDetails={[...bankDetails, { label: "Payment Reference", value: paymentRef }]}
     />
   );
 }

@@ -489,6 +489,17 @@ EMAIL_SERVER_PORT=1025
 EMAIL_SERVER_USER=          # leave blank for MailHog
 EMAIL_SERVER_PASSWORD=      # leave blank for MailHog
 EMAIL_FROM=noreply@kip.local
+
+# Stanbic bank account details (bank transfer payment page).
+# Defaults to UNOC production values; override to change without a code redeploy.
+STANBIC_BANK_NAME=Stanbic Bank Uganda Ltd
+STANBIC_ACCOUNT_NAME=Uganda National Oil Company Ltd
+STANBIC_ACCOUNT_NUMBER=9030011896005
+STANBIC_SWIFT=SBICUGKX
+
+# Bank-transfer SLA for the admin console. Hours from proof upload until the
+# "Overdue" label appears. Default 48. Parsed in admin/queries.ts at request time.
+BANK_TRANSFER_SLA_HOURS=48
 ```
 
 ### Planned — referenced in design but NOT yet wired/validated

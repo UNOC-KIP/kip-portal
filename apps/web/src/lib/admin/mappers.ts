@@ -202,8 +202,9 @@ export function toTransferRow(t: {
   transferRef: string | null;
   uploadedAt: Date | string;
   now?: Date;
+  slaHours?: number;
 }): TransferRow {
-  const sla = computeTransferSla(t.uploadedAt, t.now);
+  const sla = computeTransferSla(t.uploadedAt, t.now, t.slaHours);
   return {
     paymentId: t.id,
     paymentStatus: t.status,

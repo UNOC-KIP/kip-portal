@@ -83,6 +83,8 @@ export async function listApplications(opts: { limit?: number; offset?: number }
 // ─── Pending bank transfers ──────────────────────────────────────────────────
 
 export async function listPendingBankTransfers(now: Date = new Date()): Promise<TransferRow[]> {
+  const slaHours = Number(process.env.BANK_TRANSFER_SLA_HOURS) || 48;
+
   const payments = await Payment.findAll({
     where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
     include: [
@@ -108,6 +110,7 @@ export async function listPendingBankTransfers(now: Date = new Date()): Promise<
       transferRef: p.transferRef,
       uploadedAt: p.paidAt ?? p.createdAt,
       now,
+      slaHours,
     });
   });
 }

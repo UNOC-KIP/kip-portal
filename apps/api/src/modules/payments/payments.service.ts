@@ -49,11 +49,11 @@ export async function initiatePayment(
       ? env.EOI_APPLICATION_FEE_UGX
       : env.EOI_APPLICATION_FEE_USD;
 
-  // Idempotency: re-check inside the transaction so concurrent calls don't
-  // both slip through before either commits. lock:true issues SELECT FOR UPDATE,
-  // serialising concurrent requests on the found rows. A DB-level unique partial
-  // index on (applicationId) WHERE status='PENDING' would be the complete fix —
-  // tracked as a future migration.
+  // Idempotency: re-check inside the transaction with SELECT FOR UPDATE to
+  // serialise concurrent requests on an existing PENDING row. A partial unique
+  // index on (applicationId) WHERE status='PENDING' (migration
+  // 20260621000000-payment-pending-unique-index.ts) closes the concurrent-empty-
+  // set race that SELECT FOR UPDATE cannot catch (no row to lock yet).
   return sequelize.transaction(async (t) => {
     const existing = await Payment.findOne({
       where: { applicationId: input.applicationId, status: PaymentStatus.PENDING },
