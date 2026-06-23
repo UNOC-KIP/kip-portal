@@ -14,6 +14,7 @@ export class InvestorOrg extends Model<
   declare id: CreationOptional<string>
   declare legalName: string
   declare countryOfIncorporation: CreationOptional<string | null>
+  declare tin: CreationOptional<string | null>
   declare address: CreationOptional<string | null>
   declare phone: CreationOptional<string | null>
   declare email: CreationOptional<string | null>
@@ -26,6 +27,7 @@ export class InvestorOrg extends Model<
         id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
         legalName: { type: DataTypes.STRING, allowNull: false },
         countryOfIncorporation: { type: DataTypes.STRING, allowNull: true },
+        tin: { type: DataTypes.STRING, allowNull: true },
         address: { type: DataTypes.STRING, allowNull: true },
         phone: { type: DataTypes.STRING, allowNull: true },
         email: { type: DataTypes.STRING, allowNull: true },

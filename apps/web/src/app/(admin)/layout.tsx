@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { SidebarProvider } from "@/context/sidebar-context";
 import { DashboardSidebar } from "@/components/dashboard-sidebar";
 import { SidebarInset } from "@/components/sidebar-inset";
+import { IdleTimeout } from "@/components/idle-timeout";
 import { requireStaff } from "@/lib/rbac-server";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -16,6 +17,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
         <DashboardSidebar role={role} />
         <SidebarInset>{children}</SidebarInset>
       </div>
+      <IdleTimeout />
     </SidebarProvider>
   );
 }

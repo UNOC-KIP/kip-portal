@@ -40,7 +40,7 @@ kip-portal/
 │   │       ├── components/    Shared UI components (+ ui/ primitives)
 │   │       ├── context/       React context providers
 │   │       └── lib/           auth.ts (NextAuth), utils.ts, investor-data.ts (placeholder data)
-│   └── api/                   Express / Node.js — REST API (port 4000)
+│   └── api/                   Express / Node.js — REST API (port 4001)
 │       └── src/
 │           ├── modules/       applications/, payments/, health/, webhooks/
 │           ├── middleware/    auth.ts, error-handler.ts, request-context.ts
@@ -79,7 +79,7 @@ kip-portal/
 | Layer | Technology | Notes |
 |---|---|---|
 | Frontend | Next.js 14, App Router, Tailwind CSS | |
-| Backend | Express.js, Node.js, TypeScript | Port 4000 |
+| Backend | Express.js, Node.js, TypeScript | Port 4001 |
 | ORM | **Sequelize 6** + pg (pure JS) | Client package: `@kip/db`. No native binaries — works on ARM64 Windows. Compiled to `dist/` so Next.js loads it as a server-external. |
 | Migrations | **umzug 3** + TypeScript migration files | `packages/db/migrations/` |
 | Database | PostgreSQL 16 | Local Docker port **5433** (maps to 5432 inside container) |
@@ -250,7 +250,7 @@ WITHDRAWN               → terminal — investor can withdraw before SUBMITTED
 | `Account` | NextAuth OAuth/email accounts linked to a User |
 | `Session` | NextAuth active sessions |
 | `VerificationToken` | NextAuth email verification tokens |
-| `InvestorOrg` | Investor's company. Created at sign-up. User.investorOrgId links here |
+| `InvestorOrg` | Investor's company. Created at sign-up (via `/api/register`). User.investorOrgId links here. Columns: `legalName`, `countryOfIncorporation`, `tin`, `address`, `phone`, `email` |
 | `ApplicationWindow` | Configures the open/close period for an EOI round |
 | `Application` | Central EOI record |
 | `ApplicationSection` | One row per section per application. `payload` is JSON validated by `@kip/shared` Zod schemas |
@@ -450,8 +450,8 @@ These are the **only** variables the API enforces. The process exits on startup 
 ```env
 NODE_ENV=development        # development | test | production (default: development)
 DATABASE_URL=postgresql://kip:kip_dev_password@localhost:5433/kip_portal?schema=public
-API_PORT=4000               # default: 4000
-WEB_PUBLIC_URL=http://localhost:3000   # default
+API_PORT=4001               # default: 4001
+WEB_PUBLIC_URL=http://localhost:4000   # default
 LOG_LEVEL=info              # fatal|error|warn|info|debug|trace (default: info)
 NEXTAUTH_SECRET=            # REQUIRED; must equal apps/web NEXTAUTH_SECRET (API verifies web-minted JWTs)
 N8N_WEBHOOK_SECRET=         # optional; empty/unset = webhooks are no-ops (good for tests)
@@ -475,13 +475,13 @@ EOI_APPLICATION_FEE_UGX=3700000  # default: 3700000 (UGX)
 ### Web / NextAuth — consumed by the Next.js app (not in the API schema)
 
 ```env
-NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_URL=http://localhost:4000
 NEXTAUTH_SECRET=            # min 32 chars random string
 
 # Express API base URL — used by client components (e.g. BankTransferForm) to reach the API.
 # Must have NEXT_PUBLIC_ prefix to be available in the browser bundle.
-# Code falls back to http://localhost:4000 when unset.
-NEXT_PUBLIC_API_URL=http://localhost:4000
+# Code falls back to http://localhost:4001 when unset.
+NEXT_PUBLIC_API_URL=http://localhost:4001
 
 # Email (MailHog local)
 EMAIL_SERVER_HOST=localhost
@@ -555,6 +555,7 @@ Seed password for all accounts: **`KipPortal2025!`** (bcrypt-hashed, works with 
 | `packages/db/src/models/` | 13 model files: user, account, session, verification-token, investor-org, application-window, application, application-section, document, payment, review-action, clarification-request, notification |
 | `packages/db/migrations/20260526060720-initial.ts` | Full initial schema — all tables, enums, indexes, foreign keys |
 | `packages/db/migrations/20260608120000-lac-committee-pipeline.ts` | LAC pipeline migration — updated enums, ClarificationRequest, sequenceCounter, nullable reference |
+| `packages/db/migrations/20260623000000-investor-org-tin.ts` | Adds nullable `tin TEXT` column to `InvestorOrg` — populated at investor registration |
 | `packages/db/migrations/20260621000000-payment-pending-unique-index.ts` | Partial unique index `payments_pending_per_app` on `Payment(applicationId) WHERE status='PENDING'` — closes the concurrent-creation race |
 | `packages/db/seed.ts` | Full seed — 9 accounts, 4 orgs, 4 apps (LAC_REVIEW / ALLOCATED / NOT_SHORTLISTED / DRAFT), payments, sections, review history |
 | `packages/shared/src/enums.ts` | All enums (`as const` objects + union types, not TS `enum`) — source of truth; keep Sequelize model strings in sync |
@@ -574,13 +575,15 @@ Seed password for all accounts: **`KipPortal2025!`** (bcrypt-hashed, works with 
 | `apps/web/src/context/sidebar-context.tsx` | Dashboard sidebar open/collapsed state |
 | `apps/web/src/lib/investor-data.ts` | Hardcoded investor/dashboard test data — pending live wiring |
 | `apps/web/src/app/page.tsx` | Public home page |
-| `apps/web/src/app/(auth)/sign-up/page.tsx` | Investor registration form |
-| `apps/web/src/app/(auth)/sign-in/page.tsx` | Sign-in (split-panel layout) |
+| `apps/web/src/app/api/register/route.ts` | `POST /api/register` — validates + hashes password, creates `InvestorOrg` + `User` (INVESTOR role) in one transaction. Returns 201 / 409 / 422. |
+| `apps/web/src/app/(auth)/sign-up/page.tsx` | Investor registration form — calls `/api/register`, client-side + server-side Zod validation, password strength meter, field-level errors |
+| `apps/web/src/app/(auth)/sign-in/page.tsx` | Sign-in (split-panel layout) — shows success banner when `?registered=1` query param is present |
+| `apps/web/src/app/(admin)/console/users/[id]/page.tsx` | Admin user detail page — shows account + company info (TIN, country, phone, org email, app ref/status) |
 | `apps/web/src/app/(auth)/verify/page.tsx` | OTP / magic link verify step |
 | `apps/web/src/lib/format.ts` | Pure display formatters (date/money), deterministic (UTC + fixed locale). Unit-tested. No `@kip/db`. |
 | `apps/web/src/lib/investor-data.ts` | Investor read data layer — direct-DB server queries (dashboard + application detail). **Live on seeded data.** |
-| `apps/web/src/lib/admin/mappers.ts` | Pure DB-row → table-row mappers + SLA/label helpers for the admin console. Unit-tested. No `@kip/db`. |
-| `apps/web/src/lib/admin/queries.ts` | `server-only` admin read layer (applications, app detail, bank transfers, users, windows, TC queue, dashboard stats). Direct-DB via `@kip/db`. |
+| `apps/web/src/lib/admin/mappers.ts` | Pure DB-row → table-row mappers + SLA/label helpers for the admin console. Unit-tested. No `@kip/db`. `UserRow` now includes `id`, `tin`, `country`, `phone`, `registeredAt`. |
+| `apps/web/src/lib/admin/queries.ts` | `server-only` admin read layer. `listUsers` now returns `id`, `tin`, `country`, `phone`, `registeredAt`. New export: `getUserDetail(id)` → `UserDetail`. |
 | `apps/web/src/app/(investor)/dashboard/` | Investor dashboard — **live** via `investor-data.ts`. |
 | `apps/web/src/app/(admin)/console/` | Admin console — **live on seeded data** via `admin/queries.ts` (applications list + `[ref]` detail, bank-transfers, users, windows, TC queue, overview). `land-plots`/`report` still placeholder (no backing models yet). |
 
@@ -591,7 +594,7 @@ Seed password for all accounts: **`KipPortal2025!`** (bcrypt-hashed, works with 
 ```bash
 pnpm dev                         # start web + api in parallel
 pnpm --filter @kip/web dev       # web only  (port 3000)
-pnpm --filter @kip/api dev       # api only  (port 4000)
+pnpm --filter @kip/api dev       # api only  (port 4001)
 
 pnpm db:build                    # compile @kip/db to dist/ (run after any model change)
 pnpm db:migrate                  # apply pending migrations to the DB
@@ -658,4 +661,4 @@ docker compose logs -f           # tail all service logs
 - **Never let `apps/web` and `apps/api` `NEXTAUTH_SECRET` drift apart** — the API can't verify the web's session tokens if they differ
 - **Never hardcode TC deadlines or date offsets in pages** — compute them in the query layer (e.g. `tcDeadlineLabel = closeAt + 21 days` in `getTcQueueView`) so they stay in sync with the active window. See `lib/admin/queries.ts`.
 - **Never compare `TcAppRow.status` against raw string literals** — import `TC_STATUS_LABELS` from `lib/admin/mappers.ts` so a rename in `tcStatusLabel()` breaks at the import site rather than silently breaking stat counts.
-- **Client components calling the Express API use `NEXT_PUBLIC_API_URL`** (fallback: `http://localhost:4000`). Always pass `credentials: "include"` so the `next-auth.session-token` cookie is forwarded. Do not hardcode the API base URL in client components.
+- **Client components calling the Express API use `NEXT_PUBLIC_API_URL`** (fallback: `http://localhost:4001`). Always pass `credentials: "include"` so the `next-auth.session-token` cookie is forwarded. Do not hardcode the API base URL in client components.

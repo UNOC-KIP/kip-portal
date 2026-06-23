@@ -138,7 +138,10 @@ function SequelizeAdapter(): Adapter {
 
 export const authOptions: NextAuthOptions = {
   adapter: SequelizeAdapter(),
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 8 * 60 * 60, // 8 hours — hard ceiling on token lifetime
+  },
   pages: {
     signIn: "/sign-in",
   },

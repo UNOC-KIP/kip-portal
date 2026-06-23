@@ -1,23 +1,29 @@
 "use client";
 
+import Link from "next/link";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { StatusBadge, type StatusVariant } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 
 export type UserRow = {
+  id: string;
   company: string;
   email: string;
   role: string;
   ref: string;
   status: string;
-  lastLogin: string;
+  tin: string;
+  country: string;
+  phone: string;
+  registeredAt: string;
 };
 
 const ROLE_VARIANT: Record<string, StatusVariant> = {
-  Investor:    "role-investor",
-  "TC Member": "role-tc",
-  Exco:        "role-exco",
-  Admin:       "role-admin",
+  Investor:     "role-investor",
+  "TC Member":  "role-tc",
+  "LAC Member": "role-tc",
+  Exco:         "role-exco",
+  Admin:        "role-admin",
 };
 
 const STATUS_VARIANT: Record<string, StatusVariant> = {
@@ -35,10 +41,23 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
   },
   {
     key: "email",
-    header: "Email address",
+    header: "Email",
     render: (row) => (
       <span className="text-ink-500">{String(row.email)}</span>
     ),
+  },
+  {
+    key: "tin",
+    header: "TIN",
+    hideBelow: "md",
+    render: (row) => (
+      <span className="font-mono text-xs text-ink-600">{String(row.tin)}</span>
+    ),
+  },
+  {
+    key: "country",
+    header: "Country",
+    hideBelow: "lg",
   },
   {
     key: "role",
@@ -50,7 +69,7 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
   },
   {
     key: "ref",
-    header: "Reference",
+    header: "App Ref",
     hideBelow: "md",
     render: (row) => (
       <span className="font-mono text-xs text-ink-500">{String(row.ref)}</span>
@@ -65,20 +84,22 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
     },
   },
   {
-    key: "lastLogin",
-    header: "Last Login",
+    key: "registeredAt",
+    header: "Registered",
     hideBelow: "lg",
     render: (row) => (
-      <span className="text-ink-500">{String(row.lastLogin)}</span>
+      <span className="text-ink-500">{String(row.registeredAt)}</span>
     ),
   },
   {
     key: "actions",
-    header: "Actions",
-    render: () => (
-      <Button variant="ghost" size="sm" className="h-7 text-ink-400">
-        •••
-      </Button>
+    header: "",
+    render: (row) => (
+      <Link href={`/console/users/${String(row.id)}`}>
+        <Button variant="ghost" size="sm" className="h-7 text-xs text-ink-400 hover:text-ink-900">
+          View
+        </Button>
+      </Link>
     ),
   },
 ];
@@ -88,9 +109,9 @@ export function UsersTable({ data }: { data: UserRow[] }) {
     <DataTable
       columns={COLUMNS}
       data={data as unknown as Record<string, unknown>[]}
-      rowKey="ref"
-      searchPlaceholder="Search company or email…"
-      searchKeys={["company", "email", "role"] as never[]}
+      rowKey="id"
+      searchPlaceholder="Search company, email or TIN…"
+      searchKeys={["company", "email", "tin", "role"] as never[]}
       exportLabel="Export"
     />
   );

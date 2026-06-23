@@ -8,7 +8,7 @@ import { Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB — matches presignProofSchema
 

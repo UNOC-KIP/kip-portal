@@ -3,14 +3,26 @@
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function SignInPage() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
+  const [warningMsg, setWarningMsg] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("registered") === "1") {
+      setSuccessMsg("Account created! Sign in with your email and password.");
+    } else if (searchParams.get("timeout") === "1") {
+      setWarningMsg("Your session expired due to inactivity. Please sign in again.");
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -121,6 +133,18 @@ export default function SignInPage() {
                     className="block w-full rounded-md border border-ink-300 px-3 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
                   />
                 </div>
+
+                {warningMsg && (
+                  <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {warningMsg}
+                  </p>
+                )}
+
+                {successMsg && (
+                  <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+                    {successMsg}
+                  </p>
+                )}
 
                 {error && (
                   <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">

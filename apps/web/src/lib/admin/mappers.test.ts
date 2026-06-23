@@ -140,9 +140,10 @@ describe("row mappers", () => {
     });
   });
 
-  it("toUserRow uses name, derives status, dashes the unknowns", () => {
+  it("toUserRow uses orgName, derives status, dashes the unknowns", () => {
     expect(
       toUserRow({
+        id: "user-uuid-1",
         name: "Mohammed Al-Rashidi",
         email: "investor@gulfpetrochem.ae",
         role: "INVESTOR",
@@ -150,14 +151,22 @@ describe("row mappers", () => {
         reference: "KIP-EOI-2026-0001",
         emailVerified: null,
         hasPassword: true,
+        tin: "1000234567",
+        country: "UAE",
+        phone: "+971501234567",
+        createdAt: "2026-01-15T08:00:00.000Z",
       }),
     ).toEqual({
-      company: "Mohammed Al-Rashidi",
+      id: "user-uuid-1",
+      company: "Gulf Petrochem International FZE",
       email: "investor@gulfpetrochem.ae",
       role: "Investor",
       ref: "KIP-EOI-2026-0001",
       status: "Active",
-      lastLogin: "—",
+      tin: "1000234567",
+      country: "UAE",
+      phone: "+971501234567",
+      registeredAt: "15 Jan 2026",
     });
   });
 

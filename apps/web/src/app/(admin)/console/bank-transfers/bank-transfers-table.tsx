@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { PaymentStatus } from "@kip/shared";
 import type { TransferRow } from "@/lib/admin/mappers";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 const SLA_CLASSES: Record<TransferRow["slaUrgency"], string> = {
   ok:      "text-ink-500",

@@ -148,12 +148,16 @@ export type TransferRow = {
 };
 
 export type UserRow = {
+  id: string;
   company: string;
   email: string;
   role: string;
   ref: string;
   status: string;
-  lastLogin: string;
+  tin: string;
+  country: string;
+  phone: string;
+  registeredAt: string;
 };
 
 export type TcAppRow = {
@@ -218,6 +222,7 @@ export function toTransferRow(t: {
 }
 
 export function toUserRow(u: {
+  id: string;
   name: string | null;
   email: string;
   role: string;
@@ -225,16 +230,22 @@ export function toUserRow(u: {
   reference: string | null;
   emailVerified: Date | string | null;
   hasPassword: boolean;
+  tin: string | null;
+  country: string | null;
+  phone: string | null;
+  createdAt: Date | string;
 }): UserRow {
   return {
-    company: u.name ?? u.orgName ?? u.email,
+    id: u.id,
+    company: u.orgName ?? u.name ?? u.email,
     email: u.email,
     role: roleLabel(u.role),
     ref: u.reference ?? DASH,
     status: userStatusLabel(u.emailVerified, u.hasPassword),
-    // Last login is not tracked: NextAuth uses JWT sessions, so no Session rows
-    // are written on credential sign-in. Revisit if a lastLoginAt column lands.
-    lastLogin: DASH,
+    tin: u.tin ?? DASH,
+    country: u.country ?? DASH,
+    phone: u.phone ?? DASH,
+    registeredAt: formatShortDate(u.createdAt),
   };
 }
 

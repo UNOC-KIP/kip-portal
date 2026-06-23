@@ -38,6 +38,7 @@ import {
   toTransferRow,
   toUserRow,
   toWindowRow,
+  userStatusLabel,
   type ApplicationRow,
   type TcAppRow,
   type TransferRow,
@@ -119,10 +120,14 @@ export async function listPendingBankTransfers(now: Date = new Date()): Promise<
 
 export async function listUsers(opts: { limit?: number; offset?: number } = {}): Promise<UserRow[]> {
   const users = await User.findAll({
-    // passwordHash is read only to derive a boolean below — never returned.
-    attributes: ["email", "name", "role", "emailVerified", "passwordHash"],
+    // passwordHash is read only to derive a boolean — never returned in the row.
+    attributes: ["id", "email", "name", "role", "emailVerified", "passwordHash", "createdAt"],
     include: [
-      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] },
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: ["legalName", "countryOfIncorporation", "tin", "phone"],
+      },
       { model: Application, as: "applications", attributes: ["reference"], required: false },
     ],
     order: [["createdAt", "ASC"]],
@@ -134,6 +139,7 @@ export async function listUsers(opts: { limit?: number; offset?: number } = {}):
     const u = row as User & { investorOrg?: InvestorOrg; applications?: Application[] };
     const ref = u.applications?.find((a) => a.reference)?.reference ?? null;
     return toUserRow({
+      id: u.id,
       name: u.name ?? null,
       email: u.email,
       role: u.role,
@@ -141,8 +147,66 @@ export async function listUsers(opts: { limit?: number; offset?: number } = {}):
       reference: ref,
       emailVerified: u.emailVerified ?? null,
       hasPassword: Boolean(u.passwordHash),
+      tin: u.investorOrg?.tin ?? null,
+      country: u.investorOrg?.countryOfIncorporation ?? null,
+      phone: u.investorOrg?.phone ?? null,
+      createdAt: u.createdAt,
     });
   });
+}
+
+// ─── User detail ─────────────────────────────────────────────────────────────
+
+export type UserDetail = {
+  id: string;
+  email: string;
+  role: string;
+  status: string;
+  registeredAt: string;
+  company: string;
+  tin: string;
+  country: string;
+  phone: string;
+  orgEmail: string;
+  ref: string;
+  appStatus: string | null;
+};
+
+export async function getUserDetail(id: string): Promise<UserDetail | null> {
+  const user = await User.findByPk(id, {
+    attributes: ["id", "email", "name", "role", "emailVerified", "passwordHash", "createdAt"],
+    include: [
+      { model: InvestorOrg, as: "investorOrg" },
+      {
+        model: Application,
+        as: "applications",
+        attributes: ["reference", "status"],
+        required: false,
+      },
+    ],
+  });
+  if (!user) return null;
+
+  const u = user as User & {
+    investorOrg?: InvestorOrg;
+    applications?: Application[];
+  };
+  const latestApp = u.applications?.find((a) => a.reference) ?? u.applications?.[0] ?? null;
+
+  return {
+    id: u.id,
+    email: u.email,
+    role: roleLabel(u.role),
+    status: userStatusLabel(u.emailVerified ?? null, Boolean(u.passwordHash)),
+    registeredAt: formatDateTime(u.createdAt),
+    company: u.investorOrg?.legalName ?? "—",
+    tin: u.investorOrg?.tin ?? "—",
+    country: u.investorOrg?.countryOfIncorporation ?? "—",
+    phone: u.investorOrg?.phone ?? "—",
+    orgEmail: u.investorOrg?.email ?? "—",
+    ref: latestApp?.reference ?? "—",
+    appStatus: latestApp?.status ?? null,
+  };
 }
 
 // ─── Application windows ─────────────────────────────────────────────────────
