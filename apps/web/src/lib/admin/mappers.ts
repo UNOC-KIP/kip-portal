@@ -89,12 +89,16 @@ export function roleLabel(role: string): string {
   }
 }
 
-/** A user is "Active" once they can authenticate (verified email or a password set). */
+/** Maps the User.status DB value to a display label. */
 export function userStatusLabel(
-  emailVerified: Date | string | null | undefined,
-  hasPassword: boolean,
-): "Active" | "Pending" {
-  return emailVerified || hasPassword ? "Active" : "Pending";
+  rawStatus: string,
+): "Active" | "Pending" | "Rejected" {
+  switch (rawStatus) {
+    case "ACTIVE":         return "Active";
+    case "REJECTED":       return "Rejected";
+    case "PENDING_REVIEW":
+    default:               return "Pending";
+  }
 }
 
 /** Square metres → hectares, one decimal. Em dash for missing/invalid. */
@@ -228,8 +232,7 @@ export function toUserRow(u: {
   role: string;
   orgName: string | null;
   reference: string | null;
-  emailVerified: Date | string | null;
-  hasPassword: boolean;
+  rawStatus: string;
   tin: string | null;
   country: string | null;
   phone: string | null;
@@ -241,7 +244,7 @@ export function toUserRow(u: {
     email: u.email,
     role: roleLabel(u.role),
     ref: u.reference ?? DASH,
-    status: userStatusLabel(u.emailVerified, u.hasPassword),
+    status: userStatusLabel(u.rawStatus),
     tin: u.tin ?? DASH,
     country: u.country ?? DASH,
     phone: u.phone ?? DASH,

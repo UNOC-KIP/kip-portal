@@ -14,6 +14,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
   declare passwordHash: CreationOptional<string | null>
   declare name: CreationOptional<string | null>
   declare role: CreationOptional<string>
+  declare status: CreationOptional<string>
   declare investorOrgId: CreationOptional<string | null>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
@@ -27,6 +28,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
         passwordHash: { type: DataTypes.STRING, allowNull: true },
         name: { type: DataTypes.STRING, allowNull: true },
         role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'INVESTOR' },
+        status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'PENDING_REVIEW' },
         investorOrgId: { type: DataTypes.UUID, allowNull: true },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,

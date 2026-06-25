@@ -2,9 +2,31 @@ import Image from "next/image";
 import Link from "next/link";
 
 const FOOTER_COLS = [
-  { title: "Our Company", links: ["About KIP", "Contact Us"] },
-  { title: "Platform",    links: ["How it works", "For Investors"] },
-  { title: "Support",     links: ["FAQ", "Help Centre", "Privacy Policy", "Terms of Service"] },
+  {
+    title: "Our Company",
+    links: [
+      { label: "About KIP",  href: "/about" },
+      { label: "Contact Us", href: "/contact" },
+    ],
+  },
+  {
+    title: "Platform",
+    links: [
+      { label: "How it works",  href: "/how-it-works" },
+      { label: "For Investors", href: "/for-investors" },
+      { label: "Land Map",      href: "/land-map" },
+      { label: "Resources",     href: "/resources" },
+    ],
+  },
+  {
+    title: "Support",
+    links: [
+      { label: "FAQ",              href: "/faq" },
+      { label: "Help Centre",      href: "/help" },
+      { label: "Privacy Policy",   href: "/privacy" },
+      { label: "Terms of Service", href: "/terms" },
+    ],
+  },
 ];
 
 export function SiteFooter() {
@@ -23,9 +45,12 @@ export function SiteFooter() {
               <p className="mb-4 text-[13px] font-semibold">{col.title}</p>
               <ul className="space-y-2.5">
                 {col.links.map((link) => (
-                  <li key={link}>
-                    <Link href="#" className="text-[13px] text-white/50 transition hover:text-white">
-                      {link}
+                  <li key={link.label}>
+                    <Link
+                      href={link.href}
+                      className="text-[13px] text-white/50 transition hover:text-white"
+                    >
+                      {link.label}
                     </Link>
                   </li>
                 ))}

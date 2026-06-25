@@ -26,6 +26,8 @@ import {
   PaymentMethod,
   PaymentStatus,
   ReviewActionType,
+  UserRole,
+  UserStatus,
 } from "@kip/shared";
 import { formatMoney, formatDateTime, formatShortDate } from "../format";
 import { SECTION_ORDER, SECTION_LABELS } from "../investor-data";
@@ -120,8 +122,7 @@ export async function listPendingBankTransfers(now: Date = new Date()): Promise<
 
 export async function listUsers(opts: { limit?: number; offset?: number } = {}): Promise<UserRow[]> {
   const users = await User.findAll({
-    // passwordHash is read only to derive a boolean — never returned in the row.
-    attributes: ["id", "email", "name", "role", "emailVerified", "passwordHash", "createdAt"],
+    attributes: ["id", "email", "name", "role", "status", "createdAt"],
     include: [
       {
         model: InvestorOrg,
@@ -145,8 +146,7 @@ export async function listUsers(opts: { limit?: number; offset?: number } = {}):
       role: u.role,
       orgName: u.investorOrg?.legalName ?? null,
       reference: ref,
-      emailVerified: u.emailVerified ?? null,
-      hasPassword: Boolean(u.passwordHash),
+      rawStatus: u.status as string,
       tin: u.investorOrg?.tin ?? null,
       country: u.investorOrg?.countryOfIncorporation ?? null,
       phone: u.investorOrg?.phone ?? null,
@@ -162,6 +162,7 @@ export type UserDetail = {
   email: string;
   role: string;
   status: string;
+  rawStatus: string;
   registeredAt: string;
   company: string;
   tin: string;
@@ -174,7 +175,7 @@ export type UserDetail = {
 
 export async function getUserDetail(id: string): Promise<UserDetail | null> {
   const user = await User.findByPk(id, {
-    attributes: ["id", "email", "name", "role", "emailVerified", "passwordHash", "createdAt"],
+    attributes: ["id", "email", "name", "role", "status", "createdAt"],
     include: [
       { model: InvestorOrg, as: "investorOrg" },
       {
@@ -192,12 +193,14 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
     applications?: Application[];
   };
   const latestApp = u.applications?.find((a) => a.reference) ?? u.applications?.[0] ?? null;
+  const rawStatus = u.status as string;
 
   return {
     id: u.id,
     email: u.email,
     role: roleLabel(u.role),
-    status: userStatusLabel(u.emailVerified ?? null, Boolean(u.passwordHash)),
+    status: userStatusLabel(rawStatus),
+    rawStatus,
     registeredAt: formatDateTime(u.createdAt),
     company: u.investorOrg?.legalName ?? "—",
     tin: u.investorOrg?.tin ?? "—",
@@ -296,11 +299,20 @@ export type AdminDashboard = {
   totalApplications: number;
   paymentsConfirmed: number;
   amountCollectedLabel: string;
+  amountCollectedRaw: number;
   eoisSubmitted: number;
   draftsInProgress: number;
   bankTransfersPending: number;
+  proofUploadedCount: number;
   methodSplit: { label: string; count: number }[];
   activity: { time: string; text: string }[];
+  // per-status counts for pipeline funnel
+  applicationsByStatus: { status: string; count: number }[];
+  // investor account breakdown
+  pendingUsers: number;
+  activeUsers: number;
+  rejectedUsers: number;
+  totalInvestors: number;
 };
 
 const ACTIVITY_TEXT: Partial<Record<ReviewActionType, string>> = {
@@ -326,14 +338,17 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
     bankCount,
     recentActions,
     bankTransfersPending,
+    allStatusRows,
+    pendingUsers,
+    activeUsers,
+    rejectedUsers,
+    proofUploadedCount,
   ] = await Promise.all([
     Application.count(),
     Application.count({ where: { status: [...SUBMITTED_STATUSES] } }),
     Application.count({ where: { status: DRAFT_STATUSES } }),
     Payment.count({ where: { status: PaymentStatus.CONFIRMED } }),
-    // sum() avoids loading all rows; returns null when no confirmed payments exist
     Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
-    // fetch just the currency of the first confirmed payment (USD is dominant, but be explicit)
     Payment.findOne({
       where: { status: PaymentStatus.CONFIRMED },
       attributes: ["currency"],
@@ -345,19 +360,24 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
       attributes: ["type", "createdAt"],
       include: [{ model: Application, attributes: ["reference"] }],
       order: [["createdAt", "DESC"]],
-      limit: 6,
+      limit: 8,
     }),
     Payment.count({
       where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
     }),
+    Application.findAll({ attributes: ["status"], raw: true }) as unknown as Promise<{ status: string }[]>,
+    User.count({ where: { status: UserStatus.PENDING_REVIEW, role: UserRole.INVESTOR } }),
+    User.count({ where: { status: UserStatus.ACTIVE, role: UserRole.INVESTOR } }),
+    User.count({ where: { status: UserStatus.REJECTED, role: UserRole.INVESTOR } }),
+    Payment.count({ where: { status: PaymentStatus.PROOF_UPLOADED } }),
   ]);
 
   const currency = dominantCurrencyRow?.currency ?? "USD";
   const total = confirmedAmountSum ?? 0;
 
   const methodSplit = [
-    { label: "Card", count: cardCount },
     { label: "Stanbic Transfer", count: bankCount },
+    { label: "Card", count: cardCount },
   ].filter((m) => m.count > 0);
 
   const activity = recentActions.map((row) => {
@@ -367,15 +387,29 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
     return { time: formatDateTime(ra.createdAt), text: `${ref} — ${what}` };
   });
 
+  // Build per-status counts map from the raw status rows
+  const statusCountMap = new Map<string, number>();
+  for (const { status } of allStatusRows) {
+    statusCountMap.set(status, (statusCountMap.get(status) ?? 0) + 1);
+  }
+  const applicationsByStatus = Array.from(statusCountMap.entries()).map(([status, count]) => ({ status, count }));
+
   return {
     totalApplications,
     paymentsConfirmed,
     amountCollectedLabel: `${formatMoney(total, currency)} collected`,
+    amountCollectedRaw: total,
     eoisSubmitted,
     draftsInProgress,
     bankTransfersPending,
+    proofUploadedCount,
     methodSplit,
     activity,
+    applicationsByStatus,
+    pendingUsers,
+    activeUsers,
+    rejectedUsers,
+    totalInvestors: pendingUsers + activeUsers + rejectedUsers,
   };
 }
 

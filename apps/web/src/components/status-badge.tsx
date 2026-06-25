@@ -13,6 +13,7 @@ export type StatusVariant =
   | "role-exco"
   | "status-active"
   | "status-pending"
+  | "status-rejected"
   | "window-active"
   | "window-scheduled"
   | "window-closed"
@@ -36,6 +37,7 @@ const VARIANT_CLASSES: Record<StatusVariant, string> = {
   "role-exco":         "bg-teal-100 text-teal-700 border-teal-200 hover:bg-teal-100",
   "status-active":     "bg-green-100 text-green-700 border-green-200 hover:bg-green-100",
   "status-pending":    "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100",
+  "status-rejected":   "bg-red-100 text-red-700 border-red-200 hover:bg-red-100",
   "window-active":     "bg-green-500 text-white border-green-600 hover:bg-green-500",
   "window-scheduled":  "bg-amber-400 text-black border-amber-500 hover:bg-amber-400",
   "window-closed":     "bg-ink-100 text-ink-500 border-ink-300 hover:bg-ink-100",

@@ -39,10 +39,10 @@ async function upsertUser(
   pwHash: string, orgId?: string,
 ) {
   await q(
-    `INSERT INTO "User" (id, email, name, role, "passwordHash", "investorOrgId", "createdAt", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,now(),now())
+    `INSERT INTO "User" (id, email, name, role, "passwordHash", "investorOrgId", status, "createdAt", "updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE',now(),now())
      ON CONFLICT (email) DO UPDATE
-       SET name=$3, role=$4, "passwordHash"=$5, "investorOrgId"=$6, "updatedAt"=now()`,
+       SET name=$3, role=$4, "passwordHash"=$5, "investorOrgId"=$6, status='ACTIVE', "updatedAt"=now()`,
     [id, email, name, role, pwHash, orgId ?? null],
   )
 }

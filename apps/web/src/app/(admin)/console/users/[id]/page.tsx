@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { requireRole } from "@/lib/rbac-server";
 import { ADMIN_ONLY } from "@/lib/rbac";
 import { getUserDetail } from "@/lib/admin/queries";
+import { UserActionButtons } from "./user-action-buttons";
 
 export default async function UserDetailPage({
   params,
@@ -15,6 +16,13 @@ export default async function UserDetailPage({
   const { id } = await params;
   const user = await getUserDetail(id);
   if (!user) notFound();
+
+  const statusVariant =
+    user.rawStatus === "ACTIVE"
+      ? "status-active"
+      : user.rawStatus === "REJECTED"
+        ? "status-rejected"
+        : "status-pending";
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -57,9 +65,7 @@ export default async function UserDetailPage({
               <DetailRow
                 label="Account Status"
                 value={
-                  <StatusBadge
-                    variant={user.status === "Active" ? "status-active" : "status-pending"}
-                  >
+                  <StatusBadge variant={statusVariant}>
                     {user.status}
                   </StatusBadge>
                 }
@@ -95,6 +101,13 @@ export default async function UserDetailPage({
             </dl>
           </div>
         </div>
+
+        {/* Approve / Reject — only when pending review */}
+        {user.rawStatus === "PENDING_REVIEW" && (
+          <div className="mt-0 max-w-lg">
+            <UserActionButtons userId={user.id} />
+          </div>
+        )}
       </main>
     </div>
   );

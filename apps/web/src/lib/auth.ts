@@ -169,6 +169,15 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email || !credentials?.password) return null;
         const user = await User.findOne({ where: { email: credentials.email } });
         if (!user?.passwordHash) return null;
+
+        if (user.status !== "ACTIVE") {
+          throw new Error(
+            user.status === "PENDING_REVIEW"
+              ? "Your account is pending approval. You will receive your login credentials by email once our team approves your registration."
+              : "Your account has not been approved. Please contact support for assistance.",
+          );
+        }
+
         const ok = await compare(credentials.password, user.passwordHash);
         if (!ok) return null;
         return { id: user.id, email: user.email, name: user.name, role: user.role };

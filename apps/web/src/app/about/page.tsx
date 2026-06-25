@@ -47,7 +47,7 @@ export default function AboutPage() {
           <div className="grid grid-cols-2 gap-px bg-black/8 md:grid-cols-4">
             {[
               { value: "2,200", unit: "ha",  label: "Total Area" },
-              { value: "148",   unit: "",    label: "Serviced Plots" },
+              { value: "221",   unit: "",    label: "Serviced Plots" },
               { value: "USD 1B", unit: "+",  label: "Target Investment" },
               { value: "5,000", unit: "+",   label: "Jobs Target" },
             ].map((s) => (

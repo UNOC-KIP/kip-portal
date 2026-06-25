@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { hash } from "bcryptjs";
 import { sequelize, User, InvestorOrg } from "@kip/db";
+import { fireWebhook } from "@/lib/webhooks";
 
 const registerSchema = z.object({
   companyName: z
@@ -14,12 +14,6 @@ const registerSchema = z.object({
     .min(3, "TIN / Company Number must be at least 3 characters")
     .max(50, "TIN / Company Number is too long"),
   email: z.string().email("Enter a valid email address"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number"),
   phone: z
     .string()
     .min(7, "Enter a valid phone number")
@@ -42,7 +36,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { companyName, country, tin, email, password, phone } = result.data;
+  const { companyName, country, tin, email, phone } = result.data;
   const normalizedEmail = email.toLowerCase().trim();
 
   const existing = await User.findOne({ where: { email: normalizedEmail } });
@@ -53,9 +47,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const passwordHash = await hash(password, 12);
-
-  await sequelize.transaction(async (t) => {
+  const { user: createdUser } = await sequelize.transaction(async (t) => {
     const org = await InvestorOrg.create(
       {
         legalName: companyName,
@@ -66,16 +58,29 @@ export async function POST(req: NextRequest) {
       },
       { transaction: t },
     );
-    await User.create(
+    const user = await User.create(
       {
         email: normalizedEmail,
-        passwordHash,
+        passwordHash: null,
+        status: "PENDING_REVIEW",
         role: "INVESTOR",
         investorOrgId: org.id,
       },
       { transaction: t },
     );
+    return { org, user };
   });
+
+  // Non-blocking: fire after commit; if n8n is down the registration still succeeds
+  fireWebhook("investor-registered", {
+    userId: createdUser.id,
+    email: normalizedEmail,
+    companyName,
+    country,
+    tin,
+    phone,
+    registeredAt: new Date().toISOString(),
+  }).catch(() => {});
 
   return NextResponse.json({ ok: true }, { status: 201 });
 }

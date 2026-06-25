@@ -10,7 +10,6 @@ export default function SignInPage() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
@@ -18,7 +17,9 @@ export default function SignInPage() {
 
   useEffect(() => {
     if (searchParams.get("registered") === "1") {
-      setSuccessMsg("Account created! Sign in with your email and password.");
+      setSuccessMsg(
+        "Your registration is under review. You will receive your login credentials by email once approved.",
+      );
     } else if (searchParams.get("timeout") === "1") {
       setWarningMsg("Your session expired due to inactivity. Please sign in again.");
     }
@@ -27,23 +28,21 @@ export default function SignInPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    if (password) {
-      // Staff accounts use bcrypt credentials
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-        callbackUrl: "/launch",
-      });
-      if (result?.error) {
+    const result = await signIn("credentials", {
+      email,
+      password,
+      redirect: false,
+      callbackUrl: "/launch",
+    });
+    if (result?.error) {
+      const msg = result.error;
+      if (msg.includes("pending") || msg.includes("not been approved")) {
+        setError(msg);
+      } else {
         setError("Invalid email or password.");
-      } else if (result?.url) {
-        window.location.href = result.url;
       }
-    } else {
-      // Investors use magic link
-      await signIn("email", { email, redirect: false, callbackUrl: "/dashboard" });
-      setSent(true);
+    } else if (result?.url) {
+      window.location.href = result.url;
     }
     setLoading(false);
   }
@@ -54,7 +53,7 @@ export default function SignInPage() {
       <div className="relative hidden w-5/12 flex-col justify-between overflow-hidden bg-slate-900 p-10 lg:flex">
         <div
           className="absolute inset-0 bg-cover bg-center opacity-30"
-          style={{ backgroundImage: "url('/kip-aerial.jpg')" }}
+          style={{ backgroundImage: "url('/kip-refinery.jpg')" }}
         />
         <div className="relative z-10">
           <span className="inline-flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-white">
@@ -83,101 +82,81 @@ export default function SignInPage() {
             <Image src="/unoc-logo.svg" alt="UNOC" width={130} height={38} />
           </div>
 
-          {sent ? (
-            <div className="text-center">
-              <h1 className="text-2xl font-bold">Check your email</h1>
-              <p className="mt-2 text-sm text-ink-500">
-                We sent a sign-in link to <strong>{email}</strong>.
+          <h1 className="text-center text-2xl font-bold text-ink-900">Welcome back</h1>
+          <p className="mt-1 text-center text-sm text-ink-500">
+            Sign in to your KIP account
+          </p>
+
+          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-ink-800">
+                Email address
+              </label>
+              <input
+                type="email"
+                required
+                placeholder="info@nileindustries.ug"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(""); }}
+                className="block w-full rounded-md border border-ink-300 px-3 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-ink-800">
+                Password
+              </label>
+              <input
+                type="password"
+                required
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full rounded-md border border-ink-300 px-3 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
+              />
+            </div>
+
+            {warningMsg && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                {warningMsg}
               </p>
-              <p className="mt-1 text-xs text-ink-500">
-                In development, open{" "}
-                <code className="rounded bg-ink-100 px-1 py-0.5">http://localhost:8025</code>
+            )}
+
+            {successMsg && (
+              <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+                {successMsg}
               </p>
+            )}
+
+            {error && (
+              <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+
+            <div className="flex justify-end">
               <button
-                onClick={() => setSent(false)}
-                className="mt-6 text-sm text-brand-600 underline hover:text-brand-700"
+                type="button"
+                className="text-sm text-ink-500 hover:text-ink-900 transition"
               >
-                Try a different email
+                Forgot Password?
               </button>
             </div>
-          ) : (
-            <>
-              <h1 className="text-center text-2xl font-bold text-ink-900">Welcome back</h1>
-              <p className="mt-1 text-center text-sm text-ink-500">
-                Sign in to your KIP investor account
-              </p>
 
-              <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-ink-800">
-                    Email address
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="info@nileindustries.ug"
-                    value={email}
-                    onChange={(e) => { setEmail(e.target.value); setError(""); }}
-                    className="block w-full rounded-md border border-ink-300 px-3 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-ink-800">
-                    Password
-                  </label>
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="block w-full rounded-md border border-ink-300 px-3 py-2.5 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-200"
-                  />
-                </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 w-full rounded-md bg-brand-400 py-3 text-sm font-bold text-black transition hover:bg-brand-300 disabled:opacity-60"
+            >
+              {loading ? "Signing in…" : "Sign in"}
+            </button>
+          </form>
 
-                {warningMsg && (
-                  <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    {warningMsg}
-                  </p>
-                )}
-
-                {successMsg && (
-                  <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
-                    {successMsg}
-                  </p>
-                )}
-
-                {error && (
-                  <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-                    {error}
-                  </p>
-                )}
-
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    className="text-sm text-ink-500 hover:text-ink-900 transition"
-                  >
-                    Forgot Password?
-                  </button>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="mt-2 w-full rounded-md bg-brand-400 py-3 text-sm font-bold text-black transition hover:bg-brand-300 disabled:opacity-60"
-                >
-                  {loading ? "Sending link…" : "Sign in"}
-                </button>
-              </form>
-
-              <p className="mt-6 text-center text-sm text-ink-500">
-                Am an investor without an account{" "}
-                <Link href="/sign-up" className="font-semibold text-ink-900 underline hover:text-ink-700">
-                  Register here.
-                </Link>
-              </p>
-            </>
-          )}
+          <p className="mt-6 text-center text-sm text-ink-500">
+            Am an investor without an account{" "}
+            <Link href="/sign-up" className="font-semibold text-ink-900 underline hover:text-ink-700">
+              Register here.
+            </Link>
+          </p>
         </div>
       </div>
     </div>

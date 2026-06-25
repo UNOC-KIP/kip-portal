@@ -6,10 +6,10 @@ import { useSession, signOut } from "next-auth/react";
 import { homePathForRole } from "@/lib/rbac";
 
 const NAV_LINKS = [
-  { label: "About KIP", href: "/#about" },
-  { label: "Land Map",  href: "#" },
-  { label: "Policy",    href: "#" },
-  { label: "FAQ",       href: "#" },
+  { label: "About KIP",    href: "/#about" },
+  { label: "Land Map",     href: "/land-map" },
+  { label: "For Investors", href: "/for-investors" },
+  { label: "FAQ",          href: "/faq" },
 ];
 
 /**

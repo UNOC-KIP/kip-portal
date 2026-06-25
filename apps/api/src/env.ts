@@ -12,6 +12,7 @@ const schema = z.object({
     .enum(["fatal", "error", "warn", "info", "debug", "trace"])
     .default("info"),
   N8N_WEBHOOK_SECRET: z.string().min(8).optional(),
+  N8N_BASE_URL: z.string().url().optional(),
   // Must match the web app's NEXTAUTH_SECRET — the API verifies NextAuth session
   // JWTs minted by the web app with this key.
   NEXTAUTH_SECRET: z.string().min(16),

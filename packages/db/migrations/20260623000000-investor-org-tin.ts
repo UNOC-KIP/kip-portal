@@ -11,3 +11,4 @@ export const up: MigrationFn<QueryInterface> = async ({ context: qi }) => {
 export const down: MigrationFn<QueryInterface> = async ({ context: qi }) => {
   await qi.sequelize.query(`ALTER TABLE "InvestorOrg" DROP COLUMN IF EXISTS "tin"`)
 }
+

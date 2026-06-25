@@ -32,6 +32,14 @@ export const UserRole = {
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
+/** Account activation status for investor accounts. */
+export const UserStatus = {
+  PENDING_REVIEW: "PENDING_REVIEW",
+  ACTIVE:         "ACTIVE",
+  REJECTED:       "REJECTED",
+} as const;
+export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
+
 /** Sections of the EOI standard application form (6 sections). */
 export const EoiSection = {
   PRELIMINARY_INFO:         "PRELIMINARY_INFO",

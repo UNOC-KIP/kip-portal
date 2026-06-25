@@ -1,17 +1,62 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Building2, CreditCard, FileText } from "lucide-react";
+import { redirect } from "next/navigation";
+import { Building2, CreditCard, FileText, CheckCircle2 } from "lucide-react";
+import nodemailer from "nodemailer";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { CountdownTimer } from "@/components/countdown-timer";
+import { getActiveApplicationWindow } from "@/lib/public-data";
 
-export default function HomePage() {
+async function subscribeNotifications(formData: FormData) {
+  "use server";
+  const email = (formData.get("email") as string | null)?.trim() ?? "";
+  if (!email || !email.includes("@")) {
+    redirect("/?notified=error");
+    return;
+  }
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_SERVER_HOST || "localhost",
+      port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
+      secure: false,
+      auth: process.env.EMAIL_SERVER_USER
+        ? { user: process.env.EMAIL_SERVER_USER, pass: process.env.EMAIL_SERVER_PASSWORD }
+        : undefined,
+    });
+    await transporter.sendMail({
+      from: process.env.EMAIL_FROM || "noreply@kip.local",
+      to: "admin@kip.unoc.co.ug",
+      subject: "KIP Portal: New Window Notification Signup",
+      html: `<p>Investor signed up for KIP window notifications: <strong>${email}</strong></p>`,
+    });
+  } catch {
+    // non-critical — don't surface errors to user
+  }
+  redirect("/?notified=1");
+}
+
+const PARTNERS = [
+  "Uganda National Oil Company",
+  "Uganda Refinery Holding Company",
+  "Ministry of Energy & Mineral Development",
+  "Uganda Investment Authority",
+];
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: { notified?: string };
+}) {
+  const activeWindow = await getActiveApplicationWindow();
+  const notified = searchParams.notified === "1";
+
   return (
     <div className="min-h-screen font-sans">
 
       {/* ── Gold zone: navbar + hero + countdown ─────────── */}
       <div className="bg-kip-gold">
 
-        {/* ── Navbar ───────────────────────────────────────── */}
         <SiteNav />
 
         {/* ── Hero ─────────────────────────────────────────── */}
@@ -28,8 +73,7 @@ export default function HomePage() {
 
               <p className="mt-5 max-w-md text-[15px] leading-relaxed text-black/65">
                 Investor land allocation portal for Uganda&apos;s flagship petroleum
-                industrial park. Express your interest, pay your application fee,
-                and submit your EOI securely online.
+                industrial park. Express your interest and submit your EOI securely online.
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -40,7 +84,7 @@ export default function HomePage() {
                   Start Application
                 </Link>
                 <Link
-                  href="#"
+                  href="/land-map"
                   className="rounded-[4px] border-2 border-black/80 px-7 py-3 text-[14px] font-bold text-black transition hover:bg-black/10"
                 >
                   View Land Map
@@ -63,24 +107,34 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── Countdown — full-width strip ─────────────────── */}
+        {/* ── Countdown strip ───────────────────────────────── */}
         <div className="mx-auto max-w-[1343px] px-[100px] pb-10">
           <div className="flex flex-wrap items-center justify-between gap-6 rounded-[5px] bg-white/85 px-8 py-5 shadow-sm backdrop-blur-sm">
-            <div className="flex items-center gap-3">
-              <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-              <div>
-                <p className="text-[16px] font-bold text-black">Application Window Open</p>
-                <p className="text-[14px] text-black/50">Closes 30 June 2026 at 23:59 EAT</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-10">
-              {[["68", "DAYS"], ["14", "HOURS"], ["22", "MINS"]].map(([n, label]) => (
-                <div key={label} className="text-center">
-                  <p className="text-[32px] font-extrabold leading-none text-black">{n}</p>
-                  <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-kip-red">{label}</p>
+            {activeWindow ? (
+              <>
+                <div className="flex items-center gap-3">
+                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-green-500" />
+                  <div>
+                    <p className="text-[16px] font-bold text-black">Application Window Open</p>
+                    <p className="text-[14px] text-black/50">{activeWindow.name} · Closes {new Date(activeWindow.closeAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })} EAT</p>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <CountdownTimer closeAt={activeWindow.closeAt} variant="hero" />
+              </>
+            ) : (
+              <div className="flex w-full items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="h-2.5 w-2.5 rounded-full bg-black/20" />
+                  <div>
+                    <p className="text-[16px] font-bold text-black">Application Window Closed</p>
+                    <p className="text-[14px] text-black/50">No active window — subscribe below to be notified when the next round opens.</p>
+                  </div>
+                </div>
+                <Link href="#notify" className="rounded-[4px] bg-black px-5 py-2 text-[13px] font-bold text-white transition hover:bg-black/80">
+                  Get Notified
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -91,15 +145,15 @@ export default function HomePage() {
         <div className="mx-auto max-w-[1343px] px-[100px]">
           <div className="grid grid-cols-1 gap-1 md:grid-cols-3">
 
-            {/* Card 1 — Industrial Park (image bg) */}
+            {/* Card 1 — Industrial Park */}
             <div className="relative flex h-[644px] flex-col items-start justify-center overflow-hidden rounded-l-[10px] px-10">
               <Image
-                src="/industry-park.jpg"
-                alt="Industrial Park"
+                src="/kip-infrastructure.jpg"
+                alt="KIP Infrastructure"
                 fill
                 className="object-cover"
               />
-              <div className="absolute inset-0 bg-black/60" />
+              <div className="absolute inset-0 bg-black/65" />
               <div className="relative z-10 max-w-[260px]">
                 <Building2 size={24} className="mb-5 text-white" />
                 <h3 className="text-[20px] font-bold leading-snug text-white">Industrial Park</h3>
@@ -110,17 +164,17 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Card 2 — Application Fee (solid red) */}
+            {/* Card 2 — Application Fee */}
             <div className="flex h-[644px] flex-col items-start justify-center bg-kip-red px-10">
               <CreditCard size={24} className="mb-5 text-white" />
               <h3 className="text-[20px] font-bold leading-snug text-white">Application Fee</h3>
               <p className="mt-2 max-w-[260px] text-[16px] leading-relaxed text-white/65">
                 A non-refundable fee of USD 1,000 is required per application, payable
-                via MTN MoMo, Airtel Money, Visa/Mastercard, or bank transfer.
+                by direct bank transfer to our Stanbic Bank account.
               </p>
             </div>
 
-            {/* Card 3 — EOI Process (image bg) */}
+            {/* Card 3 — EOI Process */}
             <div className="relative flex h-[644px] flex-col items-start justify-center overflow-hidden rounded-r-[10px] px-10">
               <Image
                 src="/eoi-process.jpg"
@@ -143,11 +197,29 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Credibility bar ──────────────────────────────── */}
+      <section className="border-y border-black/8 bg-white py-7">
+        <div className="mx-auto max-w-[1343px] px-[100px]">
+          <p className="mb-5 text-center text-[10px] font-bold uppercase tracking-widest text-black/30">
+            Backed by Uganda&apos;s leading energy institutions
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
+            {PARTNERS.map((name) => (
+              <span
+                key={name}
+                className="text-[13px] font-semibold text-black/40 transition hover:text-black/70"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ── About KIP ───────────────────────────────────── */}
       <section id="about" className="scroll-mt-20 bg-ink-100 py-20">
         <div className="mx-auto max-w-[1343px] px-[100px]">
 
-          {/* Section header */}
           <div className="mb-12">
             <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/60">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
@@ -167,7 +239,7 @@ export default function HomePage() {
           <div className="mb-10 grid grid-cols-2 gap-px overflow-hidden rounded-[5px] border border-black/8 bg-black/8 md:grid-cols-4">
             {[
               { value: "2,200", unit: "ha",   label: "Total Area" },
-              { value: "148",   unit: "",      label: "Serviced Plots" },
+              { value: "221",   unit: "",      label: "Serviced Plots" },
               { value: "USD 1B", unit: "+",   label: "Target Investment" },
               { value: "5,000", unit: "+",    label: "Jobs Target" },
             ].map((s) => (
@@ -262,6 +334,98 @@ export default function HomePage() {
               </ol>
             </div>
 
+          </div>
+        </div>
+      </section>
+
+      {/* ── What you'll need strip ───────────────────────── */}
+      <section className="bg-white py-16">
+        <div className="mx-auto max-w-[1343px] px-[100px]">
+          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
+            <div>
+              <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-ink-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/60">
+                <span className="h-1.5 w-1.5 rounded-full bg-kip-gold" />
+                Pre-Application Checklist
+              </span>
+              <h2 className="mt-4 text-[30px] font-extrabold leading-tight text-black">
+                What you&apos;ll need<br />before you start.
+              </h2>
+              <p className="mt-3 text-[14px] leading-relaxed text-black/55">
+                Have these ready before registering to avoid delays mid-application.
+              </p>
+              <div className="mt-5">
+                <Link
+                  href="/how-it-works"
+                  className="text-[13px] font-semibold text-kip-red underline underline-offset-4 hover:brightness-110"
+                >
+                  View the full process →
+                </Link>
+              </div>
+            </div>
+            <ul className="space-y-3">
+              {[
+                "Certificate of Incorporation (or equivalent)",
+                "Company registration number and country",
+                "Primary contact name and email address",
+                "Brief description of proposed investment activity",
+                "Estimated land area requirement (hectares)",
+                "Proof of Stanbic Bank transfer — USD 1,000 application fee",
+              ].map((item) => (
+                <li key={item} className="flex items-start gap-3 rounded-[5px] border border-black/6 bg-ink-100/50 px-5 py-3.5">
+                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-green-600" />
+                  <span className="text-[14px] text-black/70">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Notify me ───────────────────────────────────── */}
+      <section id="notify" className="scroll-mt-20 bg-black py-16 text-white">
+        <div className="mx-auto max-w-[1343px] px-[100px]">
+          <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
+            <div>
+              <h2 className="text-[28px] font-extrabold leading-snug">
+                Not ready yet?<br />
+                <span className="text-kip-gold">We&apos;ll let you know.</span>
+              </h2>
+              <p className="mt-4 text-[14px] leading-relaxed text-white/55">
+                Enter your email to be notified when the next KIP application window opens.
+                No spam — just one email when a new round begins.
+              </p>
+            </div>
+            <div>
+              {notified ? (
+                <div className="flex items-center gap-3 rounded-[5px] border border-green-500/30 bg-green-900/20 px-6 py-5">
+                  <CheckCircle2 size={20} className="shrink-0 text-green-400" />
+                  <div>
+                    <p className="font-semibold text-green-300">You&apos;re on the list.</p>
+                    <p className="text-[13px] text-white/50">We&apos;ll email you when the next window opens.</p>
+                  </div>
+                </div>
+              ) : (
+                <form action={subscribeNotifications} className="flex flex-col gap-3 sm:flex-row">
+                  <input
+                    type="email"
+                    name="email"
+                    required
+                    placeholder="your@company.com"
+                    className="flex-1 rounded-[4px] border border-white/15 bg-white/10 px-4 py-3 text-[14px] text-white placeholder-white/30 outline-none transition focus:border-kip-gold focus:ring-1 focus:ring-kip-gold/30"
+                  />
+                  <button
+                    type="submit"
+                    className="shrink-0 rounded-[4px] bg-kip-gold px-7 py-3 text-[14px] font-bold text-black transition hover:brightness-105"
+                  >
+                    Notify Me
+                  </button>
+                </form>
+              )}
+              <p className="mt-3 text-[12px] text-white/30">
+                By submitting you agree to our{" "}
+                <Link href="/privacy" className="underline hover:text-white/60">Privacy Policy</Link>.
+              </p>
+            </div>
           </div>
         </div>
       </section>

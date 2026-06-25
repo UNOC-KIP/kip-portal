@@ -44,10 +44,11 @@ describe("status helpers", () => {
     expect(roleLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
   });
 
-  it("userStatusLabel is Active with a verified email or a password", () => {
-    expect(userStatusLabel(null, true)).toBe("Active");
-    expect(userStatusLabel(new Date(), false)).toBe("Active");
-    expect(userStatusLabel(null, false)).toBe("Pending");
+  it("userStatusLabel maps DB status values to display labels", () => {
+    expect(userStatusLabel("ACTIVE")).toBe("Active");
+    expect(userStatusLabel("PENDING_REVIEW")).toBe("Pending");
+    expect(userStatusLabel("REJECTED")).toBe("Rejected");
+    expect(userStatusLabel("UNKNOWN")).toBe("Pending");
   });
 });
 
@@ -140,7 +141,7 @@ describe("row mappers", () => {
     });
   });
 
-  it("toUserRow uses orgName, derives status, dashes the unknowns", () => {
+  it("toUserRow uses orgName, derives status from rawStatus, dashes the unknowns", () => {
     expect(
       toUserRow({
         id: "user-uuid-1",
@@ -149,8 +150,7 @@ describe("row mappers", () => {
         role: "INVESTOR",
         orgName: "Gulf Petrochem International FZE",
         reference: "KIP-EOI-2026-0001",
-        emailVerified: null,
-        hasPassword: true,
+        rawStatus: "ACTIVE",
         tin: "1000234567",
         country: "UAE",
         phone: "+971501234567",
@@ -168,6 +168,22 @@ describe("row mappers", () => {
       phone: "+971501234567",
       registeredAt: "15 Jan 2026",
     });
+
+    expect(
+      toUserRow({
+        id: "user-uuid-2",
+        name: null,
+        email: "pending@example.com",
+        role: "INVESTOR",
+        orgName: null,
+        reference: null,
+        rawStatus: "PENDING_REVIEW",
+        tin: null,
+        country: null,
+        phone: null,
+        createdAt: "2026-06-24T10:00:00.000Z",
+      }),
+    ).toMatchObject({ status: "Pending", ref: "—", company: "pending@example.com" });
   });
 
   it("toTcAppRow derives hectares + days, scores are internal", () => {

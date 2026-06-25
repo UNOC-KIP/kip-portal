@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { useState } from "react";
@@ -12,19 +11,6 @@ const COUNTRIES = [
 ];
 
 type FieldErrors = Partial<Record<string, string[]>>;
-
-function passwordStrength(pw: string): { score: number; label: string; barColor: string } {
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[a-z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { score, label: "Weak", barColor: "bg-red-500" };
-  if (score <= 2) return { score, label: "Fair", barColor: "bg-orange-400" };
-  if (score <= 3) return { score, label: "Good", barColor: "bg-yellow-500" };
-  return { score, label: "Strong", barColor: "bg-green-500" };
-}
 
 function inputCls(hasError: boolean) {
   return `block w-full rounded-md border ${
@@ -51,19 +37,17 @@ function Field({
 }
 
 export default function SignUpPage() {
-  const router = useRouter();
   const [form, setForm] = useState({
     companyName: "",
     country: "Uganda",
     tin: "",
     email: "",
-    password: "",
-    confirmPassword: "",
     phone: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [submitted, setSubmitted] = useState(false);
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -81,16 +65,6 @@ export default function SignUpPage() {
       errs.tin = ["TIN / Company Number must be at least 3 characters"];
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
       errs.email = ["Enter a valid email address"];
-    if (form.password.length < 8)
-      errs.password = ["Password must be at least 8 characters"];
-    else if (!/[A-Z]/.test(form.password))
-      errs.password = ["Must contain at least one uppercase letter"];
-    else if (!/[a-z]/.test(form.password))
-      errs.password = ["Must contain at least one lowercase letter"];
-    else if (!/[0-9]/.test(form.password))
-      errs.password = ["Must contain at least one number"];
-    if (form.password !== form.confirmPassword)
-      errs.confirmPassword = ["Passwords do not match"];
     if (form.phone.trim().length < 7)
       errs.phone = ["Enter a valid phone number"];
     return errs;
@@ -115,13 +89,12 @@ export default function SignUpPage() {
           country: form.country,
           tin: form.tin.trim(),
           email: form.email.trim(),
-          password: form.password,
           phone: form.phone.trim(),
         }),
       });
 
       if (res.status === 201) {
-        router.push(`/sign-in?registered=1`);
+        setSubmitted(true);
         return;
       }
 
@@ -139,9 +112,6 @@ export default function SignUpPage() {
       setLoading(false);
     }
   }
-
-  const strength = passwordStrength(form.password);
-  const showStrength = form.password.length > 0;
 
   return (
     <div className="min-h-screen">
@@ -171,177 +141,161 @@ export default function SignUpPage() {
       <section className="bg-ink-100 py-12">
         <div className="container max-w-2xl">
           <div className="rounded-2xl bg-white p-8 shadow-sm">
-            {/* Step indicator */}
-            <div className="mb-6 flex items-center gap-3">
-              <div className="h-0.5 w-8 rounded-full bg-ink-900" />
-              <div className="h-0.5 w-8 rounded-full bg-ink-300" />
-              <span className="text-xs text-ink-500">Step 1 of 2</span>
-            </div>
 
-            <h2 className="text-2xl font-bold">Create your investor account</h2>
-            <p className="mt-1 text-sm text-ink-500">
-              Register to begin your KIP land allocation application.
-            </p>
-
-            <form onSubmit={handleSubmit} className="mt-8 space-y-8" noValidate>
-              {/* Company Information */}
-              <div>
-                <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
-                  Company Information
-                </h3>
-                <div className="space-y-4">
-                  <Field label="Registered Company Name *" error={fieldErrors.companyName?.[0]}>
-                    <input
-                      required
-                      placeholder="Nile Industries Limited"
-                      value={form.companyName}
-                      onChange={(e) => set("companyName", e.target.value)}
-                      className={inputCls(!!fieldErrors.companyName)}
-                    />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field
-                      label="Country of Registration *"
-                      error={fieldErrors.country?.[0]}
-                    >
-                      <select
-                        required
-                        value={form.country}
-                        onChange={(e) => set("country", e.target.value)}
-                        className={inputCls(!!fieldErrors.country)}
-                      >
-                        {COUNTRIES.map((c) => (
-                          <option key={c}>{c}</option>
-                        ))}
-                      </select>
-                    </Field>
-                    <Field
-                      label="TIN / Company Number *"
-                      error={fieldErrors.tin?.[0]}
-                    >
-                      <input
-                        required
-                        placeholder="1000234567"
-                        value={form.tin}
-                        onChange={(e) => set("tin", e.target.value)}
-                        className={inputCls(!!fieldErrors.tin)}
-                      />
-                    </Field>
-                  </div>
+            {submitted ? (
+              /* Under-review confirmation panel */
+              <div className="flex flex-col items-center py-8 text-center">
+                <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+                  <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
                 </div>
+                <h2 className="text-2xl font-bold text-ink-900">Registration Submitted</h2>
+                <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-500">
+                  Your registration has been submitted for review. Our team will verify your
+                  company information and send your login credentials to{" "}
+                  <strong className="text-ink-800">{form.email}</strong> once your account is approved.
+                </p>
+                <p className="mt-4 text-xs text-ink-400">
+                  This process typically takes 2–5 business days.
+                </p>
+                <Link
+                  href="/"
+                  className="mt-8 rounded-md border border-ink-300 px-6 py-2.5 text-sm font-medium text-ink-700 transition hover:bg-ink-50"
+                >
+                  Return to home
+                </Link>
               </div>
+            ) : (
+              <>
+                {/* Step indicator */}
+                <div className="mb-6 flex items-center gap-3">
+                  <div className="h-0.5 w-8 rounded-full bg-ink-900" />
+                  <div className="h-0.5 w-8 rounded-full bg-ink-300" />
+                  <span className="text-xs text-ink-500">Step 1 of 2</span>
+                </div>
 
-              {/* Account Credentials */}
-              <div>
-                <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
-                  Account Credentials
-                </h3>
-                <div className="space-y-4">
-                  <Field
-                    label="Official Email Address *"
-                    error={fieldErrors.email?.[0]}
-                  >
-                    <input
-                      type="email"
-                      required
-                      placeholder="info@nileindustries.ug"
-                      value={form.email}
-                      onChange={(e) => set("email", e.target.value)}
-                      className={inputCls(!!fieldErrors.email)}
-                    />
-                  </Field>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Field label="Password *" error={fieldErrors.password?.[0]}>
+                <h2 className="text-2xl font-bold">Create your investor account</h2>
+                <p className="mt-1 text-sm text-ink-500">
+                  Register to begin your KIP land allocation application. Our team will review
+                  your details and send you login credentials once approved.
+                </p>
+
+                <form onSubmit={handleSubmit} className="mt-8 space-y-8" noValidate>
+                  {/* Company Information */}
+                  <div>
+                    <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
+                      Company Information
+                    </h3>
+                    <div className="space-y-4">
+                      <Field label="Registered Company Name *" error={fieldErrors.companyName?.[0]}>
                         <input
-                          type="password"
                           required
-                          placeholder="Min. 8 characters"
-                          value={form.password}
-                          onChange={(e) => set("password", e.target.value)}
-                          className={inputCls(!!fieldErrors.password)}
+                          placeholder="Nile Industries Limited"
+                          value={form.companyName}
+                          onChange={(e) => set("companyName", e.target.value)}
+                          className={inputCls(!!fieldErrors.companyName)}
                         />
                       </Field>
-                      {showStrength && (
-                        <div className="mt-2 space-y-1">
-                          <div className="flex gap-1">
-                            {[1, 2, 3, 4].map((i) => (
-                              <div
-                                key={i}
-                                className={`h-1 flex-1 rounded-full transition-colors ${
-                                  i <= strength.score
-                                    ? strength.barColor
-                                    : "bg-ink-200"
-                                }`}
-                              />
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field
+                          label="Country of Registration *"
+                          error={fieldErrors.country?.[0]}
+                        >
+                          <select
+                            required
+                            value={form.country}
+                            onChange={(e) => set("country", e.target.value)}
+                            className={inputCls(!!fieldErrors.country)}
+                          >
+                            {COUNTRIES.map((c) => (
+                              <option key={c}>{c}</option>
                             ))}
-                          </div>
-                          <p className="text-xs text-ink-500">
-                            Password strength: <span className="font-medium">{strength.label}</span>
-                          </p>
-                        </div>
-                      )}
+                          </select>
+                        </Field>
+                        <Field
+                          label="TIN / Company Number *"
+                          error={fieldErrors.tin?.[0]}
+                        >
+                          <input
+                            required
+                            placeholder="1000234567"
+                            value={form.tin}
+                            onChange={(e) => set("tin", e.target.value)}
+                            className={inputCls(!!fieldErrors.tin)}
+                          />
+                        </Field>
+                      </div>
                     </div>
-                    <Field
-                      label="Confirm Password *"
-                      error={fieldErrors.confirmPassword?.[0]}
-                    >
-                      <input
-                        type="password"
-                        required
-                        placeholder="Re-enter password"
-                        value={form.confirmPassword}
-                        onChange={(e) => set("confirmPassword", e.target.value)}
-                        className={inputCls(!!fieldErrors.confirmPassword)}
-                      />
-                    </Field>
                   </div>
-                  <Field
-                    label="Primary Contact Phone *"
-                    error={fieldErrors.phone?.[0]}
+
+                  {/* Contact Details */}
+                  <div>
+                    <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
+                      Contact Details
+                    </h3>
+                    <div className="space-y-4">
+                      <Field
+                        label="Official Email Address *"
+                        error={fieldErrors.email?.[0]}
+                      >
+                        <input
+                          type="email"
+                          required
+                          placeholder="info@nileindustries.ug"
+                          value={form.email}
+                          onChange={(e) => set("email", e.target.value)}
+                          className={inputCls(!!fieldErrors.email)}
+                        />
+                      </Field>
+                      <Field
+                        label="Primary Contact Phone *"
+                        error={fieldErrors.phone?.[0]}
+                      >
+                        <input
+                          type="tel"
+                          required
+                          placeholder="+256 414 700 001"
+                          value={form.phone}
+                          onChange={(e) => set("phone", e.target.value)}
+                          className={inputCls(!!fieldErrors.phone)}
+                        />
+                      </Field>
+                    </div>
+                  </div>
+
+                  {error && (
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
+                      {error}
+                    </p>
+                  )}
+
+                  {/* Disclaimer */}
+                  <div className="flex gap-2 rounded-md bg-brand-50 px-4 py-3 text-xs text-ink-700">
+                    <span className="mt-0.5 text-brand-600">ℹ</span>
+                    <span>
+                      The application fee of USD 1,000 is non-refundable. By creating an account
+                      you acknowledge the{" "}
+                      <Link
+                        href="#"
+                        className="font-semibold underline text-brand-700"
+                      >
+                        UNOC Land Allocation Policy
+                      </Link>
+                      .
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-md bg-brand-400 py-3 text-sm font-bold text-black transition hover:bg-brand-300 disabled:opacity-60"
                   >
-                    <input
-                      type="tel"
-                      required
-                      placeholder="+256 414 700 001"
-                      value={form.phone}
-                      onChange={(e) => set("phone", e.target.value)}
-                      className={inputCls(!!fieldErrors.phone)}
-                    />
-                  </Field>
-                </div>
-              </div>
-
-              {error && (
-                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
-                  {error}
-                </p>
-              )}
-
-              {/* Disclaimer */}
-              <div className="flex gap-2 rounded-md bg-brand-50 px-4 py-3 text-xs text-ink-700">
-                <span className="mt-0.5 text-brand-600">ℹ</span>
-                <span>
-                  The application fee of USD 1,000 is non-refundable. By creating an account
-                  you acknowledge the{" "}
-                  <Link
-                    href="#"
-                    className="font-semibold underline text-brand-700"
-                  >
-                    UNOC Land Allocation Policy
-                  </Link>
-                  .
-                </span>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-md bg-brand-400 py-3 text-sm font-bold text-black transition hover:bg-brand-300 disabled:opacity-60"
-              >
-                {loading ? "Creating account…" : "Create Account & Continue"}
-              </button>
-            </form>
+                    {loading ? "Submitting…" : "Submit Registration"}
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </div>
       </section>
