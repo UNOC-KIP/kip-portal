@@ -11,6 +11,7 @@ import { applicationsRouter } from "./modules/applications/route.js";
 import { paymentsRouter } from "./modules/payments/route.js";
 import { n8nWebhookRouter } from "./modules/webhooks/n8n.js";
 import { usersRouter } from "./modules/users/users.router.js";
+import { windowsRouter } from "./modules/windows/windows.router.js";
 
 export function createServer(): Application {
   const app = express();
@@ -18,7 +19,7 @@ export function createServer(): Application {
   app.use(helmet());
   app.use(
     cors({
-      origin: env.WEB_PUBLIC_URL,
+      origin: [env.WEB_PUBLIC_URL, env.PORTAL_PUBLIC_URL],
       credentials: true,
     }),
   );
@@ -32,6 +33,7 @@ export function createServer(): Application {
   app.use("/payments", paymentsRouter);
   app.use("/webhooks/n8n", n8nWebhookRouter);
   app.use("/users", usersRouter);
+  app.use("/windows", windowsRouter);
 
   app.use(errorHandler);
 

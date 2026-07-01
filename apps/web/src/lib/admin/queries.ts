@@ -30,18 +30,20 @@ import {
   UserStatus,
 } from "@kip/shared";
 import { formatMoney, formatDateTime, formatShortDate } from "../format";
-import { SECTION_ORDER, SECTION_LABELS } from "../investor-data";
+import { SECTION_ORDER, SECTION_LABELS } from "../application-data";
 import {
   SUBMITTED_STATUSES,
   hectaresFromSqm,
   roleLabel,
   toApplicationRow,
+  toStaffRow,
   toTcAppRow,
   toTransferRow,
   toUserRow,
   toWindowRow,
   userStatusLabel,
   type ApplicationRow,
+  type StaffRow,
   type TcAppRow,
   type TransferRow,
   type UserRow,
@@ -86,7 +88,8 @@ export async function listApplications(opts: { limit?: number; offset?: number }
 // ─── Pending bank transfers ──────────────────────────────────────────────────
 
 export async function listPendingBankTransfers(now: Date = new Date()): Promise<TransferRow[]> {
-  const slaHours = Number(process.env.BANK_TRANSFER_SLA_HOURS) || 48;
+  const slaHoursEnv = process.env.BANK_TRANSFER_SLA_HOURS;
+  const slaHours = slaHoursEnv != null ? Number(slaHoursEnv) : 48;
 
   const payments = await Payment.findAll({
     where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
@@ -155,6 +158,67 @@ export async function listUsers(opts: { limit?: number; offset?: number } = {}):
   });
 }
 
+// ─── Investors (INVESTOR role only) ──────────────────────────────────────────
+
+export async function listInvestors(opts: { limit?: number; offset?: number } = {}): Promise<UserRow[]> {
+  const users = await User.findAll({
+    where: { role: UserRole.INVESTOR },
+    attributes: ["id", "email", "name", "role", "status", "createdAt"],
+    include: [
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: ["legalName", "countryOfIncorporation", "tin", "phone"],
+      },
+      { model: Application, as: "applications", attributes: ["reference"], required: false },
+    ],
+    order: [["createdAt", "ASC"]],
+    limit: opts.limit ?? 500,
+    offset: opts.offset ?? 0,
+  });
+
+  return users.map((row) => {
+    const u = row as User & { investorOrg?: InvestorOrg; applications?: Application[] };
+    const ref = u.applications?.find((a) => a.reference)?.reference ?? null;
+    return toUserRow({
+      id: u.id,
+      name: u.name ?? null,
+      email: u.email,
+      role: u.role,
+      orgName: u.investorOrg?.legalName ?? null,
+      reference: ref,
+      rawStatus: u.status as string,
+      tin: u.investorOrg?.tin ?? null,
+      country: u.investorOrg?.countryOfIncorporation ?? null,
+      phone: u.investorOrg?.phone ?? null,
+      createdAt: u.createdAt,
+    });
+  });
+}
+
+// ─── Staff users (all non-INVESTOR roles) ────────────────────────────────────
+
+const STAFF_ROLES = [
+  UserRole.ADMIN,
+  UserRole.TC_CHAIR,
+  UserRole.TC_MEMBER,
+  UserRole.LAC_MEMBER,
+  UserRole.EXCO_MEMBER,
+];
+
+export async function listStaffUsers(opts: { limit?: number } = {}): Promise<StaffRow[]> {
+  const users = await User.findAll({
+    where: { role: STAFF_ROLES },
+    attributes: ["id", "name", "email", "role", "createdAt"],
+    order: [["createdAt", "ASC"]],
+    limit: opts.limit ?? 200,
+  });
+
+  return users.map((u) =>
+    toStaffRow({ id: u.id, name: u.name ?? null, email: u.email, role: u.role, createdAt: u.createdAt }),
+  );
+}
+
 // ─── User detail ─────────────────────────────────────────────────────────────
 
 export type UserDetail = {
@@ -218,6 +282,7 @@ export async function listWindows(): Promise<WindowRow[]> {
   const windows = await ApplicationWindow.findAll({ order: [["openAt", "DESC"]], limit: 1000 });
   return windows.map((w) =>
     toWindowRow({
+      id: w.id,
       name: w.name,
       status: w.status,
       openAt: w.openAt,
@@ -365,7 +430,7 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
     Payment.count({
       where: { method: PaymentMethod.STANBIC_TRANSFER, status: PENDING_TRANSFER_STATUSES },
     }),
-    Application.findAll({ attributes: ["status"], raw: true }) as unknown as Promise<{ status: string }[]>,
+    Application.count({ group: ["status"] }) as unknown as Promise<{ status: string; count: number }[]>,
     User.count({ where: { status: UserStatus.PENDING_REVIEW, role: UserRole.INVESTOR } }),
     User.count({ where: { status: UserStatus.ACTIVE, role: UserRole.INVESTOR } }),
     User.count({ where: { status: UserStatus.REJECTED, role: UserRole.INVESTOR } }),
@@ -387,12 +452,9 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
     return { time: formatDateTime(ra.createdAt), text: `${ref} — ${what}` };
   });
 
-  // Build per-status counts map from the raw status rows
-  const statusCountMap = new Map<string, number>();
-  for (const { status } of allStatusRows) {
-    statusCountMap.set(status, (statusCountMap.get(status) ?? 0) + 1);
-  }
-  const applicationsByStatus = Array.from(statusCountMap.entries()).map(([status, count]) => ({ status, count }));
+  const applicationsByStatus = (allStatusRows as { status: string; count: number }[]).map(
+    ({ status, count }) => ({ status, count }),
+  );
 
   return {
     totalApplications,
@@ -502,5 +564,93 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
         }
       : null,
     auditTrail,
+  };
+}
+
+// ─── Pipeline report data ─────────────────────────────────────────────────────
+
+export type ReportData = {
+  stats: {
+    totalRegistered: number;
+    eoisSubmitted: number;
+    feesCollected: string;
+    daysToClose: number | null;
+  };
+  byCountry: { country: string; count: number }[];
+  conversionFunnel: { label: string; count: number; pct: number }[];
+  applications: ApplicationRow[];
+};
+
+export async function getReportData(now: Date = new Date()): Promise<ReportData> {
+  const [
+    totalRegistered,
+    eoisSubmitted,
+    paymentsConfirmed,
+    confirmedAmountSum,
+    dominantCurrencyRow,
+    activeWindow,
+    applications,
+    investorsWithOrgs,
+  ] = await Promise.all([
+    User.count({ where: { role: UserRole.INVESTOR } }),
+    Application.count({ where: { status: [...SUBMITTED_STATUSES] } }),
+    Payment.count({ where: { status: PaymentStatus.CONFIRMED } }),
+    Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
+    Payment.findOne({
+      where: { status: PaymentStatus.CONFIRMED },
+      attributes: ["currency"],
+      order: [["createdAt", "ASC"]],
+    }),
+    ApplicationWindow.findOne({
+      where: { status: ApplicationWindowStatus.OPEN },
+      order: [["openAt", "DESC"]],
+    }),
+    listApplications(),
+    User.findAll({
+      where: { role: UserRole.INVESTOR },
+      attributes: ["id"],
+      include: [
+        { model: InvestorOrg, as: "investorOrg", attributes: ["countryOfIncorporation"] },
+      ],
+    }),
+  ]);
+
+  const daysToClose = activeWindow
+    ? Math.max(0, Math.floor((new Date(activeWindow.closeAt).getTime() - now.getTime()) / 86_400_000))
+    : null;
+
+  const countryCounts = new Map<string, number>();
+  for (const u of investorsWithOrgs) {
+    const usr = u as User & { investorOrg?: InvestorOrg };
+    const country = usr.investorOrg?.countryOfIncorporation ?? "Unknown";
+    countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
+  }
+  const byCountry = Array.from(countryCounts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([country, count]) => ({ country, count }));
+
+  const currency = dominantCurrencyRow?.currency ?? "USD";
+  const total = confirmedAmountSum ?? 0;
+
+  const conversionFunnel = [
+    { label: "Registered",       count: totalRegistered  },
+    { label: "Payment Confirmed", count: paymentsConfirmed },
+    { label: "EOI Submitted",     count: eoisSubmitted    },
+  ].map((row) => ({
+    ...row,
+    pct: totalRegistered > 0 ? Math.round((row.count / totalRegistered) * 100) : 0,
+  }));
+
+  return {
+    stats: {
+      totalRegistered,
+      eoisSubmitted,
+      feesCollected: formatMoney(total, currency),
+      daysToClose,
+    },
+    byCountry,
+    conversionFunnel,
+    applications,
   };
 }
