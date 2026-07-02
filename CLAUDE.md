@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
 > Last updated: 25 June 2026. Update this file in the same commit as any architectural change.
+> Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
 ---
 
@@ -16,11 +17,16 @@
 ```
 kip-portal/
 ├── apps/
-│   ├── web/          Next.js 14 App Router — investor + admin frontend (port 4000)
+│   ├── web/          Next.js 14 App Router — ADMIN portal (port 4000)
 │   │   └── src/
-│   │       ├── app/           Route groups: (auth), (investor), (admin), about, api
-│   │       ├── components/    Shared UI + ui/ primitives (check before building new UI)
-│   │       └── lib/           auth.ts, rbac.ts, format.ts, investor-data.ts, admin/
+│   │       ├── app/           Route groups: (auth), (admin), api
+│   │       ├── components/    Admin UI + ui/ primitives
+│   │       └── lib/           auth.ts, rbac.ts, format.ts, admin/
+│   ├── portal/       Next.js 14 App Router — INVESTOR portal (port 4002)
+│   │   └── src/
+│   │       ├── app/           Route groups: (auth), (investor), api
+│   │       ├── components/    Investor UI + ui/ primitives
+│   │       └── lib/           auth.ts, rbac.ts, format.ts, investor-data.ts
 │   └── api/          Express / Node.js — REST API (port 4001)
 │       └── src/
 │           ├── modules/       applications/, payments/, health/, users/
@@ -62,11 +68,18 @@ kip-portal/
 
 ## Authentication
 
-NextAuth config: `apps/web/src/lib/auth.ts` — Email + Credentials providers, custom `SequelizeAdapter()`, JWT session strategy. Callbacks extend token/session with `id` and `role`.
+**Two separate NextAuth instances share one secret and one database.**
 
-API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the NextAuth JWT from `Authorization: Bearer` or `next-auth.session-token` cookie using the same `NEXTAUTH_SECRET`. Populates `req.user = { id, role }`. `requireRole(...roles)` → 403 if role not in list.
+| App | NextAuth config | Who can sign in |
+|---|---|---|
+| `apps/portal` (port 4002) | `apps/portal/src/lib/auth.ts` | `INVESTOR` only — staff are blocked at `authorize` level |
+| `apps/web` (port 4000) | `apps/web/src/lib/auth.ts` | All staff roles — `INVESTOR` is blocked at `authorize` level |
 
-**`NEXTAUTH_SECRET` must be identical in web and api** — the API verifies web-minted tokens.
+Both use Email + Credentials providers, custom `SequelizeAdapter()`, JWT session strategy. Callbacks extend token/session with `id` and `role`.
+
+API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the NextAuth JWT from `Authorization: Bearer` or `next-auth.session-token` cookie. Accepts tokens from either portal because all three share the same `NEXTAUTH_SECRET`. Populates `req.user = { id, role }`. `requireRole(...roles)` → 403 if role not in list.
+
+**`NEXTAUTH_SECRET` must be identical across `apps/web`, `apps/portal`, and `apps/api`.**
 
 **Always include `UserRole.ADMIN` in `requireRole(...)` calls.**
 
@@ -74,21 +87,27 @@ API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the Ne
 
 ## Access control (RBAC)
 
-Two layers, one policy in `apps/web/src/lib/rbac.ts`:
-1. **Edge** — `middleware.ts` checks JWT + role on every matched route.
+Two layers per portal, each with its own policy file:
+
+**`apps/portal` (investor)** — `apps/portal/src/lib/rbac.ts`:
+1. **Edge** — `apps/portal/src/middleware.ts` checks JWT + role on every matched route.
+2. **Server** — `rbac-server.ts` `requireRole()` in every sensitive layout/page.
+
+**`apps/web` (admin)** — `apps/web/src/lib/rbac.ts`:
+1. **Edge** — `apps/web/src/middleware.ts` checks JWT + role.
 2. **Server** — `rbac-server.ts` `requireRole()`/`requireStaff()` in every sensitive layout/page.
 
 **Never rely on only one layer.**
 
-| Area | Path | Allowed roles |
-|---|---|---|
-| Investor | `/dashboard/*` | `INVESTOR` |
-| Admin console | `/console/*` (non-TC) | `ADMIN` |
-| TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
-| Post-login router | `/launch` | any authenticated |
-| No-workspace | `/unauthorized` | any authenticated |
+| App | Area | Path | Allowed roles |
+|---|---|---|---|
+| portal | Investor dashboard | `/dashboard/*` | `INVESTOR` |
+| web | Admin console | `/console/*` (non-TC) | `ADMIN` |
+| web | TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
+| both | Post-login router | `/launch` | any authenticated |
+| web | No-workspace | `/unauthorized` | any authenticated |
 
-Post-login: `/launch` → `homePathForRole()` → INVESTOR→`/dashboard`, ADMIN→`/console`, TC→`/console/tc/queue`, LAC/ExCo→`/unauthorized` (Phase 3 screens not built yet).
+Post-login in `apps/web`: `/launch` → `homePathForRole()` → INVESTOR→`http://localhost:4002` (NEXT_PUBLIC_PORTAL_URL), ADMIN→`/console`, TC→`/console/tc/queue`, LAC/ExCo→`/unauthorized`.
 
 ---
 
@@ -219,7 +238,8 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 |---|---|
 | `applications/` | create draft, get, update section, submit (DRAFT→SUBMITTED assigns ref) |
 | `payments/` | initiate only |
-| `users/` | `POST /:id/approve` + `POST /:id/reject` (ADMIN only) |
+| `users/` | `POST /staff` (create staff); `POST /:id/approve` + `POST /:id/reject` (ADMIN only) |
+| `windows/` | `POST /` create; `PATCH /:id` update; `POST /:id/open|close|archive` status transitions (ADMIN only) |
 | `health/` | complete |
 
 ---
@@ -237,7 +257,7 @@ Global error handler maps `AppError`, `ZodError`, Sequelize errors → `{ "error
 
 `fireWebhook(event, payload)` — `apps/api/src/webhooks.ts`. HMAC-SHA256 signed (`N8N_WEBHOOK_SECRET`). No-op when `N8N_BASE_URL` or `N8N_WEBHOOK_SECRET` absent. Fire **after** transaction commits, never before. Web mirror: `apps/web/src/lib/webhooks.ts`.
 
-Events: `investor-registered`, `investor-approved` (includes `generatedPassword`), `investor-rejected`, `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`
+Events: `investor-registered`, `investor-approved` (includes `generatedPassword`), `investor-rejected`, `staff-invited` (includes `tempPassword`), `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`
 
 **Omit `N8N_WEBHOOK_SECRET` from test `.env`** — setting it to `''` causes startup failure (Zod requires `min(8)` when key is present).
 
@@ -261,7 +281,7 @@ DATABASE_URL=postgresql://kip:kip_dev_password@localhost:5433/kip_portal?schema=
 API_PORT=4001
 WEB_PUBLIC_URL=http://localhost:4000
 LOG_LEVEL=info
-NEXTAUTH_SECRET=          # REQUIRED; must match web
+NEXTAUTH_SECRET=          # REQUIRED; must match both portals
 N8N_WEBHOOK_SECRET=       # optional; omit for tests
 N8N_BASE_URL=             # e.g. http://localhost:5678
 S3_ENDPOINT=              # empty = AWS
@@ -275,22 +295,31 @@ EOI_APPLICATION_FEE_USD=1000
 EOI_APPLICATION_FEE_UGX=3700000
 ```
 
-### Web / NextAuth
+### Admin portal (`apps/web`) / NextAuth
 
 ```env
 NEXTAUTH_URL=http://localhost:4000
-NEXTAUTH_SECRET=          # min 32 chars, must match API
+NEXTAUTH_SECRET=          # min 32 chars, must match API + investor portal
+NEXT_PUBLIC_API_URL=http://localhost:4001
+NEXT_PUBLIC_PORTAL_URL=http://localhost:4002   # investor portal URL — used to redirect INVESTOR role after login
+EMAIL_SERVER_HOST=localhost
+EMAIL_SERVER_PORT=1025
+EMAIL_SERVER_USER=
+EMAIL_SERVER_PASSWORD=
+EMAIL_FROM=noreply@kip.local
+```
+
+### Investor portal (`apps/portal`) / NextAuth
+
+```env
+NEXTAUTH_URL=http://localhost:4002
+NEXTAUTH_SECRET=          # min 32 chars, must match API + admin portal
 NEXT_PUBLIC_API_URL=http://localhost:4001
 EMAIL_SERVER_HOST=localhost
 EMAIL_SERVER_PORT=1025
 EMAIL_SERVER_USER=
 EMAIL_SERVER_PASSWORD=
 EMAIL_FROM=noreply@kip.local
-STANBIC_BANK_NAME=Stanbic Bank Uganda Ltd
-STANBIC_ACCOUNT_NAME=Uganda National Oil Company Ltd
-STANBIC_ACCOUNT_NUMBER=9030011896005
-STANBIC_SWIFT=SBICUGKX
-BANK_TRANSFER_SLA_HOURS=48
 ```
 
 Planned (not yet wired): `PAYMENT_GATEWAY_PUBLIC_KEY`, `PAYMENT_GATEWAY_SECRET_KEY`, `PAYMENT_GATEWAY_WEBHOOK_SECRET`.
@@ -350,6 +379,10 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/components/ui/` | Primitives: `alert`, `avatar`, `badge`, `button`, `card`, `dropdown-menu`, `input`, `separator`, `sheet`, `table`, `tooltip` |
 | `apps/web/src/app/(admin)/console/users/[id]/page.tsx` | User detail page |
 | `apps/web/src/app/(admin)/console/users/[id]/user-action-buttons.tsx` | Approve/Reject client component |
+| `apps/web/src/app/(admin)/console/users/invite-staff-dialog.tsx` | Invite staff member dialog (calls `POST /users/staff`) |
+| `apps/web/src/app/(admin)/console/windows/windows-client.tsx` | Windows page client shell with Create dialog |
+| `apps/web/src/app/(admin)/console/windows/create-window-dialog.tsx` | Create/edit window dialog |
+| `apps/web/src/app/(admin)/console/windows/window-actions.tsx` | Per-window open/close/archive action buttons |
 | `apps/web/src/app/api/register/route.ts` | `POST /api/register` — creates InvestorOrg + User (PENDING_REVIEW), fires webhook |
 | `apps/web/src/app/contact/page.tsx` | Public contact form — server action sends email via nodemailer to admin@kip.unoc.co.ug |
 | `apps/web/src/app/how-it-works/page.tsx` | 6-step EOI process walkthrough — public static page |
@@ -426,3 +459,4 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Edit `packages/db/dist/` — generated by `pnpm db:build`
 - Use npm or yarn — pnpm only
 - Update CLAUDE.md as a follow-up — same commit as the code change
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

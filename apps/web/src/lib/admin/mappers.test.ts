@@ -202,7 +202,7 @@ describe("row mappers", () => {
   });
 
   it("toWindowRow maps lifecycle to badge variants", () => {
-    const base = { name: "Round 1", openAt: "2026-01-15T00:00:00Z", closeAt: "2026-06-30T00:00:00Z", sequenceCounter: 3 };
+    const base = { id: "00000000-0000-0000-0000-000000000001", name: "Round 1", openAt: "2026-01-15T00:00:00Z", closeAt: "2026-06-30T00:00:00Z", sequenceCounter: 3 };
     expect(toWindowRow({ ...base, status: "OPEN" }).statusVariant).toBe("window-active");
     expect(toWindowRow({ ...base, status: "OPEN" }).statusLabel).toBe("Active");
     expect(toWindowRow({ ...base, status: "CLOSED" }).statusVariant).toBe("window-closed");

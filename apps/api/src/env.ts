@@ -27,6 +27,13 @@ const schema = z.object({
     .default("true")
     .transform((v) => v === "true"),
 
+  EMAIL_SERVER_HOST: z.string().default("localhost"),
+  EMAIL_SERVER_PORT: z.coerce.number().int().default(1025),
+  EMAIL_SERVER_USER: z.string().optional(),
+  EMAIL_SERVER_PASSWORD: z.string().optional(),
+  EMAIL_FROM: z.string().default("KIP Portal <no-reply@kip.unoc.co.ug>"),
+  PORTAL_PUBLIC_URL: z.string().url().default("http://localhost:4002"),
+
   ANTHROPIC_API_KEY: z.string().optional(),
 
   EOI_APPLICATION_FEE_USD: z.coerce.number().int().positive().default(1000),

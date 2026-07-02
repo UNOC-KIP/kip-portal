@@ -22,7 +22,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile.dev
     working_dir: /repo
-    command: sh -c "pnpm --filter @kip/db generate && pnpm db:migrate && pnpm db:seed"
+    command: sh -c "pnpm db:build && pnpm db:migrate && pnpm db:seed"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-kip}:${POSTGRES_PASSWORD:-kip_dev_password}@postgres:5432/${POSTGRES_DB:-kip_portal}?schema=public
     depends_on:
@@ -75,6 +75,32 @@ services:
       mailhog:
         condition: service_started
 
+  portal:
+    build:
+      context: .
+      dockerfile: apps/portal/Dockerfile.dev
+    working_dir: /repo
+    volumes:
+      - ./apps/portal:/repo/apps/portal
+      - portal_node_modules:/repo/apps/portal/node_modules
+      - portal_next_cache:/repo/apps/portal/.next
+      - ./packages/shared/src:/repo/packages/shared/src
+    ports:
+      - "4002:4002"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-kip}:${POSTGRES_PASSWORD:-kip_dev_password}@postgres:5432/${POSTGRES_DB:-kip_portal}?schema=public
+      NEXTAUTH_URL: http://localhost:4002
+      NEXT_PUBLIC_API_URL: http://localhost:4001
+      EMAIL_SERVER_HOST: mailhog
+      EMAIL_SERVER_PORT: "1025"
+      NODE_ENV: development
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mailhog:
+        condition: service_started
+
   n8n:
     image: n8nio/n8n:latest
     container_name: kip-n8n
@@ -103,6 +129,8 @@ services:
 
 volumes:
   kip-postgres-data:
-  kip-n8n-data:   
+  kip-n8n-data:
   web_node_modules:
   web_next_cache:
+  portal_node_modules:
+  portal_next_cache:

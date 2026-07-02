@@ -16,8 +16,10 @@ import {
   Smartphone,
   Users,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { useSidebar } from "@/context/sidebar-context";
 import { cn } from "@/lib/utils";
 import {
@@ -40,7 +42,7 @@ const FULL_NAV = [
   { icon: Smartphone,     href: "/console/land-plots",    label: "Land Plots" },
   { icon: AlertTriangle,  href: "/console/bank-transfers",label: "Bank Transfers" },
   { icon: BarChart2,      href: "/console/report",        label: "Reports" },
-  { icon: Users,          href: "/console/users",         label: "Users" },
+  { icon: Users,          href: "/console/users",         label: "Investors" },
 ];
 
 const TC_NAV = [
@@ -66,9 +68,8 @@ function getRoleLabel(role: string) {
 }
 
 const bottomNav = [
-  { icon: Settings, href: "#",       label: "Settings" },
-  { icon: Info,     href: "#",       label: "Help" },
-  { icon: LogOut,   href: "/sign-in",label: "Sign out" },
+  { icon: Settings, href: "/console/settings", label: "Settings" },
+  { icon: Info,     href: "#",                 label: "Help" },
 ];
 
 function NavLink({
@@ -160,6 +161,27 @@ function SidebarNav({
         {bottomNav.map((item) => (
           <NavLink key={item.label} {...item} collapsed={collapsed} />
         ))}
+        {collapsed ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => signOut({ callbackUrl: "/sign-in" })}
+                className="flex h-10 w-10 items-center justify-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+              >
+                <LogOut size={20} className="shrink-0" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="text-xs">Sign out</TooltipContent>
+          </Tooltip>
+        ) : (
+          <button
+            onClick={() => signOut({ callbackUrl: "/sign-in" })}
+            className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <LogOut size={20} className="shrink-0" />
+            <span className="truncate text-sm font-medium">Sign out</span>
+          </button>
+        )}
       </nav>
 
       {/* Avatar */}
@@ -201,16 +223,11 @@ export function DashboardSidebar({ role }: { role: string }) {
         <div
           className={cn(
             "flex shrink-0 items-center border-b border-white/10 py-3",
-            isCollapsed ? "justify-center px-0" : "justify-between px-3",
+            isCollapsed ? "justify-center px-3" : "justify-between px-3",
           )}
         >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-brand-400">
-            <span className="text-base font-black text-black">K</span>
-          </div>
           {!isCollapsed && (
-            <span className="ml-2 flex-1 text-sm font-bold text-white">
-              KIP Portal
-            </span>
+            <Image src="/unoc-logo.svg" alt="UNOC" width={96} height={28} className="object-contain" priority />
           )}
           <button
             onClick={toggle}

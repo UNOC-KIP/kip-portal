@@ -152,10 +152,14 @@ export default function SignInPage() {
           </form>
 
           <p className="mt-6 text-center text-sm text-ink-500">
-            Am an investor without an account{" "}
-            <Link href="/sign-up" className="font-semibold text-ink-900 underline hover:text-ink-700">
-              Register here.
-            </Link>
+            For investor access, visit{" "}
+            <a
+              href={process.env.NEXT_PUBLIC_PORTAL_URL ?? "http://localhost:4002"}
+              className="font-semibold text-ink-900 underline hover:text-ink-700"
+            >
+              the Investor Portal
+            </a>
+            .
           </p>
         </div>
       </div>

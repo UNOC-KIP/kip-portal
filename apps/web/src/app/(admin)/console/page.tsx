@@ -95,11 +95,11 @@ const PAYMENT_STAGES = [
 
 const QUICK_ACTIONS = [
   { label: "Review Bank Transfers", href: "/console/bank-transfers", icon: CreditCard,  urgent: false },
-  { label: "Manage Users",          href: "/console/users",          icon: Users,        urgent: false },
+  { label: "Investors",             href: "/console/users",          icon: Users,        urgent: false },
   { label: "Manage Window",         href: "/console/windows",        icon: Clock,        urgent: false },
   { label: "Pipeline Report",       href: "/console/report",         icon: BarChart3,    urgent: false },
   { label: "All Applications",      href: "/console/applications",   icon: FileText,     urgent: false },
-  { label: "Land Plot Manager",     href: "/console/land-plots",     icon: Activity,     urgent: false },
+  { label: "Settings",              href: "/console/settings",       icon: Activity,     urgent: false },
 ];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────

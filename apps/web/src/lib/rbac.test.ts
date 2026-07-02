@@ -19,7 +19,8 @@ const ALL_ROLES = [
 
 describe("homePathForRole", () => {
   it("routes each role to its workspace", () => {
-    expect(homePathForRole("INVESTOR")).toBe("/dashboard");
+    // INVESTOR is served by apps/portal — home is an external URL
+    expect(homePathForRole("INVESTOR")).toMatch(/localhost:4002|portal/);
     expect(homePathForRole("ADMIN")).toBe("/console");
     expect(homePathForRole("TC_MEMBER")).toBe("/console/tc/queue");
     expect(homePathForRole("TC_CHAIR")).toBe("/console/tc/queue");
@@ -40,8 +41,9 @@ describe("allowedRolesForPath", () => {
     expect(allowedRolesForPath("/console/users")).toBe(ADMIN_ONLY);
     expect(allowedRolesForPath("/console/bank-transfers")).toBe(ADMIN_ONLY);
   });
-  it("gates investor + auth-only routes", () => {
-    expect(allowedRolesForPath("/dashboard/eoi/PRELIMINARY_INFO")).toContain("INVESTOR");
+  it("gates auth-only routes", () => {
+    // /dashboard is no longer in apps/web — it lives in apps/portal
+    expect(allowedRolesForPath("/dashboard/eoi/PRELIMINARY_INFO")).toBeNull();
     expect(allowedRolesForPath("/launch")).toBe("any");
     expect(allowedRolesForPath("/unauthorized")).toBe("any");
   });
@@ -64,8 +66,12 @@ describe("roleSatisfies", () => {
 });
 
 describe("no redirect loops (safety invariant)", () => {
-  it("every role's home page is a page that role may actually access", () => {
+  it("every staff role's home page is a page that role may actually access", () => {
     for (const role of ALL_ROLES) {
+      if (role === "INVESTOR") {
+        // INVESTOR home is an absolute URL in apps/portal — invariant doesn't apply here
+        continue;
+      }
       const home = homePathForRole(role);
       const policy = allowedRolesForPath(home);
       expect(

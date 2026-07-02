@@ -34,7 +34,7 @@ export function SiteNav({ bg = "transparent" }: { bg?: "gold" | "white" | "trans
       <div className="bg-black shadow-md">
         <div className="mx-auto flex h-16 max-w-[1343px] items-center justify-between px-8">
           <Link href="/">
-            <Image src="/unoc-logo.svg" alt="UNOC" width={110} height={32} priority />
+            <Image src="/unoc-logo.svg" alt="UNOC" width={110} height={32} className="mb-5" priority />
           </Link>
 
           <nav className="hidden items-center gap-8 text-[13px] font-medium text-white/70 md:flex">
