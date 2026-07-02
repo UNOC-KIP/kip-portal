@@ -16,9 +16,16 @@ import { Notification } from './models/notification'
 const globalForDb = globalThis as unknown as { sequelize: Sequelize | undefined }
 
 function createSequelize(): Sequelize {
-  return new Sequelize(process.env.DATABASE_URL!, {
+  const url = process.env.DATABASE_URL!
+  // Hosted Postgres (Neon, RDS, …) requires TLS; local Docker does not.
+  // Sequelize does not honour sslmode in the URL, so translate it explicitly.
+  const sslRequired = /\bsslmode=require\b/.test(url)
+  return new Sequelize(url, {
     dialect: 'postgres',
     logging: process.env.NODE_ENV === 'development' ? false : false,
+    dialectOptions: sslRequired
+      ? { ssl: { require: true, rejectUnauthorized: false } }
+      : undefined,
     define: {
       freezeTableName: true,
       underscored: false,
