@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm --filter @kip/db build && pnpm --filter @kip/web build"
+  "buildCommand": "pnpm --filter @kip/db build && DATABASE_URL=\"${DATABASE_URL_UNPOOLED:-$DATABASE_URL}\" pnpm --filter @kip/db migrate && DATABASE_URL=\"${DATABASE_URL_UNPOOLED:-$DATABASE_URL}\" pnpm --filter @kip/db seed && pnpm --filter @kip/web build"
 }
