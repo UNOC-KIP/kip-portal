@@ -401,9 +401,10 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 
 ---
 
-## Deployment — Vercel demo (`apps/web` only)
+## Deployment — Vercel demo (`apps/web` + `apps/portal`)
 
-- `apps/web/vercel.json` — install/build commands for Vercel. Project **Root Directory** must be `apps/web` with "Include source files outside of the Root Directory" enabled (pnpm workspace). Build compiles `@kip/db`, runs migrations + idempotent seed against `DATABASE_URL_UNPOOLED` (Neon marketplace env vars are *sensitive* — not pullable locally), then `next build`.
+- Two Vercel projects, one per app: `kip-portal` (admin, Root Directory `apps/web`) and `kip-portal-investor` (investor, Root Directory `apps/portal`). Both share the same Neon store and the same `NEXTAUTH_SECRET`.
+- `apps/web/vercel.json` / `apps/portal/vercel.json` — install/build commands. "Include source files outside of the Root Directory" must stay enabled (pnpm workspace). Only the **admin** build runs migrations + idempotent seed against `DATABASE_URL_UNPOOLED` (Neon marketplace env vars are *sensitive* — not pullable locally); the portal build just compiles `@kip/db` + `next build`.
 - Database: hosted Postgres (Neon, provisioned via Vercel Storage). TLS: `packages/db/src/ssl.ts` `databaseNeedsSsl()` — any non-local host gets TLS `dialectOptions` unless the URL says `sslmode=disable`; local Docker URLs are unaffected.
 - Read-only demo: the Express API (`apps/api`) is **not** deployed — admin mutation buttons (approve/reject, invite staff, window actions, bank-transfer confirm) will fail. Reads work because the web app queries the DB directly.
 - Required Vercel env vars: `DATABASE_URL`, `NEXTAUTH_URL` (the Vercel URL), `NEXTAUTH_SECRET`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_URL`. Email magic link + contact form need SMTP and are non-functional on the demo; credentials sign-in works.
