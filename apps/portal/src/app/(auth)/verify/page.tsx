@@ -44,13 +44,13 @@ function VerifyForm() {
     <div className="min-h-screen">
       <section className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-8 pb-12 flex items-center justify-between">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-8 pb-12 flex items-center justify-between">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
               Register Account
             </div>
-            <h1 className="text-[36px] font-extrabold tracking-tight text-black">Already registered?</h1>
+            <h1 className="text-[28px] sm:text-[36px] font-extrabold tracking-tight text-black">Already registered?</h1>
             <Link href="/sign-in" className="mt-5 inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
               Log in
             </Link>
@@ -60,7 +60,7 @@ function VerifyForm() {
 
       <section className="bg-ink-100 py-12">
         <div className="container max-w-lg">
-          <div className="rounded-2xl bg-white p-8 shadow-sm text-center">
+          <div className="rounded-2xl bg-white p-5 shadow-sm text-center sm:p-8">
             <div className="mb-6 flex items-center justify-center gap-3">
               <div className="h-0.5 w-8 rounded-full bg-ink-900" />
               <div className="h-0.5 w-8 rounded-full bg-ink-900" />
@@ -91,7 +91,7 @@ function VerifyForm() {
                     value={d}
                     onChange={(e) => handleDigit(i, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(i, e)}
-                    className={`h-14 w-12 rounded-lg border-2 text-center text-xl font-bold outline-none transition ${
+                    className={`h-12 w-10 rounded-lg border-2 text-center text-xl font-bold outline-none transition sm:h-14 sm:w-12 ${
                       d ? "border-brand-500 bg-brand-50" : "border-ink-300"
                     } focus:border-brand-500`}
                   />

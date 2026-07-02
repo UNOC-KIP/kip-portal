@@ -26,12 +26,12 @@ export default function LandMapPage() {
     <div className="min-h-screen font-sans">
       <div className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             Phase 2 Plots
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[34px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             KIP Plot<br />
             <span className="text-kip-red">Allocation Map.</span>
           </h1>
@@ -51,8 +51,8 @@ export default function LandMapPage() {
       </div>
 
       <section className="bg-white py-12">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
-          <div className="mb-4 flex items-center justify-between">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-[17px] font-bold text-black">Official Plot Allocation Map</h2>
               <p className="mt-0.5 text-[13px] text-black/60">Kabalega Petro-Based Industrial Park</p>
@@ -62,8 +62,8 @@ export default function LandMapPage() {
             </a>
           </div>
           <div className="overflow-hidden rounded-[5px] border border-black/10 bg-ink-100 shadow-sm">
-            <object data="/kip-plot-map.pdf" type="application/pdf" className="h-[780px] w-full" title="KIP Plot Allocation Map — Phase 2">
-              <div className="flex h-[780px] flex-col items-center justify-center gap-5 bg-ink-100">
+            <object data="/kip-plot-map.pdf" type="application/pdf" className="h-[60vh] min-h-[320px] w-full lg:h-[780px]" title="KIP Plot Allocation Map — Phase 2">
+              <div className="flex h-[60vh] min-h-[320px] flex-col items-center justify-center gap-5 bg-ink-100 px-6 lg:h-[780px]">
                 <MapPin size={40} className="text-black/20" />
                 <div className="text-center">
                   <p className="text-[15px] font-semibold text-black">PDF viewer not available</p>
@@ -83,7 +83,7 @@ export default function LandMapPage() {
       </section>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-10">
             <h2 className="text-[28px] font-extrabold text-black">Land Use Zones</h2>
             <p className="mt-2 text-[14px] text-black/60">Six master-planned zones spanning the full industrial value chain.</p>
@@ -104,14 +104,14 @@ export default function LandMapPage() {
       </section>
 
       <section className="bg-white py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-8">
             <h2 className="text-[28px] font-extrabold text-black">Anchor Infrastructure &amp; Location</h2>
             <p className="mt-2 text-[14px] text-black/60">The park is developed by URHC around three anchor assets in the Kabaale industrial area.</p>
           </div>
           <div className="overflow-hidden rounded-[5px] border border-black/8">
             {INFRASTRUCTURE.map((item, i) => (
-              <div key={item.label} className={`flex items-start gap-6 px-7 py-5 ${i % 2 === 0 ? "bg-white" : "bg-ink-100/40"} ${i > 0 ? "border-t border-black/5" : ""}`}>
+              <div key={item.label} className={`flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-start sm:gap-6 sm:px-7 sm:py-5 ${i % 2 === 0 ? "bg-white" : "bg-ink-100/40"} ${i > 0 ? "border-t border-black/5" : ""}`}>
                 <span className="w-28 shrink-0 text-[12px] font-bold uppercase tracking-wide text-black/55">{item.label}</span>
                 <span className="text-[14px] text-black/75">{item.value}</span>
               </div>
@@ -121,7 +121,7 @@ export default function LandMapPage() {
       </section>
 
       <section className="bg-black py-14 text-white">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
             <div>
               <h2 className="text-[26px] font-extrabold">Ready to secure your plot?</h2>

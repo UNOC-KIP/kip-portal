@@ -88,12 +88,12 @@ export default function ContactPage({ searchParams }: { searchParams: { sent?: s
     <div className="min-h-screen font-sans">
       <div className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             Get in Touch
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[34px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             Contact <span className="text-kip-red">Our Team.</span>
           </h1>
           <p className="mt-4 max-w-lg text-[15px] font-medium leading-relaxed text-black/75">
@@ -104,7 +104,7 @@ export default function ContactPage({ searchParams }: { searchParams: { sent?: s
       </div>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <div className="flex flex-col gap-5">
               <div className="rounded-[5px] border border-black/8 bg-white p-8">

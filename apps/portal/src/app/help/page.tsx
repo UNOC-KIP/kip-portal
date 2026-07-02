@@ -71,12 +71,12 @@ export default function HelpPage() {
     <div className="min-h-screen font-sans">
       <div className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             Help Centre
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[34px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             How can we<br />
             <span className="text-kip-red">help you?</span>
           </h1>
@@ -91,7 +91,7 @@ export default function HelpPage() {
       </div>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
             {CATEGORIES.map(({ icon: Icon, title, description, articles }) => (
               <div key={title} id={title.toLowerCase().replace(/\s+/g, "-")} className="scroll-mt-20 rounded-[5px] border border-black/8 bg-white">

@@ -32,7 +32,7 @@ const FOOTER_COLS = [
 export function SiteFooter() {
   return (
     <footer className="bg-black text-white">
-      <div className="mx-auto max-w-[1343px] px-[100px] py-14">
+      <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] py-14">
         <div className="grid grid-cols-2 gap-10 md:grid-cols-4">
           <div className="col-span-2 md:col-span-1">
             <div className="mb-5 inline-block rounded-[6px] bg-white px-3 py-2">

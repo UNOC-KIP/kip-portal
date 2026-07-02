@@ -5,7 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 export default function NotFound() {
   return (
     <div className="flex min-h-screen flex-col font-sans">
-      <header className="bg-black px-[100px] py-4">
+      <header className="bg-black px-5 sm:px-10 lg:px-[100px] py-4">
         <div className="mx-auto flex h-16 max-w-[1343px] items-center">
           <Link href="/">
             <Image src="/unoc-logo.svg" alt="UNOC" width={110} height={32} />
@@ -15,7 +15,7 @@ export default function NotFound() {
 
       <main className="flex flex-1 flex-col items-center justify-center bg-kip-gold px-8 py-24 text-center">
         <p className="text-[120px] font-black leading-none text-black/10">404</p>
-        <h1 className="mt-4 text-[36px] font-extrabold leading-tight text-black">
+        <h1 className="mt-4 text-[28px] sm:text-[36px] font-extrabold leading-tight text-black">
           Page not <span className="text-kip-red">found.</span>
         </h1>
         <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-black/55">

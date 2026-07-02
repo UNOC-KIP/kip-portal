@@ -117,13 +117,13 @@ export default function SignUpPage() {
     <div className="min-h-screen">
       <section className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-8 pb-12 flex items-center justify-between">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-8 pb-12 flex items-center justify-between">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
               Register Account
             </div>
-            <h1 className="text-[36px] font-extrabold tracking-tight text-black">
+            <h1 className="text-[28px] sm:text-[36px] font-extrabold tracking-tight text-black">
               Already registered?
             </h1>
             <Link
@@ -138,7 +138,7 @@ export default function SignUpPage() {
 
       <section className="bg-ink-100 py-12">
         <div className="container max-w-2xl">
-          <div className="rounded-2xl bg-white p-8 shadow-sm">
+          <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8">
 
             {submitted ? (
               <div className="flex flex-col items-center py-8 text-center">
@@ -192,7 +192,7 @@ export default function SignUpPage() {
                           className={inputCls(!!fieldErrors.companyName)}
                         />
                       </Field>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <Field label="Country of Registration *" error={fieldErrors.country?.[0]}>
                           <select
                             required

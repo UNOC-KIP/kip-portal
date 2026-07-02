@@ -127,13 +127,13 @@ export default async function HomePage({
         <SiteNav />
 
         <section>
-          <div className="mx-auto max-w-[1343px] px-[100px] pt-14 pb-10">
+          <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-14 pb-10">
             <div className="max-w-2xl">
               <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-white backdrop-blur-sm">
                 <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
                 Kabaale, Hoima · Western Uganda
               </span>
-              <h1 className="text-[56px] font-extrabold leading-[1.08] tracking-tight text-white drop-shadow-lg lg:text-[64px]">
+              <h1 className="text-[38px] font-extrabold leading-[1.08] tracking-tight text-white drop-shadow-lg sm:text-[52px] lg:text-[64px]">
                 Kabalega<br />
                 Petro-Based<br />
                 <span className="text-kip-gold">Industrial Park.</span>
@@ -160,8 +160,8 @@ export default async function HomePage({
           </div>
         </section>
 
-        <div className="mx-auto max-w-[1343px] px-[100px] pb-10">
-          <div className="flex flex-wrap items-center justify-between gap-6 rounded-[5px] bg-white/85 px-8 py-5 shadow-sm backdrop-blur-sm">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pb-10">
+          <div className="flex flex-wrap items-center justify-between gap-6 rounded-[5px] bg-white/85 px-5 py-5 shadow-sm backdrop-blur-sm sm:px-8">
             {activeWindow ? (
               <>
                 <div className="flex items-center gap-3">
@@ -182,7 +182,7 @@ export default async function HomePage({
                 <CountdownTimer closeAt={activeWindow.closeAt} variant="hero" />
               </>
             ) : (
-              <div className="flex w-full items-center justify-between">
+              <div className="flex w-full flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-3">
                   <span className="h-2.5 w-2.5 rounded-full bg-black/20" />
                   <div>
@@ -207,10 +207,10 @@ export default async function HomePage({
 
       {/* Feature cards */}
       <section className="bg-white pb-16 pt-8">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-1 gap-1 md:grid-cols-3">
             {/* Industrial Park */}
-            <div className="relative flex h-[644px] flex-col items-start justify-center overflow-hidden rounded-l-[10px] px-10">
+            <div className="relative flex min-h-[380px] flex-col items-start justify-center overflow-hidden rounded-t-[10px] px-6 py-12 sm:px-10 md:h-[644px] md:rounded-t-none md:rounded-l-[10px] md:py-0">
               <Image src="/kip-infrastructure.jpg" alt="KIP Infrastructure" fill className="object-cover" />
               <div className="absolute inset-0 bg-black/70" />
               <div className="relative z-10 max-w-[280px]">
@@ -230,7 +230,7 @@ export default async function HomePage({
             </div>
 
             {/* Application Fee */}
-            <div className="flex h-[644px] flex-col items-start justify-center bg-kip-red px-10">
+            <div className="flex min-h-[380px] flex-col items-start justify-center bg-kip-red px-6 py-12 sm:px-10 md:h-[644px] md:py-0">
               <CreditCard size={26} className="mb-5 text-white" />
               <h3 className="text-[21px] font-bold leading-snug text-white">Application Fee</h3>
               <p className="mt-3 max-w-[280px] text-[16px] leading-relaxed text-white/90">
@@ -246,7 +246,7 @@ export default async function HomePage({
             </div>
 
             {/* EOI Process */}
-            <div className="relative flex h-[644px] flex-col items-start justify-center overflow-hidden rounded-r-[10px] px-10">
+            <div className="relative flex min-h-[380px] flex-col items-start justify-center overflow-hidden rounded-b-[10px] px-6 py-12 sm:px-10 md:h-[644px] md:rounded-b-none md:rounded-r-[10px] md:py-0">
               <Image src="/kip-refinery.jpg" alt="EOI Process" fill className="object-cover" />
               <div className="absolute inset-0 bg-black/70" />
               <div className="relative z-10 max-w-[280px]">
@@ -270,7 +270,7 @@ export default async function HomePage({
 
       {/* Credibility bar */}
       <section className="border-y border-black/8 bg-white py-7">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <p className="mb-5 text-center text-[10px] font-bold uppercase tracking-widest text-black/40">
             Backed by Uganda&apos;s leading energy institutions
           </p>
@@ -286,13 +286,13 @@ export default async function HomePage({
 
       {/* About KIP */}
       <section id="about" className="scroll-mt-20 bg-ink-100 py-20">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-12">
             <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
               About The Park
             </span>
-            <h2 className="mt-4 text-[36px] font-extrabold leading-tight tracking-tight text-black">
+            <h2 className="mt-4 text-[28px] sm:text-[36px] font-extrabold leading-tight tracking-tight text-black">
               A catalyst for Uganda&apos;s{" "}
               <span className="text-kip-red">industrial future.</span>
             </h2>
@@ -310,8 +310,8 @@ export default async function HomePage({
               { value: "6", unit: "", label: "Investment Zones" },
               { value: "USD 1B", unit: "+", label: "Target Investment" },
             ].map((s) => (
-              <div key={s.label} className="bg-white px-8 py-8 text-center">
-                <p className="text-[38px] font-extrabold leading-none text-black">
+              <div key={s.label} className="bg-white px-4 py-6 text-center sm:px-8 sm:py-8">
+                <p className="text-[28px] sm:text-[38px] font-extrabold leading-none text-black">
                   {s.value}<span className="text-kip-red">{s.unit}</span>
                 </p>
                 <p className="mt-2 text-[13px] text-black/60">{s.label}</p>
@@ -395,7 +395,7 @@ export default async function HomePage({
 
       {/* What you'll need */}
       <section className="bg-white py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
             <div>
               <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-ink-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
@@ -435,7 +435,7 @@ export default async function HomePage({
 
       {/* Notify me */}
       <section id="notify" className="scroll-mt-20 bg-black py-16 text-white">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
             <div>
               <h2 className="text-[28px] font-extrabold leading-snug">

@@ -32,7 +32,7 @@ const FOOTER_COLS = [
 export function SiteFooter() {
   return (
     <footer className="bg-black text-white">
-      <div className="mx-auto max-w-[1343px] px-[100px] py-14">
+      <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] py-14">
         <div className="grid grid-cols-2 gap-10 md:grid-cols-4">
           <div className="col-span-2 md:col-span-1">
             <Image src="/unoc-logo.svg" alt="UNOC" width={100} height={29} className="mb-5" />

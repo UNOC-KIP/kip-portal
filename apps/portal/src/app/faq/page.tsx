@@ -60,12 +60,12 @@ export default function FAQPage() {
     <div className="min-h-screen font-sans">
       <div className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             Support
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[34px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             Frequently Asked<br />
             <span className="text-kip-red">Questions.</span>
           </h1>
@@ -76,7 +76,7 @@ export default function FAQPage() {
       </div>
 
       <div className="sticky top-0 z-30 border-b border-black/8 bg-white/95 backdrop-blur-sm">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="flex gap-6 overflow-x-auto py-4">
             {CATEGORIES.map((cat) => (
               <a key={cat.title} href={`#${cat.title.toLowerCase().replace(/\s+&?\s*/g, "-")}`}
@@ -89,7 +89,7 @@ export default function FAQPage() {
       </div>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="space-y-14">
             {CATEGORIES.map((cat) => (
               <div key={cat.title} id={cat.title.toLowerCase().replace(/\s+&?\s*/g, "-")} className="scroll-mt-20">
@@ -111,7 +111,7 @@ export default function FAQPage() {
             ))}
           </div>
 
-          <div className="mt-14 rounded-[5px] border border-black/8 bg-black p-10 text-center text-white">
+          <div className="mt-14 rounded-[5px] border border-black/8 bg-black p-6 text-center text-white sm:p-10">
             <h3 className="text-[22px] font-extrabold">Still have questions?</h3>
             <p className="mt-3 text-[14px] leading-relaxed text-white/70">Our team is available Monday to Friday, 8 AM – 5 PM EAT.</p>
             <div className="mt-7 flex flex-wrap justify-center gap-4">

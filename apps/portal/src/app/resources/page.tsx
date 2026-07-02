@@ -51,12 +51,12 @@ export default function ResourcesPage() {
     <div className="min-h-screen font-sans">
       <div className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             Downloads
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[34px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             Investor<br />
             <span className="text-kip-red">Resources.</span>
           </h1>
@@ -67,7 +67,7 @@ export default function ResourcesPage() {
       </div>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="space-y-12">
             {RESOURCES.map(({ category, items }) => (
               <div key={category}>

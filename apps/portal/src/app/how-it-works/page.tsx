@@ -50,12 +50,12 @@ export default function HowItWorksPage() {
     <div className="min-h-screen font-sans">
       <div className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             The Process
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[34px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             How the KIP<br />
             <span className="text-kip-red">Application Works.</span>
           </h1>
@@ -70,7 +70,7 @@ export default function HowItWorksPage() {
       </div>
 
       <section className="bg-white py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-14 hidden items-center gap-0 md:flex">
             {STEPS.map((step, i) => (
               <div key={step.number} className="flex flex-1 items-center">
@@ -128,7 +128,7 @@ export default function HowItWorksPage() {
       </section>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-10">
             <h2 className="text-[28px] font-extrabold text-black">Common Questions</h2>
             <p className="mt-2 text-[14px] text-black/60">Quick answers about the application process.</p>
@@ -148,7 +148,7 @@ export default function HowItWorksPage() {
       </section>
 
       <section className="bg-black py-16 text-white">
-        <div className="mx-auto max-w-[1343px] px-[100px] text-center">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] text-center">
           <h2 className="text-[32px] font-extrabold">Ready to apply?</h2>
           <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-white/70">The application window is open. Register now and start your Expression of Interest.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">

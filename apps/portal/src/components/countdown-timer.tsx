@@ -36,7 +36,7 @@ export function CountdownTimer({ closeAt, variant = "default" }: CountdownTimerP
 
   if (variant === "hero") {
     return (
-      <div className="flex items-center gap-8 sm:gap-10">
+      <div className="flex items-center gap-4 sm:gap-10">
         {([
           [remaining.days,  "DAYS"],
           [remaining.hours, "HOURS"],
@@ -44,7 +44,7 @@ export function CountdownTimer({ closeAt, variant = "default" }: CountdownTimerP
           [remaining.secs,  "SECS"],
         ] as [number, string][]).map(([n, label]) => (
           <div key={label} className="text-center">
-            <p className="text-[32px] font-extrabold leading-none text-black tabular-nums">
+            <p className="text-[24px] font-extrabold leading-none text-black tabular-nums sm:text-[32px]">
               {String(n).padStart(2, "0")}
             </p>
             <p className="mt-1 text-[9px] font-bold uppercase tracking-widest text-kip-red">{label}</p>

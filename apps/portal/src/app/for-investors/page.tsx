@@ -48,12 +48,12 @@ export default function ForInvestorsPage() {
     <div className="min-h-screen font-sans">
       <div className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             Investor Information
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[34px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             Why Invest in<br />
             <span className="text-kip-red">Kabalega?</span>
           </h1>
@@ -68,11 +68,11 @@ export default function ForInvestorsPage() {
       </div>
 
       <section className="border-b border-black/8 bg-white">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-2 gap-px bg-black/8 md:grid-cols-4">
             {STATS.map((s) => (
               <div key={s.label} className="bg-white px-8 py-10 text-center">
-                <p className="text-[38px] font-extrabold leading-none text-black">{s.value}<span className="text-kip-red">{s.unit}</span></p>
+                <p className="text-[28px] sm:text-[38px] font-extrabold leading-none text-black">{s.value}<span className="text-kip-red">{s.unit}</span></p>
                 <p className="mt-2 text-[13px] text-black/60">{s.label}</p>
               </div>
             ))}
@@ -81,7 +81,7 @@ export default function ForInvestorsPage() {
       </section>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-10">
             <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
@@ -102,7 +102,7 @@ export default function ForInvestorsPage() {
       </section>
 
       <section className="bg-white py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-10">
             <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-ink-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-black" />
@@ -127,7 +127,7 @@ export default function ForInvestorsPage() {
       </section>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-10">
             <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-gold" />
@@ -154,7 +154,7 @@ export default function ForInvestorsPage() {
       </section>
 
       <section className="bg-white py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="mb-10">
             <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-ink-100 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-gold" />
@@ -191,7 +191,7 @@ export default function ForInvestorsPage() {
       </section>
 
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
             <div>
               <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
@@ -209,7 +209,7 @@ export default function ForInvestorsPage() {
                 ))}
               </ul>
             </div>
-            <div className="flex flex-col justify-center rounded-[5px] border border-black/8 bg-black p-10 text-white">
+            <div className="flex flex-col justify-center rounded-[5px] border border-black/8 bg-black p-6 text-white sm:p-10">
               <h3 className="text-[24px] font-extrabold leading-snug">Application window<br /><span className="text-kip-gold">is currently open.</span></h3>
               <p className="mt-4 text-[14px] leading-relaxed text-white/70">Don&apos;t miss Phase 1 — Round 1 of the Kabalega Industrial Park EOI round. Register and complete your application before 30 June 2026.</p>
               <div className="mt-8 space-y-3">

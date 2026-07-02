@@ -61,7 +61,7 @@ export function HeroCarousel() {
       <div className="absolute inset-0 bg-black/30" />
 
       {/* Dots */}
-      <div className="absolute bottom-6 right-[100px] z-10 flex gap-2">
+      <div className="absolute bottom-6 right-5 z-10 flex gap-2 sm:right-10 lg:right-[100px]">
         {SLIDES.map((slide, i) => (
           <button
             key={slide.src}
