@@ -1,4 +1,8 @@
 import { Sequelize } from 'sequelize'
+// Static imports so serverless bundlers (Vercel/nft) trace pg into the
+// function bundle — Sequelize itself loads the dialect via dynamic require,
+// which file tracing cannot follow.
+import * as pg from 'pg'
 import { User } from './models/user'
 import { Account } from './models/account'
 import { Session } from './models/session'
@@ -24,6 +28,7 @@ function createSequelize(): Sequelize {
   const sslRequired = databaseNeedsSsl(url)
   return new Sequelize(url, {
     dialect: 'postgres',
+    dialectModule: pg,
     logging: process.env.NODE_ENV === 'development' ? false : false,
     dialectOptions: sslRequired
       ? { ssl: { require: true, rejectUnauthorized: false } }
