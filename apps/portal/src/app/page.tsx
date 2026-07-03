@@ -52,10 +52,24 @@ async function subscribeNotifications(formData: FormData) {
 }
 
 const PARTNERS = [
-  "Uganda National Oil Company",
-  "Uganda Refinery Holding Company",
-  "Ministry of Energy & Mineral Development",
-  "Uganda Investment Authority",
+  {
+    name: "Uganda National Oil Company",
+    logo: "/unoc-logo.svg",
+    width: 180,
+    height: 48,
+  },
+  {
+    name: "Ministry of Energy & Mineral Development",
+    logo: "/ministry-of-energy-and-mineral-development-uganda-seeklogo.png",
+    width: 56,
+    height: 56,
+  },
+  {
+    name: "Uganda Investment Authority",
+    logo: "/investment_authority.png",
+    width: 104,
+    height: 56,
+  },
 ];
 
 const ANCHORS = [
@@ -274,11 +288,17 @@ export default async function HomePage({
           <p className="mb-5 text-center text-[10px] font-bold uppercase tracking-widest text-black/40">
             Backed by Uganda&apos;s leading energy institutions
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-4">
-            {PARTNERS.map((name) => (
-              <span key={name} className="text-[13px] font-semibold text-black/55 transition hover:text-black/80">
-                {name}
-              </span>
+          <div className="flex flex-wrap items-center justify-center gap-x-12 gap-y-6">
+            {PARTNERS.map((p) => (
+              <Image
+                key={p.name}
+                src={p.logo}
+                alt={p.name}
+                title={p.name}
+                width={p.width}
+                height={p.height}
+                className="h-10 w-auto object-contain opacity-75 transition hover:opacity-100 sm:h-12"
+              />
             ))}
           </div>
         </div>
