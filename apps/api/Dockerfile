@@ -17,20 +17,23 @@ COPY packages/shared packages/shared
 COPY packages/db packages/db
 COPY apps/api apps/api
 
-RUN pnpm --filter @kip/db generate
+RUN pnpm --filter @kip/db build
 RUN pnpm --filter @kip/api build
 
 # Runtime stage
 FROM node:20-alpine
-WORKDIR /app
+WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
-
 ENV NODE_ENV=production
-COPY --from=builder /repo/apps/api/dist ./dist
-COPY --from=builder /repo/apps/api/package.json ./
-COPY --from=builder /repo/packages ./packages
-COPY --from=builder /repo/node_modules ./node_modules
 
-EXPOSE 4000
-CMD ["node", "dist/index.js"]
+# Ship the whole workspace: pnpm symlinks in node_modules point at
+# ../packages/*, and this image doubles as the migrate/seed job image
+# (pnpm db:migrate / db:seed need packages/db source + tsx from the root).
+COPY --from=builder /repo ./
+
+EXPOSE 4001
+WORKDIR /repo/apps/api
+# tsx, not node: @kip/shared's package entry is raw TypeScript
+# (packages/shared/src/index.ts), which plain node cannot load.
+CMD ["node_modules/.bin/tsx", "dist/index.js"]

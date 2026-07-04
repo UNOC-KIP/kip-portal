@@ -18,3 +18,5 @@ coverage/
 
 .vercel
 .env*
+!.env.example
+!.env.production.example

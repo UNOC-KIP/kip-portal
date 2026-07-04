@@ -23,6 +23,10 @@ import { CountdownTimer } from "@/components/countdown-timer";
 import { HeroCarousel } from "@/components/hero-carousel";
 import { getActiveApplicationWindow } from "@/lib/public-data";
 
+// Renders live window data from the DB — must not be statically generated at
+// build time (Docker/CI builds have no database).
+export const dynamic = "force-dynamic";
+
 async function subscribeNotifications(formData: FormData) {
   "use server";
   const email = (formData.get("email") as string | null)?.trim() ?? "";
