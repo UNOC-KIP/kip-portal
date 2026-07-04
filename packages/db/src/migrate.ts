@@ -1,6 +1,7 @@
 import path from 'path'
 import { Sequelize } from 'sequelize'
 import { SequelizeStorage, Umzug } from 'umzug'
+import { databaseNeedsSsl } from './ssl'
 
 const DB_URL =
   process.env.DATABASE_URL ??
@@ -9,6 +10,10 @@ const DB_URL =
 const sequelize = new Sequelize(DB_URL, {
   dialect: 'postgres',
   logging: false,
+  // Hosted Postgres (Neon, RDS, …) requires TLS; local Docker does not.
+  dialectOptions: databaseNeedsSsl(DB_URL)
+    ? { ssl: { require: true, rejectUnauthorized: false } }
+    : undefined,
 })
 
 export const umzug = new Umzug({

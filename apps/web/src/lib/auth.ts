@@ -59,7 +59,8 @@ function SequelizeAdapter(): Adapter {
     async updateUser({ id, ...data }) {
       await User.update(data, { where: { id } });
       const user = await User.findByPk(id);
-      return toAdapterUser(user!);
+      if (!user) throw new Error(`updateUser: user ${id} not found after update`);
+      return toAdapterUser(user);
     },
 
     async deleteUser(userId) {
@@ -178,6 +179,11 @@ export const authOptions: NextAuthOptions = {
           );
         }
 
+        // Block investor accounts — they must use the investor portal
+        if (user.role === "INVESTOR") {
+          throw new Error("Investor accounts must sign in at the investor portal.");
+        }
+
         const ok = await compare(credentials.password, user.passwordHash);
         if (!ok) return null;
         return { id: user.id, email: user.email, name: user.name, role: user.role };
@@ -185,6 +191,19 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    // Block INVESTOR accounts from obtaining an admin-portal session via either
+    // provider. CredentialsProvider also checks this inside authorize(), but the
+    // signIn callback is the only gate for the EmailProvider magic-link flow.
+    async signIn({ user }) {
+      const role = (user as { role?: string }).role;
+      if (role === "INVESTOR") return false;
+      // Email provider: role may not be on the user object yet — check DB.
+      if (!role && user.email) {
+        const dbUser = await User.findOne({ where: { email: user.email } });
+        if (dbUser?.role === "INVESTOR") return false;
+      }
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;

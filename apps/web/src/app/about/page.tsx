@@ -25,12 +25,12 @@ export default function AboutPage() {
       {/* Gold zone: floating navbar + hero */}
       <section className="bg-kip-gold">
         <SiteNav />
-        <div className="mx-auto max-w-[1343px] px-[100px] pt-10 pb-16">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] pt-10 pb-16">
           <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
             <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
             About The Park
           </span>
-          <h1 className="mt-4 text-[48px] font-extrabold leading-tight tracking-tight text-black">
+          <h1 className="mt-4 text-[38px] sm:text-[48px] font-extrabold leading-tight tracking-tight text-black">
             Kabalega Petro-Based<br />
             <span className="text-kip-red">Industrial Park.</span>
           </h1>
@@ -43,7 +43,7 @@ export default function AboutPage() {
 
       {/* Stats bar */}
       <section className="border-b border-black/8 bg-white">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-2 gap-px bg-black/8 md:grid-cols-4">
             {[
               { value: "2,200", unit: "ha",  label: "Total Area" },
@@ -52,7 +52,7 @@ export default function AboutPage() {
               { value: "5,000", unit: "+",   label: "Jobs Target" },
             ].map((s) => (
               <div key={s.label} className="bg-white px-8 py-10 text-center">
-                <p className="text-[38px] font-extrabold leading-none text-black">
+                <p className="text-[28px] sm:text-[38px] font-extrabold leading-none text-black">
                   {s.value}<span className="text-kip-red">{s.unit}</span>
                 </p>
                 <p className="mt-2 text-[13px] text-black/50">{s.label}</p>
@@ -64,7 +64,7 @@ export default function AboutPage() {
 
       {/* Land categories + Timeline */}
       <section className="bg-ink-100 py-16">
-        <div className="mx-auto max-w-[1343px] px-[100px]">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
           <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
 
             {/* Land Categories */}

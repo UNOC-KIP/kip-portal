@@ -12,7 +12,8 @@ export type WebhookEvent =
   | "lac-decision"
   | "exco-decision"
   | "clarification-requested"
-  | "window-closed";
+  | "window-closed"
+  | "staff-invited";
 
 /**
  * Fire an outbound n8n webhook. Non-blocking — errors are logged but never

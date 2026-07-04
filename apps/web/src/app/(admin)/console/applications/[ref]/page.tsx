@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { getAdminApplicationDetail } from "@/lib/admin/queries";
-import { statusBadgeProps } from "@/lib/investor-data";
+import { statusBadgeProps } from "@/lib/application-data";
 import { requireRole } from "@/lib/rbac-server";
 import { ADMIN_ONLY } from "@/lib/rbac";
 

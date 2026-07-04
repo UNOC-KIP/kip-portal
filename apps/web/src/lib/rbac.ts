@@ -24,13 +24,14 @@ export const TC_ROLES = [UserRole.TC_MEMBER, UserRole.TC_CHAIR, UserRole.ADMIN] 
 /** Admin-management area (full data reads, user/window/payment management). */
 export const ADMIN_ONLY = [UserRole.ADMIN] as const;
 
-export const INVESTOR_ONLY = [UserRole.INVESTOR] as const;
-
 /**
  * Where each role belongs after login / when redirected off a forbidden page.
  * MUST resolve to a path that role is actually allowed to reach (see
  * `allowedRolesForPath`) — otherwise middleware would loop. This is asserted in
  * the unit tests.
+ *
+ * INVESTOR routes live in apps/portal (port 4002). If an investor somehow
+ * authenticates on this app they are redirected to the portal.
  *
  * LAC/ExCo have no dedicated workspace yet (Phase 3), so they land on the
  * neutral `/unauthorized` notice rather than seeing admin data.
@@ -38,7 +39,7 @@ export const INVESTOR_ONLY = [UserRole.INVESTOR] as const;
 export function homePathForRole(role: Role | undefined | null): string {
   switch (role) {
     case UserRole.INVESTOR:
-      return "/dashboard";
+      return process.env.NEXT_PUBLIC_PORTAL_URL ?? "http://localhost:4002";
     case UserRole.ADMIN:
       return "/console";
     case UserRole.TC_MEMBER:
@@ -60,7 +61,6 @@ export type RolePolicy = readonly Role[] | "any" | null;
 const ROUTE_POLICY: { prefix: string; policy: RolePolicy }[] = [
   { prefix: "/console/tc", policy: TC_ROLES },
   { prefix: "/console", policy: ADMIN_ONLY },
-  { prefix: "/dashboard", policy: INVESTOR_ONLY },
   { prefix: "/launch", policy: "any" },
   { prefix: "/unauthorized", policy: "any" },
 ];

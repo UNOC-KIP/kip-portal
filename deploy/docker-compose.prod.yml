@@ -1,0 +1,95 @@
+# Production stack for the KIP portal on a single EC2 instance.
+# Lives on the server at /opt/kip/docker-compose.prod.yml next to
+# .env.production (copied from .env.production.example) and Caddyfile.
+#
+# All secrets come from .env.production — values are read literally
+# (docker compose does not interpolate ${...} inside env_file values),
+# so DATABASE_URL must be written out in full there.
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  portal:
+    image: ghcr.io/unoc-kip/kip-portal-app:latest
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NEXTAUTH_URL: https://kip.unoc.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: ghcr.io/unoc-kip/kip-web:latest
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NEXTAUTH_URL: https://portal.kip.unoc.com
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ghcr.io/unoc-kip/kip-api:latest
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # One-shot migration job — runs only when invoked explicitly:
+  #   docker compose -f docker-compose.prod.yml run --rm migrate
+  # Seed (idempotent UAT data):
+  #   docker compose -f docker-compose.prod.yml run --rm migrate pnpm db:seed
+  migrate:
+    image: ghcr.io/unoc-kip/kip-api:latest
+    profiles: ["deploy"]
+    working_dir: /repo
+    command: pnpm db:migrate
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Reads POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB from the env file
+    env_file: .env.production
+    volumes:
+      - kip-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kip -d kip_portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # No ports: — reachable only on the internal compose network.
+
+  n8n:
+    image: n8nio/n8n:latest
+    restart: unless-stopped
+    environment:
+      - N8N_PORT=5678
+      - GENERIC_TIMEZONE=Africa/Kampala
+      - WEBHOOK_URL=http://n8n:5678/
+      - N8N_RUNNERS_ENABLED=true
+    volumes:
+      - kip-n8n-data:/home/node/.n8n
+    # No ports: — configure via SSH tunnel: ssh -L 5678:localhost:5678 ...
+    # then temporarily add "127.0.0.1:5678:5678" if needed.
+
+volumes:
+  caddy-data:
+  caddy-config:
+  kip-pgdata:
+  kip-n8n-data:

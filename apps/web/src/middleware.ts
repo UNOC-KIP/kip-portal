@@ -46,7 +46,6 @@ export const config = {
     "/sign-up",
     "/launch",
     "/unauthorized",
-    "/dashboard/:path*",
     "/console/:path*",
   ],
 };

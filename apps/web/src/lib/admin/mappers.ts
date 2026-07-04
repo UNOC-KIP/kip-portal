@@ -164,6 +164,30 @@ export type UserRow = {
   registeredAt: string;
 };
 
+export type StaffRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  createdAt: string;
+};
+
+export function toStaffRow(u: {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  createdAt: Date | string;
+}): StaffRow {
+  return {
+    id: u.id,
+    name: u.name ?? u.email,
+    email: u.email,
+    role: roleLabel(u.role),
+    createdAt: formatShortDate(u.createdAt),
+  };
+}
+
 export type TcAppRow = {
   ref: string;
   company: string;
@@ -175,10 +199,15 @@ export type TcAppRow = {
 };
 
 export type WindowRow = {
+  id: string;
   name: string;
+  status: string;
+  openAt: string;
+  closeAt: string;
   statusVariant: "window-active" | "window-scheduled" | "window-closed" | null;
   statusLabel: string | null;
   detail: string;
+  sequenceCounter: number;
 };
 
 const NO_REF = "(draft)";
@@ -279,6 +308,7 @@ export function toTcAppRow(a: {
 }
 
 export function toWindowRow(w: {
+  id: string;
   name: string;
   status: string;
   openAt: Date | string;
@@ -287,16 +317,24 @@ export function toWindowRow(w: {
 }): WindowRow {
   const span = `Open: ${formatShortDate(w.openAt)} · Closes: ${formatShortDate(w.closeAt)}`;
   const received = `${w.sequenceCounter} reference${w.sequenceCounter === 1 ? "" : "s"} assigned`;
+  const base = {
+    id: w.id,
+    name: w.name,
+    status: w.status,
+    openAt: formatShortDate(w.openAt),
+    closeAt: formatShortDate(w.closeAt),
+    sequenceCounter: w.sequenceCounter,
+  };
   switch (w.status) {
     case ApplicationWindowStatus.OPEN:
-      return { name: w.name, statusVariant: "window-active",    statusLabel: "Active",    detail: `${span} · ${received}` };
+      return { ...base, statusVariant: "window-active",    statusLabel: "Active",    detail: `${span} · ${received}` };
     case ApplicationWindowStatus.DRAFT:
-      return { name: w.name, statusVariant: "window-scheduled", statusLabel: "Scheduled", detail: `${span} · Not yet open` };
+      return { ...base, statusVariant: "window-scheduled", statusLabel: "Scheduled", detail: `${span} · Not yet open` };
     case ApplicationWindowStatus.CLOSED:
-      return { name: w.name, statusVariant: "window-closed",    statusLabel: "Closed",    detail: `${span} · ${received}` };
+      return { ...base, statusVariant: "window-closed",    statusLabel: "Closed",    detail: `${span} · ${received}` };
     case ApplicationWindowStatus.ARCHIVED:
-      return { name: w.name, statusVariant: "window-closed",    statusLabel: "Archived",  detail: `${span} · ${received}` };
+      return { ...base, statusVariant: "window-closed",    statusLabel: "Archived",  detail: `${span} · ${received}` };
     default:
-      return { name: w.name, statusVariant: null, statusLabel: null, detail: span };
+      return { ...base, statusVariant: null, statusLabel: null, detail: span };
   }
 }

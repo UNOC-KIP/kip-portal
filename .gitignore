@@ -15,3 +15,8 @@ coverage/
 .idea/
 *.tsbuildinfo
 .pnpm-debug.log*
+
+.vercel
+.env*
+!.env.example
+!.env.production.example
