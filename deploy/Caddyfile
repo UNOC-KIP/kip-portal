@@ -1,22 +1,29 @@
-# TLS is automatic — Caddy provisions/renews Let's Encrypt certs once the
-# hostnames resolve to this instance.
-#
-# TEMPORARY DOMAIN SCHEME: no real domain yet, so we use sslip.io hostnames
-# derived from the Elastic IP (15.240.34.84) — they resolve automatically,
-# no DNS records needed. When the real domain (kip.unoc.com etc.) arrives,
-# swap the three hosts here, in docker-compose.prod.yml (NEXTAUTH_URL),
-# in .env.production, and in the two GitHub Actions variables.
-# Note: sslip.io shares Let's Encrypt rate limits globally; Caddy falls back
-# to ZeroSSL automatically if LE declines.
+# TLS is automatic — Caddy provisions/renews Let's Encrypt certs; the three
+# A records live in the unoc.com zone (cPanel Zone Editor on Namecheap
+# hosting) and point at the EC2 Elastic IP 15.240.34.84.
 
-kip.15-240-34-84.sslip.io {
+kip.unoc.com {
 	reverse_proxy portal:4002
 }
 
-portal.15-240-34-84.sslip.io {
+portal.kip.unoc.com {
 	reverse_proxy web:4000
 }
 
-api.15-240-34-84.sslip.io {
+api.kip.unoc.com {
 	reverse_proxy api:4001
+}
+
+# Legacy sslip.io hosts (pre-domain deployment, July 2026) — permanent
+# redirects so old links keep working.
+kip.15-240-34-84.sslip.io {
+	redir https://kip.unoc.com{uri} permanent
+}
+
+portal.15-240-34-84.sslip.io {
+	redir https://portal.kip.unoc.com{uri} permanent
+}
+
+api.15-240-34-84.sslip.io {
+	redir https://api.kip.unoc.com{uri} permanent
 }

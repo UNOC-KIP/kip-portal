@@ -4,7 +4,7 @@ Runbook for deploying the full KIP stack (investor portal, admin portal, Express
 
 **All repo-side files are already implemented** — this guide tells you what they are, then walks through the server-side setup you do once (Phases 3–6).
 
-> **Live since 5 July 2026** on EC2 Elastic IP `15.240.34.84`. No real domain yet, so the three hosts use **sslip.io** (resolves to the embedded IP automatically, no DNS records): investor `kip.15-240-34-84.sslip.io`, admin `portal.15-240-34-84.sslip.io`, API `api.15-240-34-84.sslip.io`. The `kip.unoc.com` names below are the target scheme for when the domain arrives — see "When the real domain arrives" at the end.
+> **Live since 5 July 2026** on EC2 Elastic IP `15.240.34.84`, on the real domain since the same week: investor `kip.unoc.com`, admin `portal.kip.unoc.com`, API `api.kip.unoc.com`. DNS: the `unoc.com` zone is managed in the **cPanel Zone Editor** (Namecheap hosting nameservers `dns1/dns2.namecheaphosting.com`), three A records → the Elastic IP. The original pre-domain sslip.io hosts (`*.15-240-34-84.sslip.io`) 308-redirect to the real hosts (see Caddyfile).
 
 ---
 
@@ -163,7 +163,7 @@ docker compose -f docker-compose.prod.yml run --rm migrate pnpm db:seed # UAT se
 
 (Requires `aws` CLI on the host; auth via the instance role. Add an S3 lifecycle rule for retention.)
 
-**When the real domain arrives** (`kip.unoc.com` scheme): create the three A records → the Elastic IP; swap the sslip.io hosts in `deploy/Caddyfile`, the two `NEXTAUTH_URL`s in `deploy/docker-compose.prod.yml`, the four URLs in `.env.production` (server) and `.env.production.example`, and the two GitHub Actions variables; then push to `main` — the client bundles must be **rebuilt** because `NEXT_PUBLIC_*` is baked in at image build time. Also update the CORS origins on the S3 documents bucket.
+**If the hostnames ever change again** (done once already: sslip.io → kip.unoc.com, July 2026): create/update the A records (cPanel Zone Editor); swap the hosts in `deploy/Caddyfile`, the two `NEXTAUTH_URL`s in `deploy/docker-compose.prod.yml`, the four URLs in `.env.production` (server) and `.env.production.example`, and the two GitHub Actions variables; then push to `main` — the client bundles must be **rebuilt** because `NEXT_PUBLIC_*` is baked in at image build time. Copy the updated Caddyfile + compose to `/opt/kip/`, `docker compose up -d` and `docker compose restart caddy` (the bind-mounted Caddyfile is not reloaded automatically). Also update the CORS origins on the S3 documents bucket.
 
 **Later upgrades**, in rough priority order:
 1. **SES SMTP** creds into `.env.production` → magic links + contact form go live.
