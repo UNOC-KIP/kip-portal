@@ -1,5 +1,6 @@
-# TLS is automatic — Caddy provisions/renews Let's Encrypt certs once the
-# DNS A records point at this instance.
+# TLS is automatic — Caddy provisions/renews Let's Encrypt certs; the three
+# A records live in the unoc.com zone (cPanel Zone Editor on Namecheap
+# hosting) and point at the EC2 Elastic IP 15.240.34.84.
 
 kip.unoc.com {
 	reverse_proxy portal:4002
@@ -11,4 +12,18 @@ portal.kip.unoc.com {
 
 api.kip.unoc.com {
 	reverse_proxy api:4001
+}
+
+# Legacy sslip.io hosts (pre-domain deployment, July 2026) — permanent
+# redirects so old links keep working.
+kip.15-240-34-84.sslip.io {
+	redir https://kip.unoc.com{uri} permanent
+}
+
+portal.15-240-34-84.sslip.io {
+	redir https://portal.kip.unoc.com{uri} permanent
+}
+
+api.15-240-34-84.sslip.io {
+	redir https://api.kip.unoc.com{uri} permanent
 }
