@@ -1,14 +1,22 @@
 # TLS is automatic — Caddy provisions/renews Let's Encrypt certs once the
-# DNS A records point at this instance.
+# hostnames resolve to this instance.
+#
+# TEMPORARY DOMAIN SCHEME: no real domain yet, so we use sslip.io hostnames
+# derived from the Elastic IP (15.240.34.84) — they resolve automatically,
+# no DNS records needed. When the real domain (kip.unoc.com etc.) arrives,
+# swap the three hosts here, in docker-compose.prod.yml (NEXTAUTH_URL),
+# in .env.production, and in the two GitHub Actions variables.
+# Note: sslip.io shares Let's Encrypt rate limits globally; Caddy falls back
+# to ZeroSSL automatically if LE declines.
 
-kip.unoc.com {
+kip.15-240-34-84.sslip.io {
 	reverse_proxy portal:4002
 }
 
-portal.kip.unoc.com {
+portal.15-240-34-84.sslip.io {
 	reverse_proxy web:4000
 }
 
-api.kip.unoc.com {
+api.15-240-34-84.sslip.io {
 	reverse_proxy api:4001
 }

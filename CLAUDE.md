@@ -413,11 +413,14 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 
 ## Deployment — AWS EC2 (full stack)
 
-Full runbook: **`DEPLOYMENT.md`**. Single EC2 (ap-south-1) runs the whole stack via `deploy/docker-compose.prod.yml`: Caddy (auto-TLS) → `kip.unoc.com` = investor portal, `portal.kip.unoc.com` = admin, `api.kip.unoc.com` = Express API; plus internal-only Postgres 16 + n8n.
+Full runbook: **`DEPLOYMENT.md`**. Single EC2 (ap-south-1) runs the whole stack via `deploy/docker-compose.prod.yml`: Caddy (auto-TLS) → investor portal + admin + Express API; plus internal-only Postgres 16 + n8n.
+
+**Live since 5 July 2026** on Elastic IP `15.240.34.84`. No real domain yet — hosts are sslip.io (auto-resolve, no DNS): `kip.15-240-34-84.sslip.io` = investor, `portal.15-240-34-84.sslip.io` = admin, `api.15-240-34-84.sslip.io` = API. `kip.unoc.com` scheme takes over when the domain exists (checklist in DEPLOYMENT.md).
 
 - Production Dockerfiles: `apps/{api,web,portal}/Dockerfile`. The API image doubles as the migrate/seed job image and runs under **tsx, not node** (`@kip/shared`'s entry is raw TS). Next.js images ship the full workspace — **never switch them to `output: "standalone"`** (breaks the `serverExternalPackages` webpack workaround) — and set a dummy `DATABASE_URL` during `next build` (Sequelize instantiates at import time; no connection is made). `NEXT_PUBLIC_*` values are Docker build args (baked into client bundles at build time).
 - CI/CD: `.github/workflows/ci.yml` (branch/PR checks: db:build, typecheck, test) + `deploy.yml` (push to `main` → build 3 images → GHCR `ghcr.io/unoc-kip/kip-{api,web,portal-app}` → SSH to EC2 → pull, migrate, up). GHCR owner hardcoded lowercase — Docker rejects the uppercase org name.
 - GitHub secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`. Variables: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_URL`. App secrets live only in `/opt/kip/.env.production` on the server (template: `deploy/.env.production.example`; values are read literally — no `${VAR}` interpolation).
+- `DATABASE_URL` on the server must keep `?sslmode=disable` — `packages/db/src/ssl.ts` treats the compose hostname `postgres` as hosted Postgres and enables TLS, which the plain container doesn't support.
 - `apps/portal/src/app/page.tsx` must keep `export const dynamic = "force-dynamic"` — CI Docker builds have no DB; static generation would bake "no open window" into the home page.
 
 ---

@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
     env_file: .env.production
     environment:
-      NEXTAUTH_URL: https://kip.unoc.com
+      NEXTAUTH_URL: https://kip.15-240-34-84.sslip.io
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,7 +33,7 @@ services:
     restart: unless-stopped
     env_file: .env.production
     environment:
-      NEXTAUTH_URL: https://portal.kip.unoc.com
+      NEXTAUTH_URL: https://portal.15-240-34-84.sslip.io
     depends_on:
       postgres:
         condition: service_healthy
