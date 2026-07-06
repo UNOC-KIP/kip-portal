@@ -5,7 +5,7 @@ const FOOTER_COLS = [
   {
     title: "Our Company",
     links: [
-      { label: "About KIP",  href: "/#about" },
+      { label: "About KIP",  href: "/about" },
       { label: "Contact Us", href: "/contact" },
     ],
   },

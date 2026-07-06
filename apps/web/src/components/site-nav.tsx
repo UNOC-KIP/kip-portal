@@ -7,8 +7,10 @@ import { Menu, X } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 import { homePathForRole } from "@/lib/rbac";
 
+const PORTAL_URL = process.env.NEXT_PUBLIC_PORTAL_URL ?? "http://localhost:4002";
+
 const NAV_LINKS = [
-  { label: "About KIP",    href: "/#about" },
+  { label: "About KIP",    href: `${PORTAL_URL}/about` },
   { label: "Land Map",     href: "/land-map" },
   { label: "For Investors", href: "/for-investors" },
   { label: "FAQ",          href: "/faq" },
@@ -37,7 +39,7 @@ export function SiteNav({ bg = "transparent" }: { bg?: "gold" | "white" | "trans
       <div className="bg-black shadow-md">
         <div className="mx-auto flex h-16 max-w-[1343px] items-center justify-between gap-2 px-3 sm:px-8">
           <Link href="/" className="shrink-0">
-            <Image src="/unoc-logo.svg" alt="UNOC" width={110} height={32} className="mb-5" priority />
+            <Image src="/unoc-logo.png" alt="UNOC" width={110} height={32} className="mb-5" priority />
           </Link>
 
           <nav className="hidden items-center gap-8 text-[13px] font-medium text-white/70 md:flex">

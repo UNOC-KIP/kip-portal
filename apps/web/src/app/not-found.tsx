@@ -9,7 +9,7 @@ export default function NotFound() {
       <header className="bg-black px-5 sm:px-10 lg:px-[100px] py-4">
         <div className="mx-auto flex h-16 max-w-[1343px] items-center">
           <Link href="/">
-            <Image src="/unoc-logo.svg" alt="UNOC" width={110} height={32} />
+            <Image src="/unoc-logo.png" alt="UNOC" width={110} height={32} />
           </Link>
         </div>
       </header>
