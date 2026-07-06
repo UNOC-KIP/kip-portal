@@ -58,7 +58,7 @@ async function subscribeNotifications(formData: FormData) {
 const PARTNERS = [
   {
     name: "Uganda National Oil Company",
-    logo: "/unoc-logo.svg",
+    logo: "/unoc-logo.png",
     width: 180,
     height: 48,
   },
@@ -413,6 +413,12 @@ export default async function HomePage({
                 ))}
               </ol>
             </div>
+          </div>
+
+          <div className="mt-10 text-center">
+            <Link href="/about" className="inline-flex items-center gap-2 text-[14px] font-bold text-kip-red transition hover:brightness-90">
+              Learn more about the park <ArrowRight size={16} />
+            </Link>
           </div>
         </div>
       </section>

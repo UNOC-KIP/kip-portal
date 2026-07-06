@@ -392,6 +392,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/privacy/page.tsx` | Privacy Policy document (Uganda DPPA 2019) — public static page |
 | `apps/web/src/app/terms/page.tsx` | Terms of Service document — public static page |
 | `apps/web/src/app/land-map/page.tsx` | Land map page — embeds `/kip-plot-map.pdf` + zone legend + infrastructure specs |
+| `apps/portal/src/app/about/page.tsx` | Dedicated About page — promo video, story/mandate, stats, zones, connectivity, gallery, partners, timeline. Video is hosted on S3/CloudFront (`PROMO_VIDEO_URL` const, `preload="none"`) — **never commit video files to the repo** |
 | `apps/web/src/app/resources/page.tsx` | Downloads page — KIP plot map PDF + coming-soon placeholders |
 | `apps/web/src/app/not-found.tsx` | Custom 404 page matching site design |
 | `apps/web/src/lib/public-data.ts` | `server-only` — `getActiveApplicationWindow()` queries DB for OPEN window (used on home page) |

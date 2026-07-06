@@ -7,7 +7,7 @@ import { Menu, X } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 
 const NAV_LINKS = [
-  { label: "About KIP",    href: "/#about" },
+  { label: "About KIP",    href: "/about" },
   { label: "Land Map",     href: "/land-map" },
   { label: "For Investors", href: "/for-investors" },
   { label: "FAQ",          href: "/faq" },
