@@ -6,6 +6,8 @@ import {
   tcStatusLabel,
   roleLabel,
   userStatusLabel,
+  companyTypeLabel,
+  businessSectorLabel,
   hectaresFromSqm,
   computeTransferSla,
   toApplicationRow,
@@ -49,6 +51,28 @@ describe("status helpers", () => {
     expect(userStatusLabel("PENDING_REVIEW")).toBe("Pending");
     expect(userStatusLabel("REJECTED")).toBe("Rejected");
     expect(userStatusLabel("UNKNOWN")).toBe("Pending");
+  });
+});
+
+describe("companyTypeLabel / businessSectorLabel", () => {
+  it("maps known enum values to display labels", () => {
+    expect(companyTypeLabel("LIMITED_LIABILITY_COMPANY")).toBe("Limited Liability Company");
+    expect(companyTypeLabel("PUBLIC_LIMITED_COMPANY")).toBe("Public Limited Company (PLC)");
+    expect(businessSectorLabel("PETROCHEMICALS_REFINING")).toBe("Petrochemicals & Refining");
+    expect(businessSectorLabel("AGRO_PROCESSING")).toBe("Agro-processing");
+  });
+
+  it("returns em dash for missing values", () => {
+    expect(companyTypeLabel(null)).toBe("—");
+    expect(companyTypeLabel(undefined)).toBe("—");
+    expect(companyTypeLabel("")).toBe("—");
+    expect(businessSectorLabel(null)).toBe("—");
+    expect(businessSectorLabel("")).toBe("—");
+  });
+
+  it("passes unknown values through unchanged", () => {
+    expect(companyTypeLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
+    expect(businessSectorLabel("MINING")).toBe("MINING");
   });
 });
 

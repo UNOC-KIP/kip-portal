@@ -8,7 +8,15 @@
  * and calls these functions. Row shapes mirror the `*-table.tsx` client props.
  */
 
-import { ApplicationStatus, ApplicationWindowStatus, PaymentStatus } from "@kip/shared";
+import {
+  ApplicationStatus,
+  ApplicationWindowStatus,
+  PaymentStatus,
+  COMPANY_TYPE_LABELS,
+  BUSINESS_SECTOR_LABELS,
+  type CompanyType,
+  type BusinessSector,
+} from "@kip/shared";
 import { formatShortDate } from "../format";
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
@@ -99,6 +107,18 @@ export function userStatusLabel(
     case "PENDING_REVIEW":
     default:               return "Pending";
   }
+}
+
+/** CompanyType enum value → display label. Em dash for missing; unknown values pass through. */
+export function companyTypeLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return COMPANY_TYPE_LABELS[value as CompanyType] ?? value;
+}
+
+/** BusinessSector enum value → display label. Em dash for missing; unknown values pass through. */
+export function businessSectorLabel(value: string | null | undefined): string {
+  if (!value) return "—";
+  return BUSINESS_SECTOR_LABELS[value as BusinessSector] ?? value;
 }
 
 /** Square metres → hectares, one decimal. Em dash for missing/invalid. */

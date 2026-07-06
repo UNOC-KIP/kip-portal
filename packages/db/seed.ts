@@ -37,25 +37,37 @@ async function q(sql: string, params: unknown[] = []) {
 async function upsertUser(
   id: string, email: string, name: string, role: string,
   pwHash: string, orgId?: string,
+  rep?: { designation?: string; phone?: string },
 ) {
   await q(
-    `INSERT INTO "User" (id, email, name, role, "passwordHash", "investorOrgId", status, "createdAt", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE',now(),now())
+    `INSERT INTO "User" (id, email, name, role, "passwordHash", "investorOrgId", designation, phone, status, "createdAt", "updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE',now(),now())
      ON CONFLICT (email) DO UPDATE
-       SET name=$3, role=$4, "passwordHash"=$5, "investorOrgId"=$6, status='ACTIVE', "updatedAt"=now()`,
-    [id, email, name, role, pwHash, orgId ?? null],
+       SET name=$3, role=$4, "passwordHash"=$5, "investorOrgId"=$6, designation=$7, phone=$8, status='ACTIVE', "updatedAt"=now()`,
+    [id, email, name, role, pwHash, orgId ?? null, rep?.designation ?? null, rep?.phone ?? null],
   )
 }
 
 async function upsertOrg(
   id: string, legalName: string, country: string,
   address: string, phone: string, email: string,
+  profile?: {
+    tin?: string; tradingName?: string; registrationNumber?: string;
+    ursbRegistrationNumber?: string; companyType?: string; businessSector?: string;
+  },
 ) {
   await q(
-    `INSERT INTO "InvestorOrg" (id, "legalName", "countryOfIncorporation", address, phone, email, "createdAt", "updatedAt")
-     VALUES ($1,$2,$3,$4,$5,$6,now(),now())
+    `INSERT INTO "InvestorOrg"
+       (id, "legalName", "countryOfIncorporation", address, phone, email,
+        tin, "tradingName", "registrationNumber", "ursbRegistrationNumber", "companyType", "businessSector",
+        "createdAt", "updatedAt")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,now(),now())
      ON CONFLICT (id) DO NOTHING`,
-    [id, legalName, country, address, phone, email],
+    [
+      id, legalName, country, address, phone, email,
+      profile?.tin ?? null, profile?.tradingName ?? null, profile?.registrationNumber ?? null,
+      profile?.ursbRegistrationNumber ?? null, profile?.companyType ?? null, profile?.businessSector ?? null,
+    ],
   )
 }
 
@@ -291,19 +303,27 @@ async function main() {
   await upsertUser(staffId('EXCO_MEMBER'), 'exco@kip.unoc.co.ug',        'Peter Owori (ExCo Member)',         'EXCO_MEMBER', pw)
   console.log('  ✓ staff: 5 accounts')
 
-  await upsertOrg(IDS.orgGulf, 'Gulf Petrochem International FZE',        'UAE',    'P.O. Box 18334, JAFZA, Dubai',      '+971 4 884 5500',   'eoi@gulfpetrochem.ae')
-  await upsertOrg(IDS.orgNile, 'Nile Energy Ventures Ltd',                'Uganda', 'Plot 22, Kampala Road, Kampala',    '+256 700 100 200',  'invest@nileenergy.co.ug')
-  await upsertOrg(IDS.orgFert, 'Uganda Fertiliser Manufacturing Co. Ltd', 'Uganda', 'Plot 14, Nile Avenue, Kampala',     '+256 414 341 200',  'eoi@ugfertiliser.co.ug')
-  await upsertOrg(IDS.orgSaba, 'Sabastar General Trading Co. Ltd',        'Uganda', 'Nakasero Road, Kampala',            '+256 772 123 456',  'sabastar@gmail.com')
+  await upsertOrg(IDS.orgGulf, 'Gulf Petrochem International FZE',        'UAE',    'P.O. Box 18334, JAFZA, Dubai',      '+971 4 884 5500',   'eoi@gulfpetrochem.ae',
+    { tin: '100543219', tradingName: 'Gulf Petrochem', registrationNumber: 'JAFZA-18334', ursbRegistrationNumber: 'URSB-F-2026-00871', companyType: 'PUBLIC_LIMITED_COMPANY', businessSector: 'PETROCHEMICALS_REFINING' })
+  await upsertOrg(IDS.orgNile, 'Nile Energy Ventures Ltd',                'Uganda', 'Plot 22, Kampala Road, Kampala',    '+256 700 100 200',  'invest@nileenergy.co.ug',
+    { tin: '1001234567', registrationNumber: '80020004521', companyType: 'LIMITED_LIABILITY_COMPANY', businessSector: 'LOGISTICS_WAREHOUSING' })
+  await upsertOrg(IDS.orgFert, 'Uganda Fertiliser Manufacturing Co. Ltd', 'Uganda', 'Plot 14, Nile Avenue, Kampala',     '+256 414 341 200',  'eoi@ugfertiliser.co.ug',
+    { tin: '1000987654', tradingName: 'UgaFert', registrationNumber: '80020001988', companyType: 'LIMITED_LIABILITY_COMPANY', businessSector: 'FERTILISERS_CHEMICALS' })
+  await upsertOrg(IDS.orgSaba, 'Sabastar General Trading Co. Ltd',        'Uganda', 'Nakasero Road, Kampala',            '+256 772 123 456',  'sabastar@gmail.com',
+    { tin: '1000456789', registrationNumber: '80020007743', companyType: 'LIMITED_LIABILITY_COMPANY', businessSector: 'AGRO_PROCESSING' })
 
   const gulfUserId = 'user-gulf-investor-001'
   const nileUserId = 'user-nile-investor-001'
   const fertUserId = 'user-fert-investor-001'
   const sabaUserId = 'user-saba-investor-001'
-  await upsertUser(gulfUserId, 'investor@gulfpetrochem.ae',    'Mohammed Al-Rashidi', 'INVESTOR', pw, IDS.orgGulf)
-  await upsertUser(nileUserId, 'investor.ug@nileenergy.co.ug', 'Robert Ssempala',     'INVESTOR', pw, IDS.orgNile)
-  await upsertUser(fertUserId, 'investor@ugfertiliser.co.ug',  'Dr. Grace Atwine',    'INVESTOR', pw, IDS.orgFert)
-  await upsertUser(sabaUserId, 'investor@sabastar.co.ug',      'Hassan Sabir',        'INVESTOR', pw, IDS.orgSaba)
+  await upsertUser(gulfUserId, 'investor@gulfpetrochem.ae',    'Mohammed Al-Rashidi', 'INVESTOR', pw, IDS.orgGulf,
+    { designation: 'Business Development Director', phone: '+971 50 234 5678' })
+  await upsertUser(nileUserId, 'investor.ug@nileenergy.co.ug', 'Robert Ssempala',     'INVESTOR', pw, IDS.orgNile,
+    { designation: 'Managing Director', phone: '+256 700 100 201' })
+  await upsertUser(fertUserId, 'investor@ugfertiliser.co.ug',  'Dr. Grace Atwine',    'INVESTOR', pw, IDS.orgFert,
+    { designation: 'Chief Executive Officer', phone: '+256 772 341 200' })
+  await upsertUser(sabaUserId, 'investor@sabastar.co.ug',      'Hassan Sabir',        'INVESTOR', pw, IDS.orgSaba,
+    { designation: 'General Manager', phone: '+256 772 123 457' })
   console.log('  ✓ investors: 4 orgs + 4 accounts')
 
   const tcChairId  = staffId('TC_CHAIR')
