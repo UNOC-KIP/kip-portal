@@ -111,6 +111,50 @@ export const DocumentKind = {
 } as const;
 export type DocumentKind = (typeof DocumentKind)[keyof typeof DocumentKind];
 
+/** Legal form of an investor company — captured at registration. */
+export const CompanyType = {
+  LIMITED_LIABILITY_COMPANY: "LIMITED_LIABILITY_COMPANY",
+  PUBLIC_LIMITED_COMPANY:    "PUBLIC_LIMITED_COMPANY",
+  JOINT_VENTURE:             "JOINT_VENTURE",
+  PARTNERSHIP:               "PARTNERSHIP",
+  SOLE_PROPRIETORSHIP:       "SOLE_PROPRIETORSHIP",
+  OTHER:                     "OTHER",
+} as const;
+export type CompanyType = (typeof CompanyType)[keyof typeof CompanyType];
+
+export const COMPANY_TYPE_LABELS: Record<CompanyType, string> = {
+  LIMITED_LIABILITY_COMPANY: "Limited Liability Company",
+  PUBLIC_LIMITED_COMPANY:    "Public Limited Company (PLC)",
+  JOINT_VENTURE:             "Joint Venture",
+  PARTNERSHIP:               "Partnership",
+  SOLE_PROPRIETORSHIP:       "Sole Proprietorship",
+  OTHER:                     "Other",
+};
+
+/** Primary business sector — aligned with the KIP investment zones. */
+export const BusinessSector = {
+  PETROCHEMICALS_REFINING: "PETROCHEMICALS_REFINING",
+  FERTILISERS_CHEMICALS:   "FERTILISERS_CHEMICALS",
+  LIGHT_MANUFACTURING:     "LIGHT_MANUFACTURING",
+  AGRO_PROCESSING:         "AGRO_PROCESSING",
+  LOGISTICS_WAREHOUSING:   "LOGISTICS_WAREHOUSING",
+  COMMERCIAL_HOSPITALITY:  "COMMERCIAL_HOSPITALITY",
+  ICT:                     "ICT",
+  OTHER:                   "OTHER",
+} as const;
+export type BusinessSector = (typeof BusinessSector)[keyof typeof BusinessSector];
+
+export const BUSINESS_SECTOR_LABELS: Record<BusinessSector, string> = {
+  PETROCHEMICALS_REFINING: "Petrochemicals & Refining",
+  FERTILISERS_CHEMICALS:   "Fertilisers & Chemicals",
+  LIGHT_MANUFACTURING:     "Light / Downstream Manufacturing",
+  AGRO_PROCESSING:         "Agro-processing",
+  LOGISTICS_WAREHOUSING:   "Logistics & Warehousing",
+  COMMERCIAL_HOSPITALITY:  "Commercial & Hospitality",
+  ICT:                     "ICT",
+  OTHER:                   "Other",
+};
+
 /** Application window lifecycle. */
 export const ApplicationWindowStatus = {
   DRAFT:    "DRAFT",

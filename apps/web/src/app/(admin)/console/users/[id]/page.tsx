@@ -94,10 +94,29 @@ export default async function UserDetailPage({
             </h2>
             <dl className="divide-y divide-ink-100">
               <DetailRow label="Legal Name" value={user.company} />
-              <DetailRow label="TIN / Company No." value={user.tin} />
-              <DetailRow label="Country of Registration" value={user.country} />
-              <DetailRow label="Phone" value={user.phone} />
+              <DetailRow label="Trading Name" value={user.tradingName} />
+              <DetailRow label="Registration No." value={user.registrationNumber} />
+              <DetailRow label="URSB Registration No." value={user.ursbRegistrationNumber} />
+              <DetailRow label="Company Type" value={user.companyType} />
+              <DetailRow label="Primary Sector" value={user.businessSector} />
+              <DetailRow label="TIN" value={user.tin} />
+              <DetailRow label="Country of Incorporation" value={user.country} />
+              <DetailRow label="Registered Address" value={<span className="break-words">{user.address}</span>} />
+              <DetailRow label="Company Phone" value={user.phone} />
               <DetailRow label="Company Email" value={user.orgEmail} />
+            </dl>
+          </div>
+
+          {/* Authorized representative card */}
+          <div className="rounded-xl border border-ink-200 bg-white p-6">
+            <h2 className="mb-4 border-b border-ink-100 pb-2 text-xs font-bold uppercase tracking-widest text-ink-400">
+              Authorized Representative
+            </h2>
+            <dl className="divide-y divide-ink-100">
+              <DetailRow label="Full Name" value={user.repName} />
+              <DetailRow label="Designation / Title" value={user.repDesignation} />
+              <DetailRow label="Email (login)" value={user.email} />
+              <DetailRow label="Phone" value={user.repPhone} />
             </dl>
           </div>
         </div>

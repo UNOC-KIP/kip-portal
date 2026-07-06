@@ -33,6 +33,8 @@ import { formatMoney, formatDateTime, formatShortDate } from "../format";
 import { SECTION_ORDER, SECTION_LABELS } from "../application-data";
 import {
   SUBMITTED_STATUSES,
+  businessSectorLabel,
+  companyTypeLabel,
   hectaresFromSqm,
   roleLabel,
   toApplicationRow,
@@ -229,17 +231,26 @@ export type UserDetail = {
   rawStatus: string;
   registeredAt: string;
   company: string;
+  tradingName: string;
+  registrationNumber: string;
+  ursbRegistrationNumber: string;
+  companyType: string;
+  businessSector: string;
+  address: string;
   tin: string;
   country: string;
   phone: string;
   orgEmail: string;
+  repName: string;
+  repDesignation: string;
+  repPhone: string;
   ref: string;
   appStatus: string | null;
 };
 
 export async function getUserDetail(id: string): Promise<UserDetail | null> {
   const user = await User.findByPk(id, {
-    attributes: ["id", "email", "name", "role", "status", "createdAt"],
+    attributes: ["id", "email", "name", "designation", "phone", "role", "status", "createdAt"],
     include: [
       { model: InvestorOrg, as: "investorOrg" },
       {
@@ -267,10 +278,19 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
     rawStatus,
     registeredAt: formatDateTime(u.createdAt),
     company: u.investorOrg?.legalName ?? "—",
+    tradingName: u.investorOrg?.tradingName ?? "—",
+    registrationNumber: u.investorOrg?.registrationNumber ?? "—",
+    ursbRegistrationNumber: u.investorOrg?.ursbRegistrationNumber ?? "—",
+    companyType: companyTypeLabel(u.investorOrg?.companyType),
+    businessSector: businessSectorLabel(u.investorOrg?.businessSector),
+    address: u.investorOrg?.address ?? "—",
     tin: u.investorOrg?.tin ?? "—",
     country: u.investorOrg?.countryOfIncorporation ?? "—",
     phone: u.investorOrg?.phone ?? "—",
     orgEmail: u.investorOrg?.email ?? "—",
+    repName: u.name ?? "—",
+    repDesignation: u.designation ?? "—",
+    repPhone: u.phone ?? "—",
     ref: latestApp?.reference ?? "—",
     appStatus: latestApp?.status ?? null,
   };

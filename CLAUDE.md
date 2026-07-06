@@ -185,9 +185,9 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 
 | Model | Key columns / notes |
 |---|---|
-| `User` | `email`, `passwordHash`, `name`, `role`, `status (UserStatus)`, `investorOrgId` |
+| `User` | `email`, `passwordHash`, `name`, `designation`, `phone`, `role`, `status (UserStatus)`, `investorOrgId` — for INVESTOR, `name/designation/phone/email` describe the authorized representative (email = login) |
 | `Account`, `Session`, `VerificationToken` | NextAuth tables |
-| `InvestorOrg` | `legalName`, `countryOfIncorporation`, `tin`, `address`, `phone`, `email` |
+| `InvestorOrg` | `legalName`, `tradingName`, `registrationNumber`, `ursbRegistrationNumber`, `companyType (CompanyType)`, `businessSector (BusinessSector)`, `countryOfIncorporation`, `tin`, `address`, `phone`, `email` — company-official contact, distinct from the rep's on `User` |
 | `ApplicationWindow` | open/close period, `sequenceCounter` |
 | `Application` | central EOI record |
 | `ApplicationSection` | one row per section, `payload` JSON |
@@ -208,6 +208,9 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `DocumentKind`: 12 values incl. `CERTIFICATE_OF_INCORPORATION`, `PAYMENT_PROOF`, `OTHER`
 - `ReviewActionType`: `ASSIGNED | COMMENTED | REQUESTED_CLARIFICATION | CLARIFICATION_PROVIDED | RECOMMENDED | REJECTED | APPROVED | SHORTLISTED | NOT_SHORTLISTED | LAC_APPROVED | LAC_REJECTED | ALLOCATED | RETURNED_TO_TC | ESCALATED`
 - `ApplicationWindowStatus`: `DRAFT | OPEN | CLOSED | ARCHIVED`
+- `CompanyType`: `LIMITED_LIABILITY_COMPANY | PUBLIC_LIMITED_COMPANY | JOINT_VENTURE | PARTNERSHIP | SOLE_PROPRIETORSHIP | OTHER`
+- `BusinessSector`: `PETROCHEMICALS_REFINING | FERTILISERS_CHEMICALS | LIGHT_MANUFACTURING | AGRO_PROCESSING | LOGISTICS_WAREHOUSING | COMMERCIAL_HOSPITALITY | ICT | OTHER`
+- `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` display-label maps live beside the enums
 
 ---
 
@@ -257,7 +260,7 @@ Global error handler maps `AppError`, `ZodError`, Sequelize errors → `{ "error
 
 `fireWebhook(event, payload)` — `apps/api/src/webhooks.ts`. HMAC-SHA256 signed (`N8N_WEBHOOK_SECRET`). No-op when `N8N_BASE_URL` or `N8N_WEBHOOK_SECRET` absent. Fire **after** transaction commits, never before. Web mirror: `apps/web/src/lib/webhooks.ts`.
 
-Events: `investor-registered`, `investor-approved` (includes `generatedPassword`), `investor-rejected`, `staff-invited` (includes `tempPassword`), `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`
+Events: `investor-registered` (full company + rep profile; `email` = rep login email), `investor-approved` (includes `generatedPassword`), `investor-rejected`, `staff-invited` (includes `tempPassword`), `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`
 
 **Omit `N8N_WEBHOOK_SECRET` from test `.env`** — setting it to `''` causes startup failure (Zod requires `min(8)` when key is present).
 
@@ -355,7 +358,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 |---|---|
 | `packages/db/src/index.ts` | Sequelize singleton + 13 model inits + associations |
 | `packages/db/src/models/` | 13 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index) |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
@@ -383,7 +386,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/(admin)/console/windows/windows-client.tsx` | Windows page client shell with Create dialog |
 | `apps/web/src/app/(admin)/console/windows/create-window-dialog.tsx` | Create/edit window dialog |
 | `apps/web/src/app/(admin)/console/windows/window-actions.tsx` | Per-window open/close/archive action buttons |
-| `apps/web/src/app/api/register/route.ts` | `POST /api/register` — creates InvestorOrg + User (PENDING_REVIEW), fires webhook |
+| `apps/portal/src/app/api/register/route.ts` | `POST /api/register` — two-step registration payload (company identity + authorized rep), creates InvestorOrg + User (PENDING_REVIEW), fires webhook. The web app's `/sign-up` redirects to the portal wizard |
 | `apps/web/src/app/contact/page.tsx` | Public contact form — server action sends email via nodemailer to admin@kip.unoc.co.ug |
 | `apps/web/src/app/how-it-works/page.tsx` | 6-step EOI process walkthrough — public static page |
 | `apps/web/src/app/for-investors/page.tsx` | Investor benefits, incentives, land categories, eligibility — public static page |
