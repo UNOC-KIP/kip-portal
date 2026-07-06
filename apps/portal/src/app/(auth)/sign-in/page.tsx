@@ -90,7 +90,7 @@ function SignInForm() {
       <div className="flex flex-1 flex-col items-center justify-center bg-white px-8">
         <div className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center">
-            <Image src="/unoc-logo.svg" alt="UNOC" width={130} height={38} />
+            <Image src="/unoc-logo.png" alt="UNOC" width={130} height={38} />
           </div>
 
           <h1 className="text-center text-2xl font-bold text-ink-900">Welcome back</h1>

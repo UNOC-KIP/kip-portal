@@ -227,7 +227,7 @@ export function DashboardSidebar({ role }: { role: string }) {
           )}
         >
           {!isCollapsed && (
-            <Image src="/unoc-logo.svg" alt="UNOC" width={96} height={28} className="object-contain" priority />
+            <Image src="/unoc-logo.png" alt="UNOC" width={96} height={28} className="object-contain" priority />
           )}
           <button
             onClick={toggle}
