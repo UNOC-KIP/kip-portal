@@ -13,7 +13,9 @@ export async function getActiveApplicationWindow(): Promise<ActiveWindow> {
       where: { status: "OPEN" },
       attributes: ["name", "openAt", "closeAt"],
     });
-    if (!win) return null;
+    // An OPEN window whose close date has passed is no longer accepting
+    // submissions — treat it as inactive so the home page shows the next round.
+    if (!win || win.closeAt.getTime() <= Date.now()) return null;
     return {
       name: win.name,
       openAt: win.openAt.toISOString(),

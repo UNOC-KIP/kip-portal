@@ -3,6 +3,7 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { EOI_CALL, getPhase2Timeline } from "@/lib/timeline";
 import {
   Fuel,
   Factory,
@@ -21,6 +22,10 @@ import {
   Zap,
   TreePine,
 } from "lucide-react";
+
+// Re-render hourly so the timeline's active milestone (computed from the
+// current date) advances without a rebuild.
+export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: "About KIP — Kabalega Petro-Based Industrial Park",
@@ -173,13 +178,6 @@ const WHY_INVEST = [
   },
 ];
 
-const TIMELINE = [
-  { date: "Now", label: "Application window open — EOI submissions accepted", active: true },
-  { date: "30 Jun 2026", label: "Window closes — no further submissions", active: false },
-  { date: "Jul 2026", label: "Technical Committee pre-screening", active: false },
-  { date: "Aug 2026", label: "ExCo review and decisions", active: false },
-  { date: "Sep 2026", label: "Letters of Intent issued to successful applicants", active: false },
-];
 
 export default function AboutPage() {
   return (
@@ -473,9 +471,10 @@ export default function AboutPage() {
                 Where we are in <span className="text-kip-red">the process.</span>
               </h2>
               <p className="mt-3 text-[15px] leading-relaxed text-black/65">
-                Land is allocated through open application windows. The current round — Phase 1 —
-                is accepting Expressions of Interest now, with committee reviews following once
-                the window closes.
+                Land is allocated through open application windows. Phase 2 investor onboarding
+                is underway — registration is open now, and the Call for Expressions of Interest
+                runs {EOI_CALL.opensLabel} to {EOI_CALL.closesLabel}, with committee reviews
+                following once the window closes.
               </p>
               <div className="mt-6">
                 <Link href="/how-it-works" className="inline-flex items-center gap-2 text-[14px] font-bold text-kip-red transition hover:brightness-90">
@@ -488,9 +487,9 @@ export default function AboutPage() {
                 <span className="h-2 w-2 rounded-full bg-kip-gold" />
                 <h3 className="text-[15px] font-bold text-black">Application Timeline</h3>
               </div>
-              <p className="mb-8 text-[13px] text-black/55">Current round — Phase 1</p>
+              <p className="mb-8 text-[13px] text-black/55">Phase 2 — Investor Onboarding</p>
               <ol className="relative border-l-2 border-black/10 pl-6">
-                {TIMELINE.map((item, i, arr) => (
+                {getPhase2Timeline(new Date()).map((item, i, arr) => (
                   <li key={i} className={i < arr.length - 1 ? "mb-7" : ""}>
                     <span className={`absolute -left-[9px] mt-0.5 h-4 w-4 rounded-full border-2 ${
                       item.active ? "border-kip-gold bg-kip-gold" : "border-black/20 bg-white"
