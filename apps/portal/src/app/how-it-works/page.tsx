@@ -150,7 +150,7 @@ export default function HowItWorksPage() {
       <section className="bg-black py-16 text-white">
         <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px] text-center">
           <h2 className="text-[32px] font-extrabold">Ready to apply?</h2>
-          <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-white/70">The application window is open. Register now and start your Expression of Interest.</p>
+          <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-white/70">Registration is open now. The Call for Expressions of Interest runs 19 August to 2 September 2026.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link href="/sign-up" className="rounded-[4px] bg-kip-gold px-8 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Start Application</Link>
             <Link href="/contact" className="rounded-[4px] border border-white/30 px-8 py-3 text-[14px] font-semibold text-white transition hover:border-white">Contact Us</Link>

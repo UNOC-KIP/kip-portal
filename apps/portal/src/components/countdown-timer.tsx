@@ -17,9 +17,10 @@ function calcRemaining(closeAt: string) {
 interface CountdownTimerProps {
   closeAt: string;
   variant?: "default" | "hero";
+  expiredText?: string;
 }
 
-export function CountdownTimer({ closeAt, variant = "default" }: CountdownTimerProps) {
+export function CountdownTimer({ closeAt, variant = "default", expiredText }: CountdownTimerProps) {
   const [remaining, setRemaining] = useState(() => calcRemaining(closeAt));
 
   useEffect(() => {
@@ -29,9 +30,9 @@ export function CountdownTimer({ closeAt, variant = "default" }: CountdownTimerP
 
   if (!remaining) {
     if (variant === "hero") {
-      return <p className="text-[16px] font-bold text-kip-red">Application window is closed</p>;
+      return <p className="text-[16px] font-bold text-kip-red">{expiredText ?? "Application window is closed"}</p>;
     }
-    return <p className="text-sm font-semibold text-red-600">Window is closed</p>;
+    return <p className="text-sm font-semibold text-red-600">{expiredText ?? "Window is closed"}</p>;
   }
 
   if (variant === "hero") {

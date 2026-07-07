@@ -125,7 +125,7 @@ export default function LandMapPage() {
           <div className="flex flex-col items-start justify-between gap-6 md:flex-row md:items-center">
             <div>
               <h2 className="text-[26px] font-extrabold">Ready to secure your plot?</h2>
-              <p className="mt-2 text-[14px] text-white/70">Submit your Expression of Interest before the window closes on 30 June 2026.</p>
+              <p className="mt-2 text-[14px] text-white/70">The Call for Expressions of Interest runs 19 August to 2 September 2026 — register now to be ready.</p>
             </div>
             <div className="flex shrink-0 gap-3">
               <Link href="/sign-up" className="rounded-[4px] bg-kip-gold px-7 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Start Application</Link>

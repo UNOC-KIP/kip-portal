@@ -210,8 +210,8 @@ export default function ForInvestorsPage() {
               </ul>
             </div>
             <div className="flex flex-col justify-center rounded-[5px] border border-black/8 bg-black p-6 text-white sm:p-10">
-              <h3 className="text-[24px] font-extrabold leading-snug">Application window<br /><span className="text-kip-gold">is currently open.</span></h3>
-              <p className="mt-4 text-[14px] leading-relaxed text-white/70">Don&apos;t miss Phase 1 — Round 1 of the Kabalega Industrial Park EOI round. Register and complete your application before 30 June 2026.</p>
+              <h3 className="text-[24px] font-extrabold leading-snug">Call for EOIs opens<br /><span className="text-kip-gold">19 August 2026.</span></h3>
+              <p className="mt-4 text-[14px] leading-relaxed text-white/70">Don&apos;t miss Phase 2 of the Kabalega Industrial Park onboarding. Register now and submit your Expression of Interest between 19 August and 2 September 2026.</p>
               <div className="mt-8 space-y-3">
                 <Link href="/sign-up" className="flex w-full items-center justify-between rounded-[4px] bg-kip-gold px-6 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Start Application <ArrowRight size={16} /></Link>
                 <Link href="/how-it-works" className="flex w-full items-center justify-between rounded-[4px] border border-white/20 px-6 py-3 text-[14px] font-semibold text-white transition hover:border-white">Learn how it works <ArrowRight size={16} /></Link>

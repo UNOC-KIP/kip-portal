@@ -22,6 +22,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { HeroCarousel } from "@/components/hero-carousel";
 import { getActiveApplicationWindow } from "@/lib/public-data";
+import { EOI_CALL, getPhase2Timeline } from "@/lib/timeline";
 
 // Renders live window data from the DB — must not be statically generated at
 // build time (Docker/CI builds have no database).
@@ -200,23 +201,21 @@ export default async function HomePage({
                 <CountdownTimer closeAt={activeWindow.closeAt} variant="hero" />
               </>
             ) : (
-              <div className="flex w-full flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <>
                 <div className="flex items-center gap-3">
-                  <span className="h-2.5 w-2.5 rounded-full bg-black/20" />
+                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-kip-gold" />
                   <div>
-                    <p className="text-[16px] font-bold text-black">Application Window Closed</p>
+                    <p className="text-[16px] font-bold text-black">Call for Expressions of Interest</p>
                     <p className="text-[14px] text-black/60">
-                      No active window — subscribe below to be notified when the next round opens.
+                      Opens {EOI_CALL.opensLabel} · Closes {EOI_CALL.closesLabel} EAT ·{" "}
+                      <Link href="#notify" className="font-semibold text-kip-red underline underline-offset-2 hover:brightness-90">
+                        Get notified
+                      </Link>
                     </p>
                   </div>
                 </div>
-                <Link
-                  href="#notify"
-                  className="rounded-[4px] bg-black px-5 py-2 text-[13px] font-bold text-white transition hover:bg-black/80"
-                >
-                  Get Notified
-                </Link>
-              </div>
+                <CountdownTimer closeAt={EOI_CALL.opensAt} variant="hero" expiredText="EOI window opening soon" />
+              </>
             )}
           </div>
         </div>
@@ -390,15 +389,9 @@ export default async function HomePage({
                 <span className="h-2 w-2 rounded-full bg-kip-gold" />
                 <h3 className="text-[15px] font-bold text-black">Application Timeline</h3>
               </div>
-              <p className="mb-8 text-[13px] text-black/55">Current round — Phase 1</p>
+              <p className="mb-8 text-[13px] text-black/55">Phase 2 — Investor Onboarding</p>
               <ol className="relative border-l-2 border-black/10 pl-6">
-                {[
-                  { date: "Now",         label: "Application window open — EOI submissions accepted", active: true  },
-                  { date: "30 Jun 2026", label: "Window closes — no further submissions",             active: false },
-                  { date: "Jul 2026",    label: "Technical Committee pre-screening",                  active: false },
-                  { date: "Aug 2026",    label: "ExCo review and decisions",                          active: false },
-                  { date: "Sep 2026",    label: "Letters of Intent issued to successful applicants",  active: false },
-                ].map((item, i, arr) => (
+                {getPhase2Timeline(new Date()).map((item, i, arr) => (
                   <li key={i} className={i < arr.length - 1 ? "mb-7" : ""}>
                     <span className={`absolute -left-[9px] mt-0.5 h-4 w-4 rounded-full border-2 ${
                       item.active ? "border-kip-gold bg-kip-gold" : "border-black/20 bg-white"
