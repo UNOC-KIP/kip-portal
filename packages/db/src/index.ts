@@ -16,6 +16,8 @@ import { Payment } from './models/payment'
 import { ReviewAction } from './models/review-action'
 import { ClarificationRequest } from './models/clarification-request'
 import { Notification } from './models/notification'
+import { Inquiry } from './models/inquiry'
+import { NotifySignup } from './models/notify-signup'
 
 const globalForDb = globalThis as unknown as { sequelize: Sequelize | undefined }
 
@@ -58,6 +60,8 @@ Payment.initModel(sequelize)
 ReviewAction.initModel(sequelize)
 ClarificationRequest.initModel(sequelize)
 Notification.initModel(sequelize)
+Inquiry.initModel(sequelize)
+NotifySignup.initModel(sequelize)
 
 // ─── Associations ────────────────────────────────────────────────────────────
 
@@ -100,6 +104,9 @@ ClarificationRequest.belongsTo(User, { foreignKey: 'requestedById', as: 'request
 User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' })
 Notification.belongsTo(User, { foreignKey: 'userId' })
 
+User.hasMany(Inquiry, { foreignKey: 'respondedById', as: 'respondedInquiries' })
+Inquiry.belongsTo(User, { foreignKey: 'respondedById', as: 'respondedBy' })
+
 User.hasMany(Account, { foreignKey: 'userId', as: 'accounts' })
 Account.belongsTo(User, { foreignKey: 'userId', as: 'user' })
 
@@ -122,4 +129,6 @@ export {
   ReviewAction,
   ClarificationRequest,
   Notification,
+  Inquiry,
+  NotifySignup,
 }

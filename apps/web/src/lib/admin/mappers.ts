@@ -14,10 +14,13 @@ import {
   PaymentStatus,
   COMPANY_TYPE_LABELS,
   BUSINESS_SECTOR_LABELS,
+  INQUIRY_CHANNEL_LABELS,
+  InquiryStatus,
   type CompanyType,
   type BusinessSector,
+  type InquiryChannel,
 } from "@kip/shared";
-import { formatShortDate } from "../format";
+import { formatDateTime, formatShortDate } from "../format";
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
@@ -324,6 +327,83 @@ export function toTcAppRow(a: {
     status: tcStatusLabel(a.status),
     date: formatShortDate(a.submittedAt),
     days,
+  };
+}
+
+// ─── Inquiries & notify signups ──────────────────────────────────────────────
+
+export function inquiryStatusLabel(rawStatus: string): "New" | "Responded" | "Closed" {
+  switch (rawStatus) {
+    case InquiryStatus.RESPONDED: return "Responded";
+    case InquiryStatus.CLOSED:    return "Closed";
+    case InquiryStatus.NEW:
+    default:                      return "New";
+  }
+}
+
+export function inquiryChannelLabel(channel: string): string {
+  return INQUIRY_CHANNEL_LABELS[channel as InquiryChannel] ?? channel;
+}
+
+export type InquiryRow = {
+  id: string;
+  name: string;
+  email: string;
+  company: string;
+  subject: string;
+  message: string;
+  channel: string;
+  status: string;
+  rawStatus: string;
+  respondedBy: string;
+  respondedAt: string;
+  receivedAt: string;
+};
+
+export function toInquiryRow(i: {
+  id: string;
+  name: string;
+  email: string;
+  company: string | null;
+  subject: string | null;
+  message: string;
+  channel: string;
+  rawStatus: string;
+  respondedByName: string | null;
+  respondedAt: Date | string | null;
+  createdAt: Date | string;
+}): InquiryRow {
+  return {
+    id: i.id,
+    name: i.name,
+    email: i.email,
+    company: i.company ?? DASH,
+    subject: i.subject ?? DASH,
+    message: i.message,
+    channel: inquiryChannelLabel(i.channel),
+    status: inquiryStatusLabel(i.rawStatus),
+    rawStatus: i.rawStatus,
+    respondedBy: i.respondedByName ?? DASH,
+    respondedAt: i.respondedAt ? formatDateTime(i.respondedAt) : DASH,
+    receivedAt: formatDateTime(i.createdAt),
+  };
+}
+
+export type NotifySignupRow = {
+  id: string;
+  email: string;
+  signedUpAt: string;
+};
+
+export function toNotifySignupRow(s: {
+  id: string;
+  email: string;
+  createdAt: Date | string;
+}): NotifySignupRow {
+  return {
+    id: s.id,
+    email: s.email,
+    signedUpAt: formatDateTime(s.createdAt),
   };
 }
 

@@ -4,6 +4,8 @@ import { SiteFooter } from "@/components/site-footer";
 import { Mail, Phone, MapPin, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import nodemailer from "nodemailer";
 import { z } from "zod";
+import { Inquiry } from "@kip/db";
+import { InquiryChannel } from "@kip/shared";
 
 const contactSchema = z.object({
   name:    z.string().min(2, "Name is required"),
@@ -32,6 +34,23 @@ async function submitContact(formData: FormData) {
 
   const { name, email, company, subject, message } = result.data;
 
+  // Persist first — the admin console tracks inquiries from the DB, so the
+  // message is never lost even when email delivery is unavailable.
+  try {
+    await Inquiry.create({
+      name,
+      email,
+      company: company || null,
+      subject,
+      message,
+      channel: InquiryChannel.CONTACT_FORM,
+    });
+  } catch {
+    redirect("/contact?error=send");
+    return;
+  }
+
+  // Email notification is best-effort — a failure must not fail the submission.
   try {
     const transporter = nodemailer.createTransport({
       host: process.env.EMAIL_SERVER_HOST || "localhost",
@@ -64,8 +83,7 @@ async function submitContact(formData: FormData) {
       `,
     });
   } catch {
-    redirect("/contact?error=send");
-    return;
+    // Saved to the DB above — the admin console still sees the inquiry.
   }
 
   redirect("/contact?sent=1");

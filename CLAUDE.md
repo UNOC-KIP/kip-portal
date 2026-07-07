@@ -196,6 +196,8 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `ReviewAction` | append-only audit log |
 | `ClarificationRequest` | LAC REQUEST_MORE_INFO records |
 | `Notification` | in-app + email records |
+| `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
+| `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
 
 **Enums** (`packages/shared/src/enums.ts` — source of truth):
 - `UserRole`: `INVESTOR | TC_MEMBER | TC_CHAIR | LAC_MEMBER | EXCO_MEMBER | ADMIN`
@@ -210,7 +212,9 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `ApplicationWindowStatus`: `DRAFT | OPEN | CLOSED | ARCHIVED`
 - `CompanyType`: `LIMITED_LIABILITY_COMPANY | PUBLIC_LIMITED_COMPANY | JOINT_VENTURE | PARTNERSHIP | SOLE_PROPRIETORSHIP | OTHER`
 - `BusinessSector`: `PETROCHEMICALS_REFINING | FERTILISERS_CHEMICALS | LIGHT_MANUFACTURING | AGRO_PROCESSING | LOGISTICS_WAREHOUSING | COMMERCIAL_HOSPITALITY | ICT | OTHER`
-- `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` display-label maps live beside the enums
+- `InquiryChannel`: `CONTACT_FORM | LIVE_CHAT`
+- `InquiryStatus`: `NEW | RESPONDED | CLOSED`
+- `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` / `INQUIRY_CHANNEL_LABELS` display-label maps live beside the enums
 
 ---
 
@@ -243,6 +247,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `payments/` | initiate only |
 | `users/` | `POST /staff` (create staff); `POST /:id/approve` + `POST /:id/reject` (ADMIN only) |
 | `windows/` | `POST /` create; `PATCH /:id` update; `POST /:id/open|close|archive` status transitions (ADMIN only) |
+| `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
 | `health/` | complete |
 
 ---
@@ -358,7 +363,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 |---|---|
 | `packages/db/src/index.ts` | Sequelize singleton + 13 model inits + associations |
 | `packages/db/src/models/` | 13 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields) |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
@@ -387,7 +392,9 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/(admin)/console/windows/create-window-dialog.tsx` | Create/edit window dialog |
 | `apps/web/src/app/(admin)/console/windows/window-actions.tsx` | Per-window open/close/archive action buttons |
 | `apps/portal/src/app/api/register/route.ts` | `POST /api/register` — two-step registration payload (company identity + authorized rep), creates InvestorOrg + User (PENDING_REVIEW), fires webhook. The web app's `/sign-up` redirects to the portal wizard |
-| `apps/web/src/app/contact/page.tsx` | Public contact form — server action sends email via nodemailer to admin@kip.unoc.co.ug |
+| `apps/portal/src/app/contact/page.tsx` | Public contact form — server action persists an `Inquiry` row, then best-effort email to kipinvestorrelations@unoc.com |
+| `apps/portal/src/app/api/inquiry/route.ts` | Live-chat widget endpoint — persists an `Inquiry` row (channel LIVE_CHAT), then best-effort email |
+| `apps/web/src/app/(admin)/console/inquiries/page.tsx` | Admin inquiries tracker — contact/chat inquiries + notify-me signup list, status actions via `POST /inquiries/:id/status` |
 | `apps/web/src/app/how-it-works/page.tsx` | 6-step EOI process walkthrough — public static page |
 | `apps/web/src/app/for-investors/page.tsx` | Investor benefits, incentives, land categories, eligibility — public static page |
 | `apps/web/src/app/faq/page.tsx` | FAQ accordion (5 categories, `<details>/<summary>`) — public static page |

@@ -17,6 +17,7 @@ import {
   Cpu,
 } from "lucide-react";
 import nodemailer from "nodemailer";
+import { NotifySignup } from "@kip/db";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { CountdownTimer } from "@/components/countdown-timer";
@@ -30,10 +31,17 @@ export const dynamic = "force-dynamic";
 
 async function subscribeNotifications(formData: FormData) {
   "use server";
-  const email = (formData.get("email") as string | null)?.trim() ?? "";
+  const email = (formData.get("email") as string | null)?.trim().toLowerCase() ?? "";
   if (!email || !email.includes("@")) {
     redirect("/?notified=error");
     return;
+  }
+  // Persist first — the admin console tracks signups from the DB, so the
+  // address is never lost even when email delivery is unavailable.
+  try {
+    await NotifySignup.findOrCreate({ where: { email }, defaults: { email } });
+  } catch {
+    // fall through to the email attempt
   }
   try {
     const transporter = nodemailer.createTransport({

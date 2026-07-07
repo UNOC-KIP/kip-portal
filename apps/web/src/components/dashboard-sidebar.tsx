@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   FileText,
+  Inbox,
   Info,
   LayoutGrid,
   LogOut,
@@ -43,6 +44,7 @@ const FULL_NAV = [
   { icon: AlertTriangle,  href: "/console/bank-transfers",label: "Bank Transfers" },
   { icon: BarChart2,      href: "/console/report",        label: "Reports" },
   { icon: Users,          href: "/console/users",         label: "Investors" },
+  { icon: Inbox,          href: "/console/inquiries",     label: "Inquiries" },
 ];
 
 const TC_NAV = [

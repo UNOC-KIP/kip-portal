@@ -155,6 +155,26 @@ export const BUSINESS_SECTOR_LABELS: Record<BusinessSector, string> = {
   OTHER:                   "Other",
 };
 
+/** Where a public inquiry came from. */
+export const InquiryChannel = {
+  CONTACT_FORM: "CONTACT_FORM", // /contact page form
+  LIVE_CHAT:    "LIVE_CHAT",    // chat widget → POST /api/inquiry
+} as const;
+export type InquiryChannel = (typeof InquiryChannel)[keyof typeof InquiryChannel];
+
+export const INQUIRY_CHANNEL_LABELS: Record<InquiryChannel, string> = {
+  CONTACT_FORM: "Contact Form",
+  LIVE_CHAT:    "Live Chat",
+};
+
+/** Manual follow-up state of a public inquiry — tracked in the admin console. */
+export const InquiryStatus = {
+  NEW:       "NEW",
+  RESPONDED: "RESPONDED",
+  CLOSED:    "CLOSED",
+} as const;
+export type InquiryStatus = (typeof InquiryStatus)[keyof typeof InquiryStatus];
+
 /** Application window lifecycle. */
 export const ApplicationWindowStatus = {
   DRAFT:    "DRAFT",
