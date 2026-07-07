@@ -12,6 +12,7 @@ import { paymentsRouter } from "./modules/payments/route.js";
 import { n8nWebhookRouter } from "./modules/webhooks/n8n.js";
 import { usersRouter } from "./modules/users/users.router.js";
 import { windowsRouter } from "./modules/windows/windows.router.js";
+import { inquiriesRouter } from "./modules/inquiries/inquiries.router.js";
 
 export function createServer(): Application {
   const app = express();
@@ -34,6 +35,7 @@ export function createServer(): Application {
   app.use("/webhooks/n8n", n8nWebhookRouter);
   app.use("/users", usersRouter);
   app.use("/windows", windowsRouter);
+  app.use("/inquiries", inquiriesRouter);
 
   app.use(errorHandler);
 

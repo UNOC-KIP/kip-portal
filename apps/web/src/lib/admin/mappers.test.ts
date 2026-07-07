@@ -10,7 +10,11 @@ import {
   businessSectorLabel,
   hectaresFromSqm,
   computeTransferSla,
+  inquiryStatusLabel,
+  inquiryChannelLabel,
   toApplicationRow,
+  toInquiryRow,
+  toNotifySignupRow,
   toTransferRow,
   toUserRow,
   toTcAppRow,
@@ -231,5 +235,75 @@ describe("row mappers", () => {
     expect(toWindowRow({ ...base, status: "OPEN" }).statusLabel).toBe("Active");
     expect(toWindowRow({ ...base, status: "CLOSED" }).statusVariant).toBe("window-closed");
     expect(toWindowRow({ ...base, status: "WEIRD" }).statusVariant).toBe(null);
+  });
+});
+
+describe("inquiry mappers", () => {
+  it("inquiryStatusLabel maps DB values, defaults to New", () => {
+    expect(inquiryStatusLabel("NEW")).toBe("New");
+    expect(inquiryStatusLabel("RESPONDED")).toBe("Responded");
+    expect(inquiryStatusLabel("CLOSED")).toBe("Closed");
+    expect(inquiryStatusLabel("UNKNOWN")).toBe("New");
+  });
+
+  it("inquiryChannelLabel maps known channels, passes unknown through", () => {
+    expect(inquiryChannelLabel("CONTACT_FORM")).toBe("Contact Form");
+    expect(inquiryChannelLabel("LIVE_CHAT")).toBe("Live Chat");
+    expect(inquiryChannelLabel("CARRIER_PIGEON")).toBe("CARRIER_PIGEON");
+  });
+
+  it("toInquiryRow fills optional fields with em dashes", () => {
+    const row = toInquiryRow({
+      id: "00000000-0000-0000-0000-000000000001",
+      name: "Jane Doe",
+      email: "jane@company.com",
+      company: null,
+      subject: null,
+      message: "Interested in agro-processing land.",
+      channel: "LIVE_CHAT",
+      rawStatus: "NEW",
+      respondedByName: null,
+      respondedAt: null,
+      createdAt: "2026-07-07T08:00:00Z",
+    });
+    expect(row).toMatchObject({
+      company: "—",
+      subject: "—",
+      channel: "Live Chat",
+      status: "New",
+      rawStatus: "NEW",
+      respondedBy: "—",
+      respondedAt: "—",
+    });
+    expect(row.receivedAt).not.toBe("—");
+  });
+
+  it("toInquiryRow surfaces responder details when present", () => {
+    const row = toInquiryRow({
+      id: "00000000-0000-0000-0000-000000000002",
+      name: "John Smith",
+      email: "john@company.com",
+      company: "Acme Ltd",
+      subject: "General Inquiry",
+      message: "Hello",
+      channel: "CONTACT_FORM",
+      rawStatus: "RESPONDED",
+      respondedByName: "KIP Admin",
+      respondedAt: "2026-07-07T10:00:00Z",
+      createdAt: "2026-07-06T08:00:00Z",
+    });
+    expect(row.status).toBe("Responded");
+    expect(row.respondedBy).toBe("KIP Admin");
+    expect(row.respondedAt).not.toBe("—");
+  });
+
+  it("toNotifySignupRow formats the signup date", () => {
+    const row = toNotifySignupRow({
+      id: "00000000-0000-0000-0000-000000000003",
+      email: "investor@company.com",
+      createdAt: "2026-07-01T12:00:00Z",
+    });
+    expect(row.email).toBe("investor@company.com");
+    expect(row.signedUpAt).not.toBe("—");
   });
 });

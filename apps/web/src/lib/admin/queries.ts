@@ -15,7 +15,9 @@ import {
   Application,
   ApplicationSection,
   ApplicationWindow,
+  Inquiry,
   InvestorOrg,
+  NotifySignup,
   Payment,
   ReviewAction,
   User,
@@ -38,6 +40,8 @@ import {
   hectaresFromSqm,
   roleLabel,
   toApplicationRow,
+  toInquiryRow,
+  toNotifySignupRow,
   toStaffRow,
   toTcAppRow,
   toTransferRow,
@@ -45,6 +49,8 @@ import {
   toWindowRow,
   userStatusLabel,
   type ApplicationRow,
+  type InquiryRow,
+  type NotifySignupRow,
   type StaffRow,
   type TcAppRow,
   type TransferRow,
@@ -375,6 +381,48 @@ export async function getTcQueueView(now: Date = new Date()): Promise<TcQueueVie
     locked: windowOpenInFuture && apps.length === 0,
     windowCloseLabel: activeWindow ? formatShortDate(activeWindow.closeAt) : "—",
     tcDeadlineLabel,
+  };
+}
+
+// ─── Inquiries & notify signups ──────────────────────────────────────────────
+
+export type InquiriesView = {
+  inquiries: InquiryRow[];
+  signups: NotifySignupRow[];
+  newCount: number;
+};
+
+export async function getInquiriesView(): Promise<InquiriesView> {
+  const [inquiries, signups] = await Promise.all([
+    Inquiry.findAll({
+      include: [{ model: User, as: "respondedBy", attributes: ["name", "email"], required: false }],
+      order: [["createdAt", "DESC"]],
+      limit: 500,
+    }),
+    NotifySignup.findAll({ order: [["createdAt", "DESC"]], limit: 1000 }),
+  ]);
+
+  const inquiryRows = inquiries.map((row) => {
+    const i = row as Inquiry & { respondedBy?: User };
+    return toInquiryRow({
+      id: i.id,
+      name: i.name,
+      email: i.email,
+      company: i.company ?? null,
+      subject: i.subject ?? null,
+      message: i.message,
+      channel: i.channel,
+      rawStatus: i.status,
+      respondedByName: i.respondedBy?.name ?? i.respondedBy?.email ?? null,
+      respondedAt: i.respondedAt ?? null,
+      createdAt: i.createdAt,
+    });
+  });
+
+  return {
+    inquiries: inquiryRows,
+    signups: signups.map((s) => toNotifySignupRow({ id: s.id, email: s.email, createdAt: s.createdAt })),
+    newCount: inquiryRows.filter((i) => i.rawStatus === "NEW").length,
   };
 }
 

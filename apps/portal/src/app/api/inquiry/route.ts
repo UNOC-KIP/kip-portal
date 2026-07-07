@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import nodemailer from "nodemailer";
+import { Inquiry } from "@kip/db";
+import { InquiryChannel } from "@kip/shared";
 
 const inquirySchema = z.object({
   name: z.string().min(2, "Name is required").max(120, "Name is too long"),
@@ -29,6 +31,24 @@ export async function POST(req: NextRequest) {
 
   const { name, email, message } = result.data;
 
+  // Persist first — the admin console tracks inquiries from the DB, so the
+  // message is never lost even when email delivery is unavailable.
+  try {
+    await Inquiry.create({
+      name,
+      email,
+      message,
+      subject: "Live Chat",
+      channel: InquiryChannel.LIVE_CHAT,
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "We couldn't send your message right now. Please try again shortly." },
+      { status: 502 },
+    );
+  }
+
+  // Email notification is best-effort — a failure must not fail the submission.
   try {
     const transporter = nodemailer.createTransport({
       host: process.env.EMAIL_SERVER_HOST || "localhost",
@@ -59,10 +79,7 @@ export async function POST(req: NextRequest) {
       `,
     });
   } catch {
-    return NextResponse.json(
-      { error: "We couldn't send your message right now. Please try again shortly." },
-      { status: 502 },
-    );
+    // Saved to the DB above — the admin console still sees the inquiry.
   }
 
   return NextResponse.json({ ok: true }, { status: 201 });

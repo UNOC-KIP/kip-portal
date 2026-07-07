@@ -11,15 +11,16 @@ const STEPS = [
     cta: { label: "Create Account", href: "/sign-up" },
   },
   {
-    number: "02", icon: CreditCard, title: "Pay the Application Fee", duration: "1–2 business days",
-    description: "A non-refundable application fee of USD 1,000 (or equivalent UGX) is required before you can begin filling your EOI. Make a direct bank transfer to the UNOC Stanbic Bank account and upload your proof of payment in the portal.",
-    items: ["Non-refundable fee: USD 1,000", "Payment method: direct Stanbic Bank transfer only", "Upload proof of transfer — confirmed by UNOC admin within 1–2 business days"],
-  },
-  {
-    number: "03", icon: FileText, title: "Complete Your EOI Form", duration: "Several days",
+    number: "02", icon: FileText, title: "Complete Your EOI Form", duration: "Several days",
     description: "Your Expression of Interest covers six structured sections. You can save progress and return at any time before the window closes. All six sections must be complete before you can submit.",
     items: ["Section 1 — Preliminary Information", "Section 2 — Land & Business Profile", "Section 3 — Utilities & Infrastructure Requirements", "Section 4 — Health, Safety, Security & Environment (H3SE)", "Section 5 — National Content Plan", "Section 6 — Declaration & Certification"],
   },
+  {
+    number: "03", icon: CreditCard, title: "Pay the Application Fee", duration: "1–2 business days",
+    description: "A non-refundable application fee of USD 1,000 (or equivalent UGX) is required before you can submit your EOI. Make a direct bank transfer to the UNOC Stanbic Bank account and upload your proof of payment in the portal.",
+    items: ["Non-refundable fee: USD 1,000", "Payment method: direct Stanbic Bank transfer only", "Upload proof of transfer — confirmed by UNOC admin within 1–2 business days"],
+  },
+  
   {
     number: "04", icon: Send, title: "Submit Your EOI", duration: "Instant",
     description: "Once all six sections are complete and the application window is still open, click Submit to finalise your EOI. You will receive a unique reference number (KIP-EOI-YYYY-NNNN) confirming your submission.",
