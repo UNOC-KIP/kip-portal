@@ -22,6 +22,7 @@ export class Application extends Model<
   declare decisionLetter: CreationOptional<string | null>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
+  declare deletedAt: CreationOptional<Date | null>
 
   static initModel(sequelize: Sequelize): typeof Application {
     Application.init(
@@ -41,8 +42,9 @@ export class Application extends Model<
         decisionLetter: { type: DataTypes.STRING, allowNull: true },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,
+        deletedAt: DataTypes.DATE,
       },
-      { sequelize, tableName: 'Application', timestamps: true }
+      { sequelize, tableName: 'Application', timestamps: true, paranoid: true }
     )
     return Application
   }

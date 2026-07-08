@@ -24,6 +24,7 @@ export class Payment extends Model<
   declare confirmedAt: CreationOptional<Date | null>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
+  declare deletedAt: CreationOptional<Date | null>
 
   static initModel(sequelize: Sequelize): typeof Payment {
     Payment.init(
@@ -41,8 +42,9 @@ export class Payment extends Model<
         confirmedAt: { type: DataTypes.DATE, allowNull: true },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,
+        deletedAt: DataTypes.DATE,
       },
-      { sequelize, tableName: 'Payment', timestamps: true }
+      { sequelize, tableName: 'Payment', timestamps: true, paranoid: true }
     )
     return Payment
   }

@@ -25,6 +25,7 @@ export class InvestorOrg extends Model<
   declare email: CreationOptional<string | null>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
+  declare deletedAt: CreationOptional<Date | null>
 
   static initModel(sequelize: Sequelize): typeof InvestorOrg {
     InvestorOrg.init(
@@ -43,8 +44,9 @@ export class InvestorOrg extends Model<
         email: { type: DataTypes.STRING, allowNull: true },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,
+        deletedAt: DataTypes.DATE,
       },
-      { sequelize, tableName: 'InvestorOrg', timestamps: true }
+      { sequelize, tableName: 'InvestorOrg', timestamps: true, paranoid: true }
     )
     return InvestorOrg
   }

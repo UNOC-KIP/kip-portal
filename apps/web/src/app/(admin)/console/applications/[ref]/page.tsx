@@ -7,6 +7,8 @@ import { getAdminApplicationDetail } from "@/lib/admin/queries";
 import { statusBadgeProps } from "@/lib/application-data";
 import { requireRole } from "@/lib/rbac-server";
 import { ADMIN_ONLY } from "@/lib/rbac";
+import { DeleteApplicationButton } from "../delete-application-button";
+import { SectionEditButton } from "./section-edit-button";
 
 export default async function AdminApplicationDetailPage({
   params,
@@ -36,6 +38,12 @@ export default async function AdminApplicationDetailPage({
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm">View all documents</Button>
               <Button variant="outline" size="sm">Download all</Button>
+              <DeleteApplicationButton
+                applicationId={app.id}
+                reference={app.reference ?? ref}
+                company={app.orgName}
+                redirectTo="/console/applications"
+              />
               <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
             </div>
           }
@@ -81,9 +89,19 @@ export default async function AdminApplicationDetailPage({
                 {app.sections.map((s) => (
                   <div key={s.key} className="flex items-center justify-between">
                     <span className="text-sm text-ink-700">{s.label}</span>
-                    <StatusBadge variant={s.complete ? "tc-approved" : "eoi-draft"}>
-                      {s.complete ? "Complete" : "Not started"}
-                    </StatusBadge>
+                    <div className="flex items-center gap-1.5">
+                      {s.payload != null && (
+                        <SectionEditButton
+                          applicationId={app.id}
+                          section={s.key}
+                          label={s.label}
+                          payload={s.payload}
+                        />
+                      )}
+                      <StatusBadge variant={s.complete ? "tc-approved" : "eoi-draft"}>
+                        {s.complete ? "Complete" : "Not started"}
+                      </StatusBadge>
+                    </div>
                   </div>
                 ))}
               </div>

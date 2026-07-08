@@ -15,7 +15,7 @@ import {
 } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { BadRequest, Forbidden, NotFound } from "../../errors.js";
-import { submitApplication } from "./applications.service.js";
+import { submitApplication, deleteApplication } from "./applications.service.js";
 
 export const applicationsRouter: Router = Router();
 
@@ -118,6 +118,22 @@ applicationsRouter.put(
           });
 
       res.json(section);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/** DELETE /applications/:id — admin soft delete (application + its payments). */
+applicationsRouter.delete(
+  "/:id",
+  requireRole(UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      await deleteApplication(id);
+      res.json({ ok: true });
     } catch (e) {
       next(e);
     }

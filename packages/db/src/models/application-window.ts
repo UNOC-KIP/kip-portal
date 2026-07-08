@@ -19,6 +19,7 @@ export class ApplicationWindow extends Model<
   declare sequenceCounter: CreationOptional<number>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
+  declare deletedAt: CreationOptional<Date | null>
 
   static initModel(sequelize: Sequelize): typeof ApplicationWindow {
     ApplicationWindow.init(
@@ -31,8 +32,9 @@ export class ApplicationWindow extends Model<
         sequenceCounter: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,
+        deletedAt: DataTypes.DATE,
       },
-      { sequelize, tableName: 'ApplicationWindow', timestamps: true }
+      { sequelize, tableName: 'ApplicationWindow', timestamps: true, paranoid: true }
     )
     return ApplicationWindow
   }

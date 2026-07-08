@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Edit2, Play, Square, Archive } from "lucide-react";
+import { Edit2, Play, Square, Archive, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { CreateWindowDialog } from "./create-window-dialog";
 import type { WindowRow } from "@/lib/admin/mappers";
 
@@ -25,9 +26,10 @@ const ACTION_CONFIRM: Record<TransitionAction, string> = {
 
 export function WindowActions({ window: w }: { window: WindowRow }) {
   const router = useRouter();
-  const [busy, setBusy] = useState<TransitionAction | null>(null);
+  const [busy, setBusy] = useState<TransitionAction | "delete" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   async function handleTransition(action: TransitionAction) {
     if (!confirm(ACTION_CONFIRM[action])) return;
@@ -54,6 +56,28 @@ export function WindowActions({ window: w }: { window: WindowRow }) {
   const canClose   = w.status === "OPEN";
   const canArchive = w.status === "CLOSED";
   const canEdit    = w.status !== "ARCHIVED";
+  const canDelete  = w.status !== "OPEN";
+
+  async function handleDelete() {
+    setBusy("delete");
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/windows/${w.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: { message?: string } };
+        throw new Error(data?.error?.message ?? "Failed to delete window");
+      }
+      setDeleteOpen(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <>
@@ -106,14 +130,45 @@ export function WindowActions({ window: w }: { window: WindowRow }) {
             {busy === "archive" ? "Archiving…" : ACTION_LABELS.archive}
           </Button>
         )}
+
+        {canDelete && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 border-red-300 text-xs text-red-700 hover:bg-red-50"
+            disabled={busy !== null}
+            onClick={() => { setError(null); setDeleteOpen(true); }}
+          >
+            <Trash2 size={12} /> Delete
+          </Button>
+        )}
       </div>
 
-      {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      {error && !deleteOpen && <p className="mt-2 text-xs text-red-600">{error}</p>}
 
       <CreateWindowDialog
         open={editOpen}
         onClose={() => setEditOpen(false)}
         editing={{ id: w.id, name: w.name, closeAt: "" }}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        title="Delete this application window?"
+        entityName={w.name}
+        entityDetail={`${w.openAt} – ${w.closeAt} · ${w.statusLabel ?? w.status}`}
+        consequences={[
+          "Remove the window from this list",
+          w.sequenceCounter > 0
+            ? `Keep the ${w.sequenceCounter} already-assigned reference${w.sequenceCounter === 1 ? "" : "s"} on their applications`
+            : "No references have been assigned from this window",
+          "Windows cannot be recovered from the console — create a new one for a future round",
+        ]}
+        confirmLabel="Delete Window"
+        loading={busy === "delete"}
+        error={error}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
       />
     </>
   );

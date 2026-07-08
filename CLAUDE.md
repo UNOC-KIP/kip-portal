@@ -1,5 +1,5 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 3 July 2026. Update this file in the same commit as any architectural change.
+> Last updated: 8 July 2026. Update this file in the same commit as any architectural change.
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
 ---
@@ -182,6 +182,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 **Import:** `import { sequelize, User, Application, ... } from "@kip/db"`
 **Models:** `packages/db/src/models/` — `Model.init()` pattern, no decorators. Column names are camelCase.
 **Long text:** always `DataTypes.TEXT`, never `DataTypes.STRING`.
+**Soft delete:** `User`, `InvestorOrg`, `Application`, `ApplicationWindow`, `Payment` are `paranoid: true` (`deletedAt` column) — `destroy()` hides the row from every default-scope query; recoverable in SQL. A soft-deleted user still owns its email (unique index) — pass `paranoid: false` when checking email uniqueness. Child tables (sections, documents, review actions) are not paranoid; they become unreachable when their parent Application is hidden.
 
 | Model | Key columns / notes |
 |---|---|
@@ -243,10 +244,10 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 
 | Module | Status |
 |---|---|
-| `applications/` | create draft, get, update section, submit (DRAFT→SUBMITTED assigns ref) |
+| `applications/` | create draft, get, update section (owner or ADMIN), submit (DRAFT→SUBMITTED assigns ref); `DELETE /:id` soft delete + payments (ADMIN only) |
 | `payments/` | initiate only |
-| `users/` | `POST /staff` (create staff); `POST /:id/approve` + `POST /:id/reject` (ADMIN only) |
-| `windows/` | `POST /` create; `PATCH /:id` update; `POST /:id/open|close|archive` status transitions (ADMIN only) |
+| `users/` | `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject` (all ADMIN only) |
+| `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
 | `health/` | complete |
 
@@ -363,7 +364,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 |---|---|
 | `packages/db/src/index.ts` | Sequelize singleton + 13 model inits + associations |
 | `packages/db/src/models/` | 13 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries) |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
@@ -383,10 +384,13 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/lib/admin/mappers.ts` | Pure DB-row → view-model mappers, unit-tested |
 | `apps/web/src/lib/investor-data.ts` | Investor read data layer — live on seeded data |
 | `apps/web/src/lib/webhooks.ts` | Server-only `fireWebhook()` for Next.js API routes |
-| `apps/web/src/components/` | Shared UI: `site-nav`, `admin-topbar`, `dashboard-sidebar`, `stat-card`, `status-badge`, `data-table`, `payment-amount-card`, `countdown-timer` — check before building new UI |
+| `apps/web/src/components/` | Shared UI: `site-nav`, `admin-topbar`, `dashboard-sidebar`, `stat-card`, `status-badge`, `data-table`, `payment-amount-card`, `countdown-timer`, `confirm-delete-dialog` (all admin deletes go through it) — check before building new UI |
 | `apps/web/src/components/ui/` | Primitives: `alert`, `avatar`, `badge`, `button`, `card`, `dropdown-menu`, `input`, `separator`, `sheet`, `table`, `tooltip` |
 | `apps/web/src/app/(admin)/console/users/[id]/page.tsx` | User detail page |
 | `apps/web/src/app/(admin)/console/users/[id]/user-action-buttons.tsx` | Approve/Reject client component |
+| `apps/web/src/app/(admin)/console/users/[id]/user-manage-buttons.tsx` | Admin Edit + Delete for any account (opens `edit-user-dialog.tsx`, calls `PATCH`/`DELETE /users/:id`) |
+| `apps/web/src/app/(admin)/console/applications/delete-application-button.tsx` | Admin delete for an application (list + detail page), calls `DELETE /applications/:id` |
+| `apps/web/src/app/(admin)/console/applications/[ref]/section-edit-button.tsx` | Admin raw-JSON editor per EOI section — `PUT /applications/:id/section`, Zod-validated server-side |
 | `apps/web/src/app/(admin)/console/users/invite-staff-dialog.tsx` | Invite staff member dialog (calls `POST /users/staff`) |
 | `apps/web/src/app/(admin)/console/windows/windows-client.tsx` | Windows page client shell with Create dialog |
 | `apps/web/src/app/(admin)/console/windows/create-window-dialog.tsx` | Create/edit window dialog |

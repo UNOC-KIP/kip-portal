@@ -20,6 +20,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
   declare investorOrgId: CreationOptional<string | null>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
+  declare deletedAt: CreationOptional<Date | null>
 
   static initModel(sequelize: Sequelize): typeof User {
     User.init(
@@ -36,8 +37,9 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
         investorOrgId: { type: DataTypes.UUID, allowNull: true },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,
+        deletedAt: DataTypes.DATE,
       },
-      { sequelize, tableName: 'User', timestamps: true }
+      { sequelize, tableName: 'User', timestamps: true, paranoid: true }
     )
     return User
   }
