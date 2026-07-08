@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { StatusBadge } from "@/components/status-badge";
+import { DeleteApplicationButton } from "./delete-application-button";
 
 export type ApplicationRow = {
+  id: string;
   ref: string;
   company: string;
   country: string;
@@ -70,12 +72,19 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
     key: "actions",
     header: "Actions",
     render: (row) => (
-      <Link
-        href={`/console/applications/${row.ref}`}
-        className="text-xs font-semibold text-brand-600 hover:underline"
-      >
-        View →
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          href={`/console/applications/${row.ref}`}
+          className="text-xs font-semibold text-brand-600 hover:underline"
+        >
+          View →
+        </Link>
+        <DeleteApplicationButton
+          applicationId={String(row.id)}
+          reference={String(row.ref)}
+          company={String(row.company)}
+        />
+      </div>
     ),
   },
 ];
@@ -85,7 +94,7 @@ export function ApplicationsTable({ data }: { data: ApplicationRow[] }) {
     <DataTable
       columns={COLUMNS}
       data={data as unknown as Record<string, unknown>[]}
-      rowKey="ref"
+      rowKey="id"
       searchPlaceholder="Search reference or company…"
       searchKeys={["ref", "company", "country"] as never[]}
       exportLabel="Export"

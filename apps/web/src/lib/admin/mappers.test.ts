@@ -114,6 +114,7 @@ describe("row mappers", () => {
   it("toApplicationRow", () => {
     expect(
       toApplicationRow({
+        id: "app-uuid-1",
         reference: "KIP-EOI-2026-0001",
         status: "LAC_REVIEW",
         createdAt: "2026-02-14T10:30:00Z",
@@ -122,6 +123,7 @@ describe("row mappers", () => {
         payments: [{ status: "CONFIRMED" }],
       }),
     ).toEqual({
+      id: "app-uuid-1",
       ref: "KIP-EOI-2026-0001",
       company: "Gulf Petrochem International FZE",
       country: "UAE",
@@ -133,6 +135,7 @@ describe("row mappers", () => {
 
   it("toApplicationRow falls back for draft (no reference / no country)", () => {
     const row = toApplicationRow({
+      id: "app-uuid-2",
       reference: null,
       status: "DRAFT",
       createdAt: "2026-04-10T00:00:00Z",

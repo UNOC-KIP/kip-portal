@@ -44,6 +44,18 @@ export async function updateWindow(
   return win;
 }
 
+/** Admin soft delete. An OPEN window must be closed first — it gates live submissions. */
+export async function deleteWindow(id: string): Promise<void> {
+  const win = await ApplicationWindow.findByPk(id);
+  if (!win) throw NotFound("Application window");
+
+  if (win.status === ApplicationWindowStatus.OPEN) {
+    throw Conflict("Close the window before deleting it");
+  }
+
+  await win.destroy();
+}
+
 const STATUS_TRANSITIONS: Record<string, string> = {
   OPEN: ApplicationWindowStatus.DRAFT,
   CLOSED: ApplicationWindowStatus.OPEN,

@@ -3,6 +3,7 @@ import {
   Application,
   ApplicationSection,
   ApplicationWindow,
+  Payment,
 } from "@kip/db";
 import {
   ApplicationStatus,
@@ -15,6 +16,22 @@ import {
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
 const ALL_SECTIONS = Object.values(EoiSection);
+
+/**
+ * Admin soft delete (paranoid mode — recoverable in SQL). Payments go with the
+ * application so dashboard totals and the bank-transfer queue stay consistent;
+ * sections/documents/review actions stay in place but are unreachable once the
+ * parent row is hidden.
+ */
+export async function deleteApplication(applicationId: string): Promise<void> {
+  const app = await Application.findByPk(applicationId, { attributes: ["id"] });
+  if (!app) throw NotFound("Application");
+
+  await sequelize.transaction(async (t) => {
+    await Payment.destroy({ where: { applicationId: app.id }, transaction: t });
+    await app.destroy({ transaction: t });
+  });
+}
 
 /**
  * SUBMITTED transition. Owns the status machine for this step (the API is the

@@ -155,6 +155,7 @@ export function computeTransferSla(
 // ─── Row view-models (mirror *-table.tsx props) ──────────────────────────────
 
 export type ApplicationRow = {
+  id: string;
   ref: string;
   company: string;
   country: string;
@@ -237,6 +238,7 @@ const NO_REF = "(draft)";
 const DASH = "—";
 
 export function toApplicationRow(a: {
+  id: string;
   reference: string | null;
   status: string;
   createdAt: Date | string;
@@ -245,6 +247,7 @@ export function toApplicationRow(a: {
   payments: { status: string }[];
 }): ApplicationRow {
   return {
+    id: a.id,
     ref: a.reference ?? NO_REF,
     company: a.orgName,
     country: a.country ?? DASH,

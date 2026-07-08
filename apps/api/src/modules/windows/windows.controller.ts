@@ -8,6 +8,7 @@ import {
   createWindow,
   updateWindow,
   transitionWindowStatus,
+  deleteWindow,
 } from "./windows.service.js";
 
 export const handleCreate: RequestHandler = async (req, res, next) => {
@@ -26,6 +27,16 @@ export const handleUpdate: RequestHandler = async (req, res, next) => {
     const body = updateWindowSchema.parse(req.body);
     const win = await updateWindow(id, body);
     res.json(win);
+  } catch (e) {
+    next(e);
+  }
+};
+
+export const handleDelete: RequestHandler = async (req, res, next) => {
+  try {
+    const { id } = windowIdParamSchema.parse(req.params);
+    await deleteWindow(id);
+    res.json({ ok: true });
   } catch (e) {
     next(e);
   }

@@ -83,6 +83,7 @@ export async function listApplications(opts: { limit?: number; offset?: number }
   return apps.map((row) => {
     const a = row as Application & { investorOrg?: InvestorOrg; payments?: Payment[] };
     return toApplicationRow({
+      id: a.id,
       reference: a.reference,
       status: a.status,
       createdAt: a.createdAt,
@@ -252,6 +253,28 @@ export type UserDetail = {
   repPhone: string;
   ref: string;
   appStatus: string | null;
+  /** Raw (unformatted) values for the admin edit form. */
+  edit: {
+    name: string;
+    designation: string;
+    phone: string;
+    email: string;
+    role: string;
+    hasOrg: boolean;
+    org: {
+      legalName: string;
+      tradingName: string;
+      registrationNumber: string;
+      ursbRegistrationNumber: string;
+      companyType: string;
+      businessSector: string;
+      countryOfIncorporation: string;
+      tin: string;
+      address: string;
+      phone: string;
+      email: string;
+    };
+  };
 };
 
 export async function getUserDetail(id: string): Promise<UserDetail | null> {
@@ -299,6 +322,27 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
     repPhone: u.phone ?? "—",
     ref: latestApp?.reference ?? "—",
     appStatus: latestApp?.status ?? null,
+    edit: {
+      name: u.name ?? "",
+      designation: u.designation ?? "",
+      phone: u.phone ?? "",
+      email: u.email,
+      role: u.role,
+      hasOrg: u.investorOrg != null,
+      org: {
+        legalName: u.investorOrg?.legalName ?? "",
+        tradingName: u.investorOrg?.tradingName ?? "",
+        registrationNumber: u.investorOrg?.registrationNumber ?? "",
+        ursbRegistrationNumber: u.investorOrg?.ursbRegistrationNumber ?? "",
+        companyType: u.investorOrg?.companyType ?? "",
+        businessSector: u.investorOrg?.businessSector ?? "",
+        countryOfIncorporation: u.investorOrg?.countryOfIncorporation ?? "",
+        tin: u.investorOrg?.tin ?? "",
+        address: u.investorOrg?.address ?? "",
+        phone: u.investorOrg?.phone ?? "",
+        email: u.investorOrg?.email ?? "",
+      },
+    },
   };
 }
 
@@ -546,6 +590,7 @@ export async function getAdminDashboard(): Promise<AdminDashboard> {
 // ─── Admin application detail ────────────────────────────────────────────────
 
 export type AdminApplicationDetail = {
+  id: string;
   reference: string | null;
   status: string;
   orgName: string;
@@ -553,7 +598,7 @@ export type AdminApplicationDetail = {
   landHa: string;
   sectionsComplete: number;
   totalSections: number;
-  sections: { key: string; label: string; complete: boolean }[];
+  sections: { key: string; label: string; complete: boolean; payload: unknown }[];
   payment: { method: string; amountLabel: string; ref: string; confirmedAt: string } | null;
   auditTrail: { time: string; text: string; actor: string }[];
 };
@@ -589,6 +634,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     key,
     label: SECTION_LABELS[key],
     complete: sections.some((s) => s.section === key && s.completedAt !== null),
+    payload: sections.find((s) => s.section === key)?.payload ?? null,
   }));
 
   // Collect with a sortable epoch, order chronologically, then format.
@@ -615,6 +661,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
   const auditTrail = events.map((e) => ({ time: formatDateTime(e.ts), text: e.text, actor: e.actor }));
 
   return {
+    id: a.id,
     reference: a.reference,
     status: a.status,
     orgName: a.investorOrg?.legalName ?? "—",

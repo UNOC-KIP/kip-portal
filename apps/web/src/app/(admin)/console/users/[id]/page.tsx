@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/rbac-server";
 import { ADMIN_ONLY } from "@/lib/rbac";
 import { getUserDetail } from "@/lib/admin/queries";
 import { UserActionButtons } from "./user-action-buttons";
+import { UserManageButtons } from "./user-manage-buttons";
 
 export default async function UserDetailPage({
   params,
@@ -34,6 +35,14 @@ export default async function UserDetailPage({
             { label: "Users", href: "/console/users" },
             { label: user.company },
           ]}
+          action={
+            <UserManageButtons
+              userId={user.id}
+              displayName={user.company !== "—" ? user.company : user.email}
+              applicationRef={user.ref !== "—" ? user.ref : null}
+              edit={user.edit}
+            />
+          }
         />
 
         <div className="mt-2 grid gap-6 md:grid-cols-2">
