@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+import { apiUrl } from "@/lib/api";
 
 export function UserActionButtons({ userId }: { userId: string }) {
   const router = useRouter();
@@ -15,7 +14,7 @@ export function UserActionButtons({ userId }: { userId: string }) {
     setLoading(action);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/users/${userId}/${action}`, {
+      const res = await fetch(apiUrl(`/users/${userId}/${action}`), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

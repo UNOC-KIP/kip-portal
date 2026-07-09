@@ -6,9 +6,8 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PaymentStatus } from "@kip/shared";
+import { apiUrl } from "@/lib/api";
 import type { TransferRow } from "@/lib/admin/mappers";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 const SLA_CLASSES: Record<TransferRow["slaUrgency"], string> = {
   ok:      "text-ink-500",
@@ -29,7 +28,7 @@ export function BankTransfersTable({ data }: { data: TransferRow[] }) {
     setErrors((prev) => { const next = { ...prev }; delete next[paymentId]; return next; });
 
     try {
-      const res = await fetch(`${API_BASE}/payments/${paymentId}/confirm`, {
+      const res = await fetch(apiUrl(`/payments/${paymentId}/confirm`), {
         method: "POST",
         credentials: "include",
       });
@@ -52,7 +51,7 @@ export function BankTransfersTable({ data }: { data: TransferRow[] }) {
     setErrors((prev) => { const next = { ...prev }; delete next[paymentId]; return next; });
 
     try {
-      const res = await fetch(`${API_BASE}/payments/${paymentId}/reject`, {
+      const res = await fetch(apiUrl(`/payments/${paymentId}/reject`), {
         method: "POST",
         credentials: "include",
       });
@@ -75,7 +74,7 @@ export function BankTransfersTable({ data }: { data: TransferRow[] }) {
     setErrors((prev) => { const next = { ...prev }; delete next[paymentId]; return next; });
 
     try {
-      const res = await fetch(`${API_BASE}/payments/${paymentId}/proof`, {
+      const res = await fetch(apiUrl(`/payments/${paymentId}/proof`), {
         credentials: "include",
       });
       if (!res.ok) {

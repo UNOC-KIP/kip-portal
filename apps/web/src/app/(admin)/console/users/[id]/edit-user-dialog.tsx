@@ -6,8 +6,7 @@ import { X } from "lucide-react";
 import { COMPANY_TYPE_LABELS, BUSINESS_SECTOR_LABELS, UserRole } from "@kip/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+import { apiUrl } from "@/lib/api";
 
 const STAFF_ROLES = [
   { value: "ADMIN",       label: "Administrator" },
@@ -98,7 +97,7 @@ export function EditUserDialog({ open, onClose, userId, initial }: Props) {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/users/${userId}`, {
+      const res = await fetch(apiUrl(`/users/${userId}`), {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

@@ -4,8 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Edit2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+import { apiUrl } from "@/lib/api";
 
 interface Props {
   applicationId: string;
@@ -44,7 +43,7 @@ export function SectionEditButton({ applicationId, section, label, payload }: Pr
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/applications/${applicationId}/section`, {
+      const res = await fetch(apiUrl(`/applications/${applicationId}/section`), {
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

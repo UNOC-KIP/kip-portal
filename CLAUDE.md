@@ -384,6 +384,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/lib/admin/mappers.ts` | Pure DB-row → view-model mappers, unit-tested |
 | `apps/web/src/lib/investor-data.ts` | Investor read data layer — live on seeded data |
 | `apps/web/src/lib/webhooks.ts` | Server-only `fireWebhook()` for Next.js API routes |
+| `apps/web/src/lib/api.ts` | Client API base resolver — `apiUrl(path)`. All admin mutation components call it; reads `NEXT_PUBLIC_API_URL` (baked at build time), uses localhost only on a localhost browser, else throws. Never inline `process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001"` in a component. |
 | `apps/web/src/components/` | Shared UI: `site-nav`, `admin-topbar`, `dashboard-sidebar`, `stat-card`, `status-badge`, `data-table`, `payment-amount-card`, `countdown-timer`, `confirm-delete-dialog` (all admin deletes go through it) — check before building new UI |
 | `apps/web/src/components/ui/` | Primitives: `alert`, `avatar`, `badge`, `button`, `card`, `dropdown-menu`, `input`, `separator`, `sheet`, `table`, `tooltip` |
 | `apps/web/src/app/(admin)/console/users/[id]/page.tsx` | User detail page |
