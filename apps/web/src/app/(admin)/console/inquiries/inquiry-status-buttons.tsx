@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+import { apiUrl } from "@/lib/api";
 
 type Status = "NEW" | "RESPONDED" | "CLOSED";
 
@@ -17,7 +16,7 @@ export function InquiryStatusButtons({ inquiryId, rawStatus }: { inquiryId: stri
     setLoading(status);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/inquiries/${inquiryId}/status`, {
+      const res = await fetch(apiUrl(`/inquiries/${inquiryId}/status`), {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

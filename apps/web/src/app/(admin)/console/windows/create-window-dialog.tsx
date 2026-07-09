@@ -5,8 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+import { apiUrl } from "@/lib/api";
 
 interface Props {
   open: boolean;
@@ -38,8 +37,8 @@ export function CreateWindowDialog({ open, onClose, editing }: Props) {
 
     try {
       const url = isEdit
-        ? `${API_BASE}/windows/${editing!.id}`
-        : `${API_BASE}/windows`;
+        ? apiUrl(`/windows/${editing!.id}`)
+        : apiUrl("/windows");
 
       const body = isEdit
         ? { name: name || undefined, closeAt: closeAt || undefined }

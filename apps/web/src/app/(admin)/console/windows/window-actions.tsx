@@ -6,9 +6,8 @@ import { Edit2, Play, Square, Archive, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { CreateWindowDialog } from "./create-window-dialog";
+import { apiUrl } from "@/lib/api";
 import type { WindowRow } from "@/lib/admin/mappers";
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 type TransitionAction = "open" | "close" | "archive";
 
@@ -36,7 +35,7 @@ export function WindowActions({ window: w }: { window: WindowRow }) {
     setBusy(action);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/windows/${w.id}/${action}`, {
+      const res = await fetch(apiUrl(`/windows/${w.id}/${action}`), {
         method: "POST",
         credentials: "include",
       });
@@ -62,7 +61,7 @@ export function WindowActions({ window: w }: { window: WindowRow }) {
     setBusy("delete");
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/windows/${w.id}`, {
+      const res = await fetch(apiUrl(`/windows/${w.id}`), {
         method: "DELETE",
         credentials: "include",
       });
