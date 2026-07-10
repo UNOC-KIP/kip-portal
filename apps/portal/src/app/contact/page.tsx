@@ -2,10 +2,10 @@ import { redirect } from "next/navigation";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { Mail, Phone, MapPin, Clock, CheckCircle2, AlertCircle } from "lucide-react";
-import nodemailer from "nodemailer";
 import { z } from "zod";
 import { Inquiry } from "@kip/db";
 import { InquiryChannel } from "@kip/shared";
+import { escapeHtml, sendMail, SECRETARIAT_EMAIL } from "@/lib/mailer";
 
 const contactSchema = z.object({
   name:    z.string().min(2, "Name is required"),
@@ -52,31 +52,21 @@ async function submitContact(formData: FormData) {
 
   // Email notification is best-effort — a failure must not fail the submission.
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_SERVER_HOST || "localhost",
-      port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
-      secure: false,
-      auth: process.env.EMAIL_SERVER_USER
-        ? { user: process.env.EMAIL_SERVER_USER, pass: process.env.EMAIL_SERVER_PASSWORD }
-        : undefined,
-    });
-
-    await transporter.sendMail({
-      from:    process.env.EMAIL_FROM || "noreply@kip.local",
-      to:      "kipinvestorrelations@unoc.com",
+    await sendMail({
+      to:      SECRETARIAT_EMAIL,
       replyTo: email,
       subject: `KIP Investor Portal Contact: ${subject}`,
       html: `
         <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
           <h2 style="color:#C8102E">New Contact Form Submission</h2>
           <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-            <tr><td style="padding:8px;font-weight:bold;color:#555;width:120px">Name</td><td style="padding:8px">${name}</td></tr>
-            <tr style="background:#f9f9f9"><td style="padding:8px;font-weight:bold;color:#555">Email</td><td style="padding:8px"><a href="mailto:${email}">${email}</a></td></tr>
-            <tr><td style="padding:8px;font-weight:bold;color:#555">Company</td><td style="padding:8px">${company || "—"}</td></tr>
-            <tr style="background:#f9f9f9"><td style="padding:8px;font-weight:bold;color:#555">Subject</td><td style="padding:8px">${subject}</td></tr>
+            <tr><td style="padding:8px;font-weight:bold;color:#555;width:120px">Name</td><td style="padding:8px">${escapeHtml(name)}</td></tr>
+            <tr style="background:#f9f9f9"><td style="padding:8px;font-weight:bold;color:#555">Email</td><td style="padding:8px"><a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></td></tr>
+            <tr><td style="padding:8px;font-weight:bold;color:#555">Company</td><td style="padding:8px">${company ? escapeHtml(company) : "—"}</td></tr>
+            <tr style="background:#f9f9f9"><td style="padding:8px;font-weight:bold;color:#555">Subject</td><td style="padding:8px">${escapeHtml(subject)}</td></tr>
           </table>
           <h3 style="color:#333">Message</h3>
-          <p style="background:#f5f5f5;padding:16px;border-radius:4px;white-space:pre-wrap">${message}</p>
+          <p style="background:#f5f5f5;padding:16px;border-radius:4px;white-space:pre-wrap">${escapeHtml(message)}</p>
           <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
           <p style="color:#999;font-size:12px">Sent from the KIP Investor Portal contact form.</p>
         </div>
@@ -146,8 +136,8 @@ export default function ContactPage({ searchParams }: { searchParams: { sent?: s
                 <p className="mb-5 text-[13px] leading-relaxed text-white/70">
                   The application window is currently open. Start your Expression of Interest today.
                 </p>
-                <a href="/sign-up" className="inline-block rounded-[4px] bg-kip-gold px-5 py-2.5 text-[13px] font-bold text-black transition hover:brightness-105">
-                  Start Application →
+                <a href="/dashboard/site-visit" className="inline-block rounded-[4px] bg-kip-gold px-5 py-2.5 text-[13px] font-bold text-black transition hover:brightness-105">
+                  Book Site Visit →
                 </a>
               </div>
             </div>

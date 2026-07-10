@@ -1,16 +1,8 @@
 import Link from "next/link";
 import { Download, MapPin, Maximize2 } from "lucide-react";
+import { KIP_ZONES } from "@kip/shared";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
-
-const ZONES = [
-  { color: "bg-red-600",     label: "Heavy Industrial Zone",  area: "≈ 871.7 acres",  desc: "Petrochemicals, polymers, fertiliser, bonded warehousing, free trade zone and waste management — supporting Uganda's petroleum value chain." },
-  { color: "bg-emerald-600", label: "Light & Downstream Hub", area: "≈ 688.1 acres",  desc: "Light industrial and downstream manufacturing — furniture, textiles, packaging, automotive parts and end-user product assembly." },
-  { color: "bg-lime-600",    label: "Agro-Industrial Zone",   area: "Agro-processing", desc: "Fruit, dairy and meat processing and value-added agricultural manufacturing, leveraging nearby agricultural zones." },
-  { color: "bg-purple-600",  label: "Business / Commercial",  area: "≈ 273.0 acres",  desc: "Warehouse development, retail, mixed use, hospitality & events and petrol filling — serving tenants, workers and visitors." },
-  { color: "bg-blue-600",    label: "Residential / Estate",   area: "≈ 217.6 acres",  desc: "High- and low-density housing, primary and secondary schools, a technology campus and a Health Centre IV." },
-  { color: "bg-amber-500",   label: "Administration Zone",    area: "≈ 134.6 acres",  desc: "Park HQ, UNOC and government offices, ICT, security and a One-Stop Centre for licensing, registration and investor aftercare." },
-];
 
 const INFRASTRUCTURE = [
   { label: "Location",   value: "Kabaale, Hoima District, Western Uganda — 29.57 km² (7,307 acres)" },
@@ -43,8 +35,8 @@ export default function LandMapPage() {
             <a href="/kip-plot-map.pdf" download="KIP-Plot-Allocation-Map-Phase2.pdf" className="inline-flex items-center gap-2 rounded-[4px] bg-kip-red px-6 py-3 text-[14px] font-bold text-white transition hover:brightness-110">
               <Download size={15} /> Download Map (PDF)
             </a>
-            <Link href="/sign-up" className="inline-flex items-center gap-2 rounded-[4px] border-2 border-black/70 px-6 py-3 text-[14px] font-bold text-black transition hover:bg-black/10">
-              Apply for a Plot
+            <Link href="/dashboard/site-visit" className="inline-flex items-center gap-2 rounded-[4px] border-2 border-black/70 px-6 py-3 text-[14px] font-bold text-black transition hover:bg-black/10">
+              Book Site Visit
             </Link>
           </div>
         </div>
@@ -89,8 +81,8 @@ export default function LandMapPage() {
             <p className="mt-2 text-[14px] text-black/60">Six master-planned zones spanning the full industrial value chain.</p>
           </div>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {ZONES.map((z) => (
-              <div key={z.label} className="rounded-[5px] border border-black/8 bg-white p-6">
+            {KIP_ZONES.map((z) => (
+              <div key={z.key} className="rounded-[5px] border border-black/8 bg-white p-6">
                 <div className="mb-3 flex items-center gap-3">
                   <span className={`h-3 w-3 rounded-sm ${z.color}`} />
                   <h3 className="text-[14px] font-bold text-black">{z.label}</h3>
@@ -128,7 +120,7 @@ export default function LandMapPage() {
               <p className="mt-2 text-[14px] text-white/70">The Call for Expressions of Interest runs 19 August to 2 September 2026 — register now to be ready.</p>
             </div>
             <div className="flex shrink-0 gap-3">
-              <Link href="/sign-up" className="rounded-[4px] bg-kip-gold px-7 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Start Application</Link>
+              <Link href="/dashboard/site-visit" className="rounded-[4px] bg-kip-gold px-7 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Book Site Visit</Link>
               <Link href="/for-investors" className="rounded-[4px] border border-white/25 px-7 py-3 text-[14px] font-semibold text-white transition hover:border-white">Investor Info</Link>
             </div>
           </div>

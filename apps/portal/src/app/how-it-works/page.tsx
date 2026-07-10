@@ -35,7 +35,7 @@ const STEPS = [
     number: "06", icon: Award, title: "ExCo Decision & Land Allocation", duration: "~4–8 weeks after TC",
     description: "The Land Allocation Committee makes a recommendation, which the Executive Committee (ExCo) ratifies. Successful investors receive a Letter of Intent (LOI) followed by a formal land lease agreement for their allocated plot.",
     items: ["LAC approves or rejects applications reviewed by TC", "ExCo ratifies final allocation decisions", "Successful applicants receive a Letter of Intent"],
-    cta: { label: "Start Your Application", href: "/sign-up" },
+    cta: { label: "Book Site Visit", href: "/dashboard/site-visit" },
   },
 ];
 
@@ -64,7 +64,7 @@ export default function HowItWorksPage() {
             Six clear steps from registration to land allocation. The entire journey is managed online through this portal.
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
-            <Link href="/sign-up" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Start Application</Link>
+            <Link href="/sign-up" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Create Account</Link>
             <Link href="/faq" className="rounded-[4px] border-2 border-black/70 px-7 py-3 text-[14px] font-bold text-black transition hover:bg-black/10">View FAQ</Link>
           </div>
         </div>
@@ -153,7 +153,7 @@ export default function HowItWorksPage() {
           <h2 className="text-[32px] font-extrabold">Ready to apply?</h2>
           <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-white/70">Registration is open now. The Call for Expressions of Interest runs 19 August to 2 September 2026.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <Link href="/sign-up" className="rounded-[4px] bg-kip-gold px-8 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Start Application</Link>
+            <Link href="/dashboard/site-visit" className="rounded-[4px] bg-kip-gold px-8 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Book Site Visit</Link>
             <Link href="/contact" className="rounded-[4px] border border-white/30 px-8 py-3 text-[14px] font-semibold text-white transition hover:border-white">Contact Us</Link>
           </div>
         </div>

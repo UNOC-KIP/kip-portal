@@ -171,10 +171,10 @@ export default async function HomePage({
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <Link
-                  href="/sign-up"
+                  href="/dashboard/site-visit"
                   className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110"
                 >
-                  Start Application
+                  Book Site Visit
                 </Link>
                 <Link
                   href="/land-map"
@@ -385,8 +385,8 @@ export default async function HomePage({
                 ))}
               </ul>
               <div className="mt-7">
-                <Link href="/sign-up" className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
-                  Start Application
+                <Link href="/dashboard/site-visit" className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
+                  Book Site Visit
                 </Link>
               </div>
             </div>

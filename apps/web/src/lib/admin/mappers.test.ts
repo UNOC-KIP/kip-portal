@@ -19,6 +19,7 @@ import {
   toUserRow,
   toTcAppRow,
   toWindowRow,
+  toSiteVisitRow,
 } from "./mappers";
 
 describe("status helpers", () => {
@@ -238,6 +239,69 @@ describe("row mappers", () => {
     expect(toWindowRow({ ...base, status: "OPEN" }).statusLabel).toBe("Active");
     expect(toWindowRow({ ...base, status: "CLOSED" }).statusVariant).toBe("window-closed");
     expect(toWindowRow({ ...base, status: "WEIRD" }).statusVariant).toBe(null);
+  });
+});
+
+describe("toSiteVisitRow", () => {
+  const base = {
+    id: "00000000-0000-0000-0000-0000000000aa",
+    companyName: "Nile Industries Ltd",
+    contactName: "Jane Mugisha",
+    contactEmail: "jane@nile.ug",
+    zone: "HEAVY_INDUSTRIAL",
+    landUse: "Polymers & Plastics",
+    description: "Polymer compounding plant with on-site warehousing.",
+    acres: 25,
+    rawStatus: "NEW",
+    handledByName: null,
+    scheduledAt: null,
+    createdAt: "2026-07-10T08:00:00Z",
+  };
+
+  it("resolves the zone label and legend colour from KIP_ZONES", () => {
+    const row = toSiteVisitRow(base);
+    expect(row).toMatchObject({
+      zone: "Heavy Industrial Zone",
+      zoneColor: "bg-red-600",
+      status: "New Request",
+      rawStatus: "NEW",
+      acresLabel: "25 acres",
+    });
+  });
+
+  it("falls back to the raw zone value for an unknown zone", () => {
+    const row = toSiteVisitRow({ ...base, zone: "ATLANTIS" });
+    expect(row.zone).toBe("ATLANTIS");
+    expect(row.zoneColor).toBe("bg-ink-300");
+  });
+
+  it("singularises a one-acre request", () => {
+    expect(toSiteVisitRow({ ...base, acres: 1 }).acresLabel).toBe("1 acre");
+  });
+
+  it("fills unscheduled / unhandled fields with em dashes", () => {
+    const row = toSiteVisitRow(base);
+    expect(row.handledBy).toBe("—");
+    expect(row.scheduledAt).toBe("—");
+    expect(row.companyName).toBe("Nile Industries Ltd");
+  });
+
+  it("surfaces scheduling details once an admin has acted", () => {
+    const row = toSiteVisitRow({
+      ...base,
+      rawStatus: "SCHEDULED",
+      handledByName: "KIP Admin",
+      scheduledAt: "2026-08-01T09:00:00Z",
+    });
+    expect(row.status).toBe("Visit Scheduled");
+    expect(row.handledBy).toBe("KIP Admin");
+    expect(row.scheduledAt).not.toBe("—");
+  });
+
+  it("falls back to an em dash when the org has been detached", () => {
+    const row = toSiteVisitRow({ ...base, companyName: null, contactName: null });
+    expect(row.companyName).toBe("—");
+    expect(row.contactName).toBe("—");
   });
 });
 

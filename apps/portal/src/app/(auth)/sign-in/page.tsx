@@ -16,6 +16,16 @@ export default function SignInPage() {
   );
 }
 
+/**
+ * `middleware.ts` stashes the route the user was trying to reach as `?from=`.
+ * Only same-origin absolute paths are honoured — `//evil.com` is protocol-
+ * relative and would leave the site.
+ */
+function safeCallbackUrl(from: string | null): string {
+  if (!from || !from.startsWith("/") || from.startsWith("//")) return "/launch";
+  return from;
+}
+
 function SignInForm() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -28,7 +38,7 @@ function SignInForm() {
   useEffect(() => {
     if (searchParams.get("registered") === "1") {
       setSuccessMsg(
-        "Your registration is under review. You will receive your login credentials by email once approved.",
+        "Account created — check your email for your password.",
       );
     } else if (searchParams.get("timeout") === "1") {
       setWarningMsg("Your session expired due to inactivity. Please sign in again.");
@@ -42,7 +52,7 @@ function SignInForm() {
       email,
       password,
       redirect: false,
-      callbackUrl: "/launch",
+      callbackUrl: safeCallbackUrl(searchParams.get("from")),
     });
     if (result?.error) {
       const msg = result.error;

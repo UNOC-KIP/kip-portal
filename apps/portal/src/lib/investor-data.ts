@@ -7,6 +7,7 @@ import {
   ApplicationWindow,
   Payment,
   ReviewAction,
+  SiteVisitBooking,
 } from "@kip/db";
 import { ApplicationWindowStatus, ReviewActionType, UserRole } from "@kip/shared";
 import type { StatusVariant } from "@/components/status-badge";
@@ -116,6 +117,51 @@ export type ApplicationDetail = {
   auditTrail: { time: string; text: string; actor: string }[]
 }
 
+export type SiteVisitBookingView = {
+  id: string
+  zone: string
+  landUse: string
+  description: string
+  acres: number
+  status: string
+  scheduledAt: string | null
+  createdAt: string
+}
+
+/** Badge variant for a site-visit booking status. */
+export function siteVisitBadgeProps(status: string): { variant: StatusVariant; label: string } {
+  switch (status) {
+    case "NEW":       return { variant: "status-pending",  label: "Awaiting Scheduling" };
+    case "SCHEDULED": return { variant: "window-active",   label: "Visit Scheduled" };
+    case "COMPLETED": return { variant: "tc-approved",     label: "Visit Completed" };
+    case "CANCELLED": return { variant: "window-closed",   label: "Cancelled" };
+    default:          return { variant: "eoi-draft",       label: status };
+  }
+}
+
+/**
+ * The investor's most recent site-visit request, if any. Reads go direct to
+ * the DB; the booking itself is created through the Express API.
+ */
+export async function getSiteVisitBooking(userId: string): Promise<SiteVisitBookingView | null> {
+  const booking = await SiteVisitBooking.findOne({
+    where: { userId },
+    order: [["createdAt", "DESC"]],
+  });
+  if (!booking) return null;
+
+  return {
+    id: booking.id,
+    zone: booking.zone,
+    landUse: booking.landUse,
+    description: booking.description,
+    acres: booking.acres,
+    status: booking.status,
+    scheduledAt: booking.scheduledAt?.toISOString() ?? null,
+    createdAt: booking.createdAt.toISOString(),
+  };
+}
+
 // ─── Dashboard data ───────────────────────────────────────────────────────────
 
 export async function getInvestorDashboardData(userId: string): Promise<DashboardData> {
@@ -126,9 +172,19 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
     ApplicationWindow.findOne({
       where: { status: ApplicationWindowStatus.OPEN },
       order: [["openAt", "DESC"]],
-      attributes: ["name", "closeAt"],
+      attributes: ["name", "openAt", "closeAt"],
     }),
   ]);
+
+  // A window is only actually open for applications when `now` is inside its
+  // range — status OPEN alone is not enough (a stale window can be past its
+  // closeAt). Treating an out-of-range window as open renders the EOI journey
+  // prematurely and shows a negative-days countdown.
+  const now = new Date();
+  const windowIsOpen =
+    activeWindow != null &&
+    now >= activeWindow.openAt &&
+    now <= activeWindow.closeAt;
 
   const app = await Application.findOne({
     where: { ownerUserId: userId },
@@ -177,8 +233,8 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
           paymentConfirmedAt: payment?.confirmedAt?.toISOString() ?? null,
         }
       : null,
-    windowCloseAt: activeWindow?.closeAt.toISOString() ?? null,
-    windowName:    activeWindow?.name ?? null,
+    windowCloseAt: windowIsOpen ? activeWindow!.closeAt.toISOString() : null,
+    windowName:    windowIsOpen ? activeWindow!.name : null,
   } satisfies DashboardData;
 }
 

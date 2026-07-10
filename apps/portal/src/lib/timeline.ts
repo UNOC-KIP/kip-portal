@@ -9,6 +9,18 @@ export const EOI_CALL = {
   closesLabel: "2 September 2026",
 };
 
+/**
+ * Investor site-visit programme (EAT). Bookings stay open until the visits
+ * begin; the visits themselves run across the two-week window.
+ */
+export const SITE_VISIT = {
+  bookingClosesAt: "2026-07-29T00:00:00+03:00",
+  bookingClosesLabel: "29 July 2026",
+  visitsFromLabel: "29 July 2026",
+  visitsToLabel: "12 August 2026",
+  windowLabel: "29 July – 12 August 2026",
+};
+
 export type TimelineItem = {
   date: string;
   label: string;

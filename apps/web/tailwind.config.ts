@@ -2,7 +2,9 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   darkMode: ["class"],
-  content: ["./src/**/*.{ts,tsx}"],
+  // `packages/shared` carries Tailwind class names (KIP_ZONES[].color), so it
+  // must be scanned or those utilities get purged from the bundle.
+  content: ["./src/**/*.{ts,tsx}", "../../packages/shared/src/**/*.ts"],
   theme: {
     container: {
       center: true,

@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 
 export function DashboardTopbar() {
   const pathname = usePathname();
-  const isApplications = !pathname.includes("/documents");
+  const isApplications =
+    !pathname.includes("/documents") && !pathname.includes("/site-visit");
 
   return (
     <header className="flex items-center gap-2 border-b border-ink-300 bg-white py-3 pl-14 pr-4 sm:gap-4 md:px-6">

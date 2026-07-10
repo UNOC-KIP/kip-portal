@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   FolderOpen,
@@ -25,8 +26,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const INVESTOR_NAV = [
-  { icon: LayoutDashboard, href: "/dashboard",           label: "Overview" },
-  { icon: FolderOpen,      href: "/dashboard/documents", label: "Documents" },
+  { icon: LayoutDashboard, href: "/dashboard",            label: "Overview" },
+  { icon: CalendarDays,    href: "/dashboard/site-visit", label: "Site Visit" },
+  { icon: FolderOpen,      href: "/dashboard/documents",  label: "Documents" },
 ];
 
 function NavLink({

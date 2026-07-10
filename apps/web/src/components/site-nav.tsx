@@ -20,8 +20,8 @@ const NAV_LINKS = [
  * Floating, sticky site header.
  *
  * Auth-aware: shows role-appropriate CTA for signed-in users so clicking
- * "Apply Now" while already authenticated doesn't bounce them to /console.
- * Falls back to "Log in" + "Apply Now" for unauthenticated visitors.
+ * "Create Account" while already authenticated doesn't bounce them to /console.
+ * Falls back to "Log in" + "Create Account" for unauthenticated visitors.
  *
  * `bg` controls the strip behind the sticky bar (the bar itself is always black).
  */
@@ -81,7 +81,7 @@ export function SiteNav({ bg = "transparent" }: { bg?: "gold" | "white" | "trans
                   href="/sign-up"
                   className="rounded-[4px] bg-kip-gold px-3 py-2 text-[13px] font-bold text-black transition hover:brightness-105 sm:px-5"
                 >
-                  Apply Now
+                  Create Account
                 </Link>
               </>
             )}

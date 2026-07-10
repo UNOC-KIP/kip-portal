@@ -61,7 +61,7 @@ export default function ForInvestorsPage() {
             Uganda&apos;s flagship petroleum-integrated industrial park offers serviced land, subsidised priority-industry rates, and direct access to the refinery and EACOP infrastructure.
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
-            <Link href="/sign-up" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Apply Now</Link>
+            <Link href="/sign-up" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Create Account</Link>
             <Link href="/how-it-works" className="rounded-[4px] border-2 border-black/70 px-7 py-3 text-[14px] font-bold text-black transition hover:bg-black/10">How it works</Link>
           </div>
         </div>
@@ -213,7 +213,7 @@ export default function ForInvestorsPage() {
               <h3 className="text-[24px] font-extrabold leading-snug">Call for EOIs opens<br /><span className="text-kip-gold">19 August 2026.</span></h3>
               <p className="mt-4 text-[14px] leading-relaxed text-white/70">Don&apos;t miss Phase 2 of the Kabalega Industrial Park onboarding. Register now and submit your Expression of Interest between 19 August and 2 September 2026.</p>
               <div className="mt-8 space-y-3">
-                <Link href="/sign-up" className="flex w-full items-center justify-between rounded-[4px] bg-kip-gold px-6 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Start Application <ArrowRight size={16} /></Link>
+                <Link href="/dashboard/site-visit" className="flex w-full items-center justify-between rounded-[4px] bg-kip-gold px-6 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Book Site Visit <ArrowRight size={16} /></Link>
                 <Link href="/how-it-works" className="flex w-full items-center justify-between rounded-[4px] border border-white/20 px-6 py-3 text-[14px] font-semibold text-white transition hover:border-white">Learn how it works <ArrowRight size={16} /></Link>
               </div>
             </div>
