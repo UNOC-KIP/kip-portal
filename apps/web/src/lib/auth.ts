@@ -3,6 +3,7 @@ import type { Adapter, AdapterUser, AdapterAccount, AdapterSession } from "next-
 import CredentialsProvider from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
 import { compare } from "bcryptjs";
+import { smtpTransportOptions } from "./smtp";
 import {
   User,
   Account,
@@ -169,16 +170,7 @@ export const authOptions: NextAuthOptions = {
   },
   providers: [
     EmailProvider({
-      server: {
-        host: process.env.EMAIL_SERVER_HOST,
-        port: Number(process.env.EMAIL_SERVER_PORT),
-        auth: process.env.EMAIL_SERVER_USER
-          ? {
-              user: process.env.EMAIL_SERVER_USER,
-              pass: process.env.EMAIL_SERVER_PASSWORD,
-            }
-          : undefined,
-      },
+      server: smtpTransportOptions(),
       from: process.env.EMAIL_FROM,
     }),
     CredentialsProvider({

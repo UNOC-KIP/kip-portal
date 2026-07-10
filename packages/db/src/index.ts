@@ -18,6 +18,7 @@ import { ClarificationRequest } from './models/clarification-request'
 import { Notification } from './models/notification'
 import { Inquiry } from './models/inquiry'
 import { NotifySignup } from './models/notify-signup'
+import { SiteVisitBooking } from './models/site-visit-booking'
 
 const globalForDb = globalThis as unknown as { sequelize: Sequelize | undefined }
 
@@ -62,6 +63,7 @@ ClarificationRequest.initModel(sequelize)
 Notification.initModel(sequelize)
 Inquiry.initModel(sequelize)
 NotifySignup.initModel(sequelize)
+SiteVisitBooking.initModel(sequelize)
 
 // ─── Associations ────────────────────────────────────────────────────────────
 
@@ -107,6 +109,11 @@ Notification.belongsTo(User, { foreignKey: 'userId' })
 User.hasMany(Inquiry, { foreignKey: 'respondedById', as: 'respondedInquiries' })
 Inquiry.belongsTo(User, { foreignKey: 'respondedById', as: 'respondedBy' })
 
+User.hasMany(SiteVisitBooking, { foreignKey: 'userId', as: 'siteVisitBookings' })
+SiteVisitBooking.belongsTo(User, { foreignKey: 'userId', as: 'user' })
+SiteVisitBooking.belongsTo(User, { foreignKey: 'handledById', as: 'handledBy' })
+SiteVisitBooking.belongsTo(InvestorOrg, { foreignKey: 'investorOrgId', as: 'investorOrg' })
+
 User.hasMany(Account, { foreignKey: 'userId', as: 'accounts' })
 Account.belongsTo(User, { foreignKey: 'userId', as: 'user' })
 
@@ -131,4 +138,5 @@ export {
   Notification,
   Inquiry,
   NotifySignup,
+  SiteVisitBooking,
 }

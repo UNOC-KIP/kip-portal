@@ -200,7 +200,7 @@ export default function AboutPage() {
             Greenfield Refinery, EACOP and Kabalega International Airport.
           </p>
           <div className="mt-8 flex flex-wrap gap-4">
-            <Link href="/sign-up" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Apply Now</Link>
+            <Link href="/sign-up" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Create Account</Link>
             <Link href="/land-map" className="rounded-[4px] border-2 border-black/70 px-7 py-3 text-[14px] font-bold text-black transition hover:bg-black/10">View Land Map</Link>
           </div>
         </div>
@@ -519,7 +519,7 @@ export default function AboutPage() {
             before the current window closes.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <Link href="/sign-up" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Start Your Application</Link>
+            <Link href="/dashboard/site-visit" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Book Site Visit</Link>
             <Link href="/contact" className="rounded-[4px] border border-white/30 px-7 py-3 text-[14px] font-bold text-white transition hover:border-white hover:bg-white hover:text-black">Talk to Us</Link>
           </div>
         </div>

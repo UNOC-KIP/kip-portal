@@ -77,7 +77,7 @@ export function SiteNav({ bg = "transparent" }: { bg?: "gold" | "white" | "trans
                   href="/sign-up"
                   className="rounded-[4px] bg-kip-gold px-3 py-2 text-[13px] font-bold text-black transition hover:brightness-105 sm:px-5"
                 >
-                  Apply Now
+                  Create Account
                 </Link>
               </>
             )}

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { z } from "zod";
+import { hash } from "bcryptjs";
 import { sequelize, User, InvestorOrg } from "@kip/db";
-import { CompanyType, BusinessSector } from "@kip/shared";
+import { CompanyType, BusinessSector, UserRole, UserStatus } from "@kip/shared";
 import { fireWebhook } from "@/lib/webhooks";
+import { credentialsEmail, portalUrl, sendMail } from "@/lib/mailer";
 
 const optionalText = (max: number, message: string) =>
   z
@@ -11,39 +14,26 @@ const optionalText = (max: number, message: string) =>
     .optional()
     .or(z.literal("").transform(() => undefined));
 
+/**
+ * Single-step registration. Company registration number, URSB number, TIN,
+ * registered address and the company contact block are collected later, during
+ * the EOI — their InvestorOrg columns stay nullable.
+ */
 const registerSchema = z.object({
-  // Step 1 — company identity & contact
+  // Company identity
   companyName: z
     .string()
     .min(2, "Company name must be at least 2 characters")
     .max(200, "Company name is too long"),
   tradingName: optionalText(200, "Trading name is too long"),
-  registrationNumber: z
-    .string()
-    .min(2, "Certificate of Incorporation / Registration No. is required")
-    .max(100, "Registration number is too long"),
-  ursbRegistrationNumber: optionalText(100, "URSB registration number is too long"),
   country: z.string().min(1, "Country is required"),
-  address: z
-    .string()
-    .min(5, "Registered office address is required")
-    .max(300, "Address is too long"),
-  tin: z
-    .string()
-    .min(3, "TIN must be at least 3 characters")
-    .max(50, "TIN is too long"),
   companyType: z.nativeEnum(CompanyType, {
     errorMap: () => ({ message: "Select a company type" }),
   }),
   businessSector: z.nativeEnum(BusinessSector, {
     errorMap: () => ({ message: "Select your primary sector" }),
   }),
-  companyEmail: z.string().email("Enter a valid company email address"),
-  companyPhone: z
-    .string()
-    .min(7, "Enter a valid company phone number")
-    .max(20, "Company phone number is too long"),
-  // Step 2 — authorized representative
+  // Authorized representative
   repName: z
     .string()
     .min(2, "Full name is required")
@@ -58,6 +48,11 @@ const registerSchema = z.object({
     .min(7, "Enter a valid phone number")
     .max(20, "Phone number is too long"),
 });
+
+/** Same shape as `generatePassword()` in apps/api/src/modules/users/users.service.ts */
+function generatePassword(): string {
+  return crypto.randomBytes(20).toString("base64url").slice(0, 20);
+}
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -86,6 +81,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Accounts self-activate — no admin approval gate. The generated password is
+  // emailed below and never persisted or forwarded in plaintext anywhere else.
+  const plainPassword = generatePassword();
+  const passwordHash = await hash(plainPassword, 12);
+
   let createdUser: User;
   try {
     ({ user: createdUser } = await sequelize.transaction(async (t) => {
@@ -93,15 +93,9 @@ export async function POST(req: NextRequest) {
         {
           legalName: data.companyName,
           tradingName: data.tradingName ?? null,
-          registrationNumber: data.registrationNumber,
-          ursbRegistrationNumber: data.ursbRegistrationNumber ?? null,
           companyType: data.companyType,
           businessSector: data.businessSector,
           countryOfIncorporation: data.country,
-          address: data.address,
-          tin: data.tin,
-          phone: data.companyPhone,
-          email: data.companyEmail.toLowerCase().trim(),
         },
         { transaction: t },
       );
@@ -111,9 +105,9 @@ export async function POST(req: NextRequest) {
           name: data.repName,
           designation: data.repDesignation,
           phone: data.repPhone,
-          passwordHash: null,
-          status: "PENDING_REVIEW",
-          role: "INVESTOR",
+          passwordHash,
+          status: UserStatus.ACTIVE,
+          role: UserRole.INVESTOR,
           investorOrgId: org.id,
         },
         { transaction: t },
@@ -131,25 +125,40 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
+  // Best-effort — the account is already committed, so a mail failure must not
+  // fail the request. The response tells the UI whether to promise an email.
+  let emailSent = true;
+  try {
+    await sendMail({
+      to: normalizedRepEmail,
+      subject: "Your KIP Investor Portal account",
+      html: credentialsEmail({
+        companyName: data.companyName,
+        email: normalizedRepEmail,
+        tempPassword: plainPassword,
+        portalUrl: portalUrl(),
+      }),
+    });
+  } catch (err) {
+    emailSent = false;
+    console.error("[register] failed to send credentials email", err);
+  }
+
+  // Never include the generated password in the webhook payload.
   fireWebhook("investor-registered", {
     userId: createdUser.id,
     email: normalizedRepEmail,
     companyName: data.companyName,
     tradingName: data.tradingName ?? null,
-    registrationNumber: data.registrationNumber,
-    ursbRegistrationNumber: data.ursbRegistrationNumber ?? null,
     companyType: data.companyType,
     businessSector: data.businessSector,
     country: data.country,
-    address: data.address,
-    tin: data.tin,
-    companyEmail: data.companyEmail.toLowerCase().trim(),
-    companyPhone: data.companyPhone,
     repName: data.repName,
     repDesignation: data.repDesignation,
     repPhone: data.repPhone,
     registeredAt: new Date().toISOString(),
+    activatedAt: new Date().toISOString(),
   }).catch(() => {});
 
-  return NextResponse.json({ ok: true }, { status: 201 });
+  return NextResponse.json({ ok: true, emailSent }, { status: 201 });
 }

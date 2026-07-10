@@ -1,5 +1,5 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 8 July 2026. Update this file in the same commit as any architectural change.
+> Last updated: 10 July 2026. Update this file in the same commit as any architectural change.
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
 ---
@@ -35,10 +35,10 @@ kip-portal/
 │           ├── env.ts, errors.ts, server.ts, webhooks.ts
 ├── packages/
 │   ├── db/           @kip/db — Sequelize 6, compiled to dist/ (run pnpm db:build after changes)
-│   │   ├── src/models/        13 model files
+│   │   ├── src/models/        14 model files
 │   │   ├── migrations/        umzug TypeScript migrations
 │   │   └── seed.ts            Raw pg seed, idempotent
-│   └── shared/       @kip/shared — enums.ts (source of truth) + Zod schemas
+│   └── shared/       @kip/shared — enums.ts + zones.ts (source of truth) + Zod schemas
 ├── docker-compose.yml
 └── .env
 ```
@@ -60,7 +60,7 @@ kip-portal/
 | Database | PostgreSQL 16 — local Docker port **5433** |
 | Auth | NextAuth.js — Email magic link + Credentials (JWT strategy) |
 | File storage | S3-compatible — presigned PUT/GET URLs |
-| Email | MailHog (local, SMTP 1025, UI 8025) → AWS SES (prod) via n8n |
+| Email | Office 365 SMTP (`smtp.office365.com:587`, `Support.Kip@unoc.com`) — MailHog (SMTP 1025, UI 8025) still available for offline dev |
 | Automation | n8n port 5678 — notifications, SLA watchdogs, AI screening |
 | Hosting | AWS ap-south-1: EC2 + RDS + S3 + CloudFront + Route 53 |
 
@@ -85,6 +85,10 @@ API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the Ne
 
 **Always include `UserRole.ADMIN` in `requireRole(...)` calls.**
 
+**Investor registration self-activates.** `POST /api/register` (portal) creates the `InvestorOrg` + `User` with **`status = ACTIVE`**, generates a random password, bcrypt-hashes it, and emails the plaintext straight to the authorized representative. There is no admin approval gate — this was removed to shorten time-to-portal-access. `POST /users/:id/approve` and `/reject` remain in the API for legacy `PENDING_REVIEW` rows and for deactivating accounts; `approveUser` throws `Conflict` on an already-`ACTIVE` user. The `authorize()` guard still blocks `REJECTED` and `PENDING_REVIEW` sign-ins.
+
+**Never put a generated password in a webhook payload from the register route.** (`investor-approved` still carries `generatedPassword` for the legacy admin-approval path.)
+
 ---
 
 ## Access control (RBAC)
@@ -104,6 +108,7 @@ Two layers per portal, each with its own policy file:
 | App | Area | Path | Allowed roles |
 |---|---|---|---|
 | portal | Investor dashboard | `/dashboard/*` | `INVESTOR` |
+| portal | Site-visit booking | `/dashboard/site-visit` | `INVESTOR` |
 | web | Admin console | `/console/*` (non-TC) | `ADMIN` |
 | web | TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
 | both | Post-login router | `/launch` | any authenticated |
@@ -201,6 +206,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Notification` | in-app + email records |
 | `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
 | `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
+| `SiteVisitBooking` | investor site-visit request — `zone (KipZone, TEXT)`, `landUse`, `description TEXT`, `acres INTEGER` (CHECK 1–100), `status (SiteVisitStatus)`, `scheduledAt`, `handledById` → User; tracked in `/console/site-visits` |
 
 **Enums** (`packages/shared/src/enums.ts` — source of truth):
 - `UserRole`: `INVESTOR | TC_MEMBER | TC_CHAIR | LAC_MEMBER | EXCO_MEMBER | ADMIN`
@@ -217,7 +223,12 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `BusinessSector`: `PETROCHEMICALS_REFINING | FERTILISERS_CHEMICALS | LIGHT_MANUFACTURING | AGRO_PROCESSING | LOGISTICS_WAREHOUSING | COMMERCIAL_HOSPITALITY | ICT | OTHER`
 - `InquiryChannel`: `CONTACT_FORM | LIVE_CHAT`
 - `InquiryStatus`: `NEW | RESPONDED | CLOSED`
-- `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` / `INQUIRY_CHANNEL_LABELS` display-label maps live beside the enums
+- `SiteVisitStatus`: `NEW | SCHEDULED | COMPLETED | CANCELLED`
+- `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` / `INQUIRY_CHANNEL_LABELS` / `SITE_VISIT_STATUS_LABELS` display-label maps live beside the enums
+
+**Zones** (`packages/shared/src/zones.ts` — source of truth): `KipZone` = `HEAVY_INDUSTRIAL | LIGHT_DOWNSTREAM | AGRO_INDUSTRIAL | BUSINESS_COMMERCIAL | RESIDENTIAL_ESTATE | ADMINISTRATION`. `KIP_ZONES` carries each zone's label, legend colour, area, description, `investable` flag and `landUses[]`. Only the four `investable` zones are offered in the site-visit form (`INVESTABLE_ZONES`); the land map renders all six. Helpers: `landUsesForZone()`, `isInvestableZone()`, `KIP_ZONE_LABELS`, `SITE_VISIT_MIN_ACRES` / `SITE_VISIT_MAX_ACRES`.
+
+> `KIP_ZONES[].color` holds Tailwind classes, so `packages/shared/src/**/*.ts` is in the `content` glob of **both** apps' `tailwind.config.ts`. Removing it silently purges the zone swatches.
 
 ---
 
@@ -251,6 +262,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `users/` | `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject` (all ADMIN only) |
 | `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
+| `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `POST /:id/status` schedule/complete/cancel (ADMIN). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `health/` | complete |
 
 ---
@@ -268,7 +280,7 @@ Global error handler maps `AppError`, `ZodError`, Sequelize errors → `{ "error
 
 `fireWebhook(event, payload)` — `apps/api/src/webhooks.ts`. HMAC-SHA256 signed (`N8N_WEBHOOK_SECRET`). No-op when `N8N_BASE_URL` or `N8N_WEBHOOK_SECRET` absent. Fire **after** transaction commits, never before. Web mirror: `apps/web/src/lib/webhooks.ts`.
 
-Events: `investor-registered` (full company + rep profile; `email` = rep login email), `investor-approved` (includes `generatedPassword`), `investor-rejected`, `staff-invited` (includes `tempPassword`), `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`
+Events: `investor-registered` (company + rep profile, `activatedAt`; **never** carries the generated password), `investor-approved` (includes `generatedPassword` — legacy approval path only), `investor-rejected`, `staff-invited` (includes `tempPassword`), `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`, `site-visit-requested`
 
 **Omit `N8N_WEBHOOK_SECRET` from test `.env`** — setting it to `''` causes startup failure (Zod requires `min(8)` when key is present).
 
@@ -313,11 +325,11 @@ NEXTAUTH_URL=http://localhost:4000
 NEXTAUTH_SECRET=          # min 32 chars, must match API + investor portal
 NEXT_PUBLIC_API_URL=http://localhost:4001
 NEXT_PUBLIC_PORTAL_URL=http://localhost:4002   # investor portal URL — used to redirect INVESTOR role after login
-EMAIL_SERVER_HOST=localhost
-EMAIL_SERVER_PORT=1025
-EMAIL_SERVER_USER=
+EMAIL_SERVER_HOST=smtp.office365.com
+EMAIL_SERVER_PORT=587
+EMAIL_SERVER_USER=Support.Kip@unoc.com
 EMAIL_SERVER_PASSWORD=
-EMAIL_FROM=noreply@kip.local
+EMAIL_FROM="Support KIP <Support.Kip@unoc.com>"
 ```
 
 ### Investor portal (`apps/portal`) / NextAuth
@@ -326,14 +338,31 @@ EMAIL_FROM=noreply@kip.local
 NEXTAUTH_URL=http://localhost:4002
 NEXTAUTH_SECRET=          # min 32 chars, must match API + admin portal
 NEXT_PUBLIC_API_URL=http://localhost:4001
-EMAIL_SERVER_HOST=localhost
-EMAIL_SERVER_PORT=1025
-EMAIL_SERVER_USER=
+EMAIL_SERVER_HOST=smtp.office365.com
+EMAIL_SERVER_PORT=587
+EMAIL_SERVER_USER=Support.Kip@unoc.com
 EMAIL_SERVER_PASSWORD=
-EMAIL_FROM=noreply@kip.local
+EMAIL_FROM="Support KIP <Support.Kip@unoc.com>"
 ```
 
 Planned (not yet wired): `PAYMENT_GATEWAY_PUBLIC_KEY`, `PAYMENT_GATEWAY_SECRET_KEY`, `PAYMENT_GATEWAY_WEBHOOK_SECRET`.
+
+---
+
+## Email / SMTP
+
+All three apps send through one Office 365 mailbox, **`Support.Kip@unoc.com`** (display name "Support KIP").
+
+Connection options are built by `smtpTransportOptions()` — `apps/portal/src/lib/smtp.ts` and `apps/web/src/lib/smtp.ts`, mirrored inline in `apps/api/src/mailer.ts`. Every transport in the repo goes through it: the two NextAuth `EmailProvider`s, both `mailer.ts` modules, and the notify-me signup action.
+
+Rules and gotchas:
+
+- **Port 587 + STARTTLS.** `secure` is true only on 465; Office 365 submission does not offer implicit TLS. `requireTLS` is set whenever `EMAIL_SERVER_USER` is present, so a credentialed login can never silently downgrade to plaintext. MailHog advertises no STARTTLS, so leaving `EMAIL_SERVER_USER` blank keeps offline dev working.
+- **`EMAIL_FROM` must be the authenticated mailbox** (or a permitted *Send As* alias). Any other address is rejected with `5.7.60 Client does not have permissions to send as this sender`.
+- The mailbox needs **SMTP AUTH enabled** and must be exempt from MFA / security defaults. If Exchange later enforces MFA, basic auth breaks and the fix is OAuth2, not a new password.
+- **Throttle: ~30 messages/minute, 10,000 recipients/day.** Bulk sends (window-open blasts) must go through n8n/SES, not this mailbox.
+- In `deploy/.env.production`, write `EMAIL_FROM` **unquoted** — Compose `env_file` reads values literally and quotes would land in the header.
+- Auth can take several seconds on first connect; that is Exchange throttling, not a hang.
 
 ---
 
@@ -364,11 +393,12 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 
 | File | What it is |
 |---|---|
-| `packages/db/src/index.ts` | Sequelize singleton + 13 model inits + associations |
-| `packages/db/src/models/` | 13 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete) |
+| `packages/db/src/index.ts` | Sequelize singleton + 14 model inits + associations |
+| `packages/db/src/models/` | 14 model files |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
+| `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
 | `apps/api/src/errors.ts` | `AppError` + factory functions |
 | `apps/api/src/env.ts` | Zod-validated env |
@@ -379,6 +409,13 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/api/src/modules/applications/` | Draft, get, section update, submit |
 | `apps/api/src/modules/payments/` | Initiate payment |
 | `apps/api/src/modules/users/` | Approve + reject investor accounts |
+| `apps/api/src/modules/site-visits/` | Create / list / schedule site-visit bookings |
+| `apps/api/src/mailer.ts` | `sendMail()` + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail`, `siteVisitNotificationEmail` |
+| `apps/portal/src/lib/mailer.ts` | Portal-side `sendMail()` + `escapeHtml()` + `credentialsEmail` (registration). Shared transport for contact form + live chat |
+| `apps/portal/src/lib/smtp.ts` | `smtpTransportOptions()` — single source for the portal's SMTP options (mailer, NextAuth EmailProvider, notify-me action) |
+| `apps/web/src/lib/smtp.ts` | `smtpTransportOptions()` — same, for the admin app's NextAuth EmailProvider |
+| `apps/portal/src/app/(investor)/dashboard/site-visit/` | Investor booking form (zone → land use → description → acres slider) + booking status view |
+| `apps/web/src/app/(admin)/console/site-visits/` | Admin site-visit tracker — schedule / complete / cancel via `POST /site-visits/:id/status` |
 | `apps/web/src/lib/auth.ts` | NextAuth config — Email + Credentials, custom SequelizeAdapter |
 | `apps/web/src/lib/rbac.ts` | RBAC policy — single source for both middleware + server guards |
 | `apps/web/src/lib/format.ts` | Pure formatters (date/money) — deterministic, unit-tested |
@@ -397,7 +434,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/(admin)/console/windows/windows-client.tsx` | Windows page client shell with Create dialog |
 | `apps/web/src/app/(admin)/console/windows/create-window-dialog.tsx` | Create/edit window dialog |
 | `apps/web/src/app/(admin)/console/windows/window-actions.tsx` | Per-window open/close/archive action buttons |
-| `apps/portal/src/app/api/register/route.ts` | `POST /api/register` — two-step registration payload (company identity + authorized rep), creates InvestorOrg + User (PENDING_REVIEW), fires webhook. The web app's `/sign-up` redirects to the portal wizard |
+| `apps/portal/src/app/api/register/route.ts` | `POST /api/register` — one-step registration (company name/country/type/sector + authorized rep), creates InvestorOrg + User (**ACTIVE**), emails generated credentials, fires webhook. The web app's `/sign-up` redirects to the portal form |
 | `apps/portal/src/app/contact/page.tsx` | Public contact form — server action persists an `Inquiry` row, then best-effort email to kipinvestorrelations@unoc.com |
 | `apps/portal/src/app/api/inquiry/route.ts` | Live-chat widget endpoint — persists an `Inquiry` row (channel LIVE_CHAT), then best-effort email |
 | `apps/web/src/app/(admin)/console/inquiries/page.tsx` | Admin inquiries tracker — contact/chat inquiries + notify-me signup list, status actions via `POST /inquiries/:id/status` |
@@ -423,7 +460,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 - Two Vercel projects, one per app: `kip-portal` (admin, Root Directory `apps/web`) and `kip-portal-investor` (investor, Root Directory `apps/portal`). Both share the same Neon store and the same `NEXTAUTH_SECRET`.
 - `apps/web/vercel.json` / `apps/portal/vercel.json` — install/build commands. "Include source files outside of the Root Directory" must stay enabled (pnpm workspace). Only the **admin** build runs migrations + idempotent seed against `DATABASE_URL_UNPOOLED` (Neon marketplace env vars are *sensitive* — not pullable locally); the portal build just compiles `@kip/db` + `next build`.
 - Database: hosted Postgres (Neon, provisioned via Vercel Storage). TLS: `packages/db/src/ssl.ts` `databaseNeedsSsl()` — any non-local host gets TLS `dialectOptions` unless the URL says `sslmode=disable`; local Docker URLs are unaffected.
-- Read-only demo: the Express API (`apps/api`) is **not** deployed — admin mutation buttons (approve/reject, invite staff, window actions, bank-transfer confirm) will fail. Reads work because the web app queries the DB directly.
+- Read-only demo: the Express API (`apps/api`) is **not** deployed — admin mutation buttons (approve/reject, invite staff, window actions, bank-transfer confirm) and **investor site-visit booking** will fail. Reads work because both apps query the DB directly. Registration still works: it's a portal route handler, not an API call.
 - Required Vercel env vars: `DATABASE_URL`, `NEXTAUTH_URL` (the Vercel URL), `NEXTAUTH_SECRET`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_URL`. Email magic link + contact form need SMTP and are non-functional on the demo; credentials sign-in works.
 
 ---
@@ -497,6 +534,12 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Hardcode role strings in pages — import from `lib/rbac.ts`
 - Implement MTN MoMo or Airtel Money — out of scope
 - Expose AI screening data to INVESTOR role
+- Send a generated password through a webhook from the register route
+- Interpolate user input into email HTML unescaped — use `escapeHtml()` from the app's `mailer.ts`
+- Build a nodemailer transport by hand — call `smtpTransportOptions()` so STARTTLS stays enforced
+- Set `EMAIL_FROM` to anything but the authenticated mailbox or a Send As alias — Exchange rejects it with 5.7.60
+- Commit the `Support.Kip@unoc.com` password — it lives only in gitignored `.env` files and `/opt/kip/.env.production`
+- Re-introduce an admin approval gate on investor registration (removed 10 July 2026)
 - Edit `packages/db/dist/` — generated by `pnpm db:build`
 - Use npm or yarn — pnpm only
 - Update CLAUDE.md as a follow-up — same commit as the code change

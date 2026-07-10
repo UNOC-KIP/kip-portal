@@ -20,6 +20,7 @@ import {
   NotifySignup,
   Payment,
   ReviewAction,
+  SiteVisitBooking,
   User,
 } from "@kip/db";
 import {
@@ -42,6 +43,7 @@ import {
   toApplicationRow,
   toInquiryRow,
   toNotifySignupRow,
+  toSiteVisitRow,
   toStaffRow,
   toTcAppRow,
   toTransferRow,
@@ -51,6 +53,7 @@ import {
   type ApplicationRow,
   type InquiryRow,
   type NotifySignupRow,
+  type SiteVisitRow,
   type StaffRow,
   type TcAppRow,
   type TransferRow,
@@ -467,6 +470,54 @@ export async function getInquiriesView(): Promise<InquiriesView> {
     inquiries: inquiryRows,
     signups: signups.map((s) => toNotifySignupRow({ id: s.id, email: s.email, createdAt: s.createdAt })),
     newCount: inquiryRows.filter((i) => i.rawStatus === "NEW").length,
+  };
+}
+
+// ─── Site visit bookings ─────────────────────────────────────────────────────
+
+export type SiteVisitsView = {
+  bookings: SiteVisitRow[];
+  newCount: number;
+  scheduledCount: number;
+};
+
+export async function getSiteVisitsView(): Promise<SiteVisitsView> {
+  const rows = await SiteVisitBooking.findAll({
+    include: [
+      { model: User, as: "user", attributes: ["name", "email"], required: false },
+      { model: User, as: "handledBy", attributes: ["name", "email"], required: false },
+      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"], required: false },
+    ],
+    order: [["createdAt", "DESC"]],
+    limit: 500,
+  });
+
+  const bookings = rows.map((row) => {
+    const b = row as SiteVisitBooking & {
+      user?: User;
+      handledBy?: User;
+      investorOrg?: InvestorOrg;
+    };
+    return toSiteVisitRow({
+      id: b.id,
+      companyName: b.investorOrg?.legalName ?? null,
+      contactName: b.user?.name ?? null,
+      contactEmail: b.user?.email ?? "—",
+      zone: b.zone,
+      landUse: b.landUse,
+      description: b.description,
+      acres: b.acres,
+      rawStatus: b.status,
+      handledByName: b.handledBy?.name ?? b.handledBy?.email ?? null,
+      scheduledAt: b.scheduledAt ?? null,
+      createdAt: b.createdAt,
+    });
+  });
+
+  return {
+    bookings,
+    newCount: bookings.filter((b) => b.rawStatus === "NEW").length,
+    scheduledCount: bookings.filter((b) => b.rawStatus === "SCHEDULED").length,
   };
 }
 

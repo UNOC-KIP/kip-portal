@@ -13,7 +13,8 @@ export type WebhookEvent =
   | "exco-decision"
   | "clarification-requested"
   | "window-closed"
-  | "staff-invited";
+  | "staff-invited"
+  | "site-visit-requested";
 
 /**
  * Fire an outbound n8n webhook. Non-blocking — errors are logged but never

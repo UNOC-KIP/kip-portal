@@ -13,12 +13,6 @@ const COUNTRIES = [
 
 type FieldErrors = Partial<Record<string, string[]>>;
 
-const STEP1_FIELDS = [
-  "companyName", "tradingName", "registrationNumber", "ursbRegistrationNumber",
-  "country", "address", "tin", "companyType", "businessSector",
-  "companyEmail", "companyPhone",
-] as const;
-
 function inputCls(hasError: boolean) {
   return `block w-full rounded-md border ${
     hasError ? "border-red-400 ring-1 ring-red-200" : "border-ink-300"
@@ -47,19 +41,12 @@ function Field({
 }
 
 export default function SignUpPage() {
-  const [step, setStep] = useState<1 | 2>(1);
   const [form, setForm] = useState({
     companyName: "",
     tradingName: "",
-    registrationNumber: "",
-    ursbRegistrationNumber: "",
     country: "Uganda",
-    address: "",
-    tin: "",
     companyType: "",
     businessSector: "",
-    companyEmail: "",
-    companyPhone: "",
     repName: "",
     repDesignation: "",
     repEmail: "",
@@ -69,6 +56,7 @@ export default function SignUpPage() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [submitted, setSubmitted] = useState(false);
+  const [emailSent, setEmailSent] = useState(true);
 
   function set(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -78,31 +66,16 @@ export default function SignUpPage() {
 
   const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-  function validateStep1(): FieldErrors {
+  function validate(): FieldErrors {
     const errs: FieldErrors = {};
     if (form.companyName.trim().length < 2)
       errs.companyName = ["Company name must be at least 2 characters"];
-    if (form.registrationNumber.trim().length < 2)
-      errs.registrationNumber = ["Certificate of Incorporation / Registration No. is required"];
     if (!form.country)
       errs.country = ["Country is required"];
-    if (form.address.trim().length < 5)
-      errs.address = ["Registered office address is required"];
-    if (form.tin.trim().length < 3)
-      errs.tin = ["TIN must be at least 3 characters"];
     if (!form.companyType)
       errs.companyType = ["Select a company type"];
     if (!form.businessSector)
       errs.businessSector = ["Select your primary sector"];
-    if (!isEmail(form.companyEmail))
-      errs.companyEmail = ["Enter a valid company email address"];
-    if (form.companyPhone.trim().length < 7)
-      errs.companyPhone = ["Enter a valid company phone number"];
-    return errs;
-  }
-
-  function validateStep2(): FieldErrors {
-    const errs: FieldErrors = {};
     if (form.repName.trim().length < 2)
       errs.repName = ["Full name is required"];
     if (form.repDesignation.trim().length < 2)
@@ -116,27 +89,13 @@ export default function SignUpPage() {
 
   function showErrors(errs: FieldErrors) {
     setFieldErrors(errs);
-    // If any errored field belongs to step 1, jump back so the user can see it.
-    if (Object.keys(errs).some((k) => (STEP1_FIELDS as readonly string[]).includes(k))) {
-      setStep(1);
-    }
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function handleContinue() {
-    const errs = validateStep1();
-    if (Object.keys(errs).length > 0) {
-      setFieldErrors(errs);
-      return;
-    }
-    setStep(2);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    const errs = { ...validateStep1(), ...validateStep2() };
+    const errs = validate();
     if (Object.keys(errs).length > 0) {
       showErrors(errs);
       return;
@@ -150,15 +109,9 @@ export default function SignUpPage() {
         body: JSON.stringify({
           companyName: form.companyName.trim(),
           tradingName: form.tradingName.trim(),
-          registrationNumber: form.registrationNumber.trim(),
-          ursbRegistrationNumber: form.ursbRegistrationNumber.trim(),
           country: form.country,
-          address: form.address.trim(),
-          tin: form.tin.trim(),
           companyType: form.companyType,
           businessSector: form.businessSector,
-          companyEmail: form.companyEmail.trim(),
-          companyPhone: form.companyPhone.trim(),
           repName: form.repName.trim(),
           repDesignation: form.repDesignation.trim(),
           repEmail: form.repEmail.trim(),
@@ -167,6 +120,8 @@ export default function SignUpPage() {
       });
 
       if (res.status === 201) {
+        const data = await res.json() as { emailSent?: boolean };
+        setEmailSent(data.emailSent !== false);
         setSubmitted(true);
         return;
       }
@@ -194,7 +149,7 @@ export default function SignUpPage() {
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/15 bg-white/50 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
               <span className="h-1.5 w-1.5 rounded-full bg-kip-red" />
-              Register Account
+              Create Account
             </div>
             <h1 className="text-[28px] sm:text-[36px] font-extrabold tracking-tight text-black">
               Already registered?
@@ -220,282 +175,182 @@ export default function SignUpPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <h2 className="text-2xl font-bold text-ink-900">Registration Submitted</h2>
-                <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-500">
-                  Your registration has been submitted for review. Our team will verify your
-                  company information and send login credentials to{" "}
-                  <strong className="text-ink-800">{form.repEmail}</strong> once your account is approved.
-                </p>
-                <p className="mt-4 text-xs text-ink-400">
-                  This process typically takes 2–5 business days.
-                </p>
+                <h2 className="text-2xl font-bold text-ink-900">Account Created</h2>
+                {emailSent ? (
+                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-500">
+                    We&apos;ve emailed your login credentials to{" "}
+                    <strong className="text-ink-800">{form.repEmail}</strong>. Check your
+                    inbox (and spam folder) to sign in and book your site visit.
+                  </p>
+                ) : (
+                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-500">
+                    Your account is ready, but we couldn&apos;t deliver the credentials email
+                    to <strong className="text-ink-800">{form.repEmail}</strong>. Please
+                    contact the KIP secretariat at{" "}
+                    <a href="mailto:kipinvestorrelations@unoc.com" className="font-medium underline">
+                      kipinvestorrelations@unoc.com
+                    </a>{" "}
+                    to receive your password.
+                  </p>
+                )}
                 <Link
-                  href="/"
-                  className="mt-8 rounded-md border border-ink-300 px-6 py-2.5 text-sm font-medium text-ink-700 transition hover:bg-ink-50"
+                  href="/sign-in"
+                  className="mt-8 rounded-md bg-brand-400 px-6 py-2.5 text-sm font-bold text-black transition hover:bg-brand-300"
                 >
-                  Return to home
+                  Sign in
                 </Link>
               </div>
             ) : (
               <>
-                <div className="mb-6 flex items-center gap-3">
-                  <div className="h-0.5 w-8 rounded-full bg-ink-900" />
-                  <div className={`h-0.5 w-8 rounded-full ${step === 2 ? "bg-ink-900" : "bg-ink-300"}`} />
-                  <span className="text-xs text-ink-500">Step {step} of 2</span>
-                </div>
-
-                <h2 className="text-2xl font-bold">
-                  {step === 1 ? "Create your investor account" : "Authorized representative"}
-                </h2>
+                <h2 className="text-2xl font-bold">Create your investor account</h2>
                 <p className="mt-1 text-sm text-ink-500">
-                  {step === 1
-                    ? "Register to begin your KIP land allocation application. Our team will review your details and send you login credentials once approved."
-                    : "Tell us who will manage this account and act on behalf of the company."}
+                  Register to book a site visit and be ready when the EOI window opens.
+                  Your login credentials will be emailed to you immediately.
                 </p>
 
                 <form onSubmit={handleSubmit} className="mt-8 space-y-8" noValidate>
-                  {step === 1 && (
-                    <>
-                      <div>
-                        <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
-                          Company Identity &amp; Legal Status
-                        </h3>
-                        <div className="space-y-4">
-                          <Field label="Registered Company Name *" error={fieldErrors.companyName?.[0]}>
-                            <input
-                              required
-                              placeholder="Nile Industries Limited"
-                              value={form.companyName}
-                              onChange={(e) => set("companyName", e.target.value)}
-                              className={inputCls(!!fieldErrors.companyName)}
-                            />
-                          </Field>
-                          <Field
-                            label="Trading Name (if different)"
-                            error={fieldErrors.tradingName?.[0]}
-                          >
-                            <input
-                              placeholder="Nile Industries"
-                              value={form.tradingName}
-                              onChange={(e) => set("tradingName", e.target.value)}
-                              className={inputCls(!!fieldErrors.tradingName)}
-                            />
-                          </Field>
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <Field
-                              label="Certificate of Incorporation / Registration No. *"
-                              error={fieldErrors.registrationNumber?.[0]}
-                            >
-                              <input
-                                required
-                                placeholder="80020001234"
-                                value={form.registrationNumber}
-                                onChange={(e) => set("registrationNumber", e.target.value)}
-                                className={inputCls(!!fieldErrors.registrationNumber)}
-                              />
-                            </Field>
-                            <Field
-                              label="URSB Registration No."
-                              hint="For Ugandan-registered entities, if different"
-                              error={fieldErrors.ursbRegistrationNumber?.[0]}
-                            >
-                              <input
-                                placeholder="URSB-80020001234"
-                                value={form.ursbRegistrationNumber}
-                                onChange={(e) => set("ursbRegistrationNumber", e.target.value)}
-                                className={inputCls(!!fieldErrors.ursbRegistrationNumber)}
-                              />
-                            </Field>
-                          </div>
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <Field label="Country of Incorporation *" error={fieldErrors.country?.[0]}>
-                              <select
-                                required
-                                value={form.country}
-                                onChange={(e) => set("country", e.target.value)}
-                                className={inputCls(!!fieldErrors.country)}
-                              >
-                                {COUNTRIES.map((c) => (
-                                  <option key={c}>{c}</option>
-                                ))}
-                              </select>
-                            </Field>
-                            <Field label="Tax Identification Number (TIN) *" error={fieldErrors.tin?.[0]}>
-                              <input
-                                required
-                                placeholder="1000234567"
-                                value={form.tin}
-                                onChange={(e) => set("tin", e.target.value)}
-                                className={inputCls(!!fieldErrors.tin)}
-                              />
-                            </Field>
-                          </div>
-                          <Field label="Registered Office Address *" error={fieldErrors.address?.[0]}>
-                            <input
-                              required
-                              placeholder="Plot 15, Jinja Road, Kampala, Uganda"
-                              value={form.address}
-                              onChange={(e) => set("address", e.target.value)}
-                              className={inputCls(!!fieldErrors.address)}
-                            />
-                          </Field>
-                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <Field label="Company Type *" error={fieldErrors.companyType?.[0]}>
-                              <select
-                                required
-                                value={form.companyType}
-                                onChange={(e) => set("companyType", e.target.value)}
-                                className={inputCls(!!fieldErrors.companyType)}
-                              >
-                                <option value="" disabled>Select company type…</option>
-                                {Object.entries(COMPANY_TYPE_LABELS).map(([value, label]) => (
-                                  <option key={value} value={value}>{label}</option>
-                                ))}
-                              </select>
-                            </Field>
-                            <Field label="Primary Sector *" error={fieldErrors.businessSector?.[0]}>
-                              <select
-                                required
-                                value={form.businessSector}
-                                onChange={(e) => set("businessSector", e.target.value)}
-                                className={inputCls(!!fieldErrors.businessSector)}
-                              >
-                                <option value="" disabled>Select primary sector…</option>
-                                {Object.entries(BUSINESS_SECTOR_LABELS).map(([value, label]) => (
-                                  <option key={value} value={value}>{label}</option>
-                                ))}
-                              </select>
-                            </Field>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
-                          Company Contact
-                        </h3>
-                        <div className="space-y-4">
-                          <Field label="Company Official Email *" error={fieldErrors.companyEmail?.[0]}>
-                            <input
-                              type="email"
-                              required
-                              placeholder="info@nileindustries.ug"
-                              value={form.companyEmail}
-                              onChange={(e) => set("companyEmail", e.target.value)}
-                              className={inputCls(!!fieldErrors.companyEmail)}
-                            />
-                          </Field>
-                          <Field label="Company Official Phone *" error={fieldErrors.companyPhone?.[0]}>
-                            <input
-                              type="tel"
-                              required
-                              placeholder="+256 414 700 001"
-                              value={form.companyPhone}
-                              onChange={(e) => set("companyPhone", e.target.value)}
-                              className={inputCls(!!fieldErrors.companyPhone)}
-                            />
-                          </Field>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleContinue}
-                        className="w-full rounded-md bg-brand-400 py-3 text-sm font-bold text-black transition hover:bg-brand-300"
+                  <div>
+                    <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
+                      Company Identity
+                    </h3>
+                    <div className="space-y-4">
+                      <Field label="Registered Company Name *" error={fieldErrors.companyName?.[0]}>
+                        <input
+                          required
+                          placeholder="Nile Industries Limited"
+                          value={form.companyName}
+                          onChange={(e) => set("companyName", e.target.value)}
+                          className={inputCls(!!fieldErrors.companyName)}
+                        />
+                      </Field>
+                      <Field
+                        label="Trading Name (if different)"
+                        error={fieldErrors.tradingName?.[0]}
                       >
-                        Continue
-                      </button>
-                    </>
-                  )}
-
-                  {step === 2 && (
-                    <>
-                      <div>
-                        <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
-                          Authorized Representative
-                        </h3>
-                        <div className="space-y-4">
-                          <Field label="Full Name *" error={fieldErrors.repName?.[0]}>
-                            <input
-                              required
-                              placeholder="Jane Mugisha"
-                              value={form.repName}
-                              onChange={(e) => set("repName", e.target.value)}
-                              className={inputCls(!!fieldErrors.repName)}
-                            />
-                          </Field>
-                          <Field label="Designation / Title *" error={fieldErrors.repDesignation?.[0]}>
-                            <input
-                              required
-                              placeholder="e.g. Managing Director"
-                              value={form.repDesignation}
-                              onChange={(e) => set("repDesignation", e.target.value)}
-                              className={inputCls(!!fieldErrors.repDesignation)}
-                            />
-                          </Field>
-                          <Field
-                            label="Email Address *"
-                            hint="This email becomes your login and receives your credentials once approved."
-                            error={fieldErrors.repEmail?.[0]}
+                        <input
+                          placeholder="Nile Industries"
+                          value={form.tradingName}
+                          onChange={(e) => set("tradingName", e.target.value)}
+                          className={inputCls(!!fieldErrors.tradingName)}
+                        />
+                      </Field>
+                      <Field label="Country of Incorporation *" error={fieldErrors.country?.[0]}>
+                        <select
+                          required
+                          value={form.country}
+                          onChange={(e) => set("country", e.target.value)}
+                          className={inputCls(!!fieldErrors.country)}
+                        >
+                          {COUNTRIES.map((c) => (
+                            <option key={c}>{c}</option>
+                          ))}
+                        </select>
+                      </Field>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <Field label="Company Type *" error={fieldErrors.companyType?.[0]}>
+                          <select
+                            required
+                            value={form.companyType}
+                            onChange={(e) => set("companyType", e.target.value)}
+                            className={inputCls(!!fieldErrors.companyType)}
                           >
-                            <input
-                              type="email"
-                              required
-                              placeholder="jane.mugisha@nileindustries.ug"
-                              value={form.repEmail}
-                              onChange={(e) => set("repEmail", e.target.value)}
-                              className={inputCls(!!fieldErrors.repEmail)}
-                            />
-                          </Field>
-                          <Field label="Phone Number *" error={fieldErrors.repPhone?.[0]}>
-                            <input
-                              type="tel"
-                              required
-                              placeholder="+256 772 100 200"
-                              value={form.repPhone}
-                              onChange={(e) => set("repPhone", e.target.value)}
-                              className={inputCls(!!fieldErrors.repPhone)}
-                            />
-                          </Field>
-                        </div>
+                            <option value="" disabled>Select company type…</option>
+                            {Object.entries(COMPANY_TYPE_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                        </Field>
+                        <Field label="Primary Sector *" error={fieldErrors.businessSector?.[0]}>
+                          <select
+                            required
+                            value={form.businessSector}
+                            onChange={(e) => set("businessSector", e.target.value)}
+                            className={inputCls(!!fieldErrors.businessSector)}
+                          >
+                            <option value="" disabled>Select primary sector…</option>
+                            {Object.entries(BUSINESS_SECTOR_LABELS).map(([value, label]) => (
+                              <option key={value} value={value}>{label}</option>
+                            ))}
+                          </select>
+                        </Field>
                       </div>
+                    </div>
+                  </div>
 
-                      {error && (
-                        <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
-                          {error}
-                        </p>
-                      )}
+                  <div>
+                    <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
+                      Authorized Representative
+                    </h3>
+                    <div className="space-y-4">
+                      <Field label="Full Name *" error={fieldErrors.repName?.[0]}>
+                        <input
+                          required
+                          placeholder="Jane Mugisha"
+                          value={form.repName}
+                          onChange={(e) => set("repName", e.target.value)}
+                          className={inputCls(!!fieldErrors.repName)}
+                        />
+                      </Field>
+                      <Field label="Designation / Title *" error={fieldErrors.repDesignation?.[0]}>
+                        <input
+                          required
+                          placeholder="e.g. Managing Director"
+                          value={form.repDesignation}
+                          onChange={(e) => set("repDesignation", e.target.value)}
+                          className={inputCls(!!fieldErrors.repDesignation)}
+                        />
+                      </Field>
+                      <Field
+                        label="Email Address *"
+                        hint="This email becomes your login. Your password will be sent here."
+                        error={fieldErrors.repEmail?.[0]}
+                      >
+                        <input
+                          type="email"
+                          required
+                          placeholder="jane.mugisha@nileindustries.ug"
+                          value={form.repEmail}
+                          onChange={(e) => set("repEmail", e.target.value)}
+                          className={inputCls(!!fieldErrors.repEmail)}
+                        />
+                      </Field>
+                      <Field label="Phone Number *" error={fieldErrors.repPhone?.[0]}>
+                        <input
+                          type="tel"
+                          required
+                          placeholder="+256 772 100 200"
+                          value={form.repPhone}
+                          onChange={(e) => set("repPhone", e.target.value)}
+                          className={inputCls(!!fieldErrors.repPhone)}
+                        />
+                      </Field>
+                    </div>
+                  </div>
 
-                      <div className="flex gap-2 rounded-md bg-brand-50 px-4 py-3 text-xs text-ink-700">
-                        <span className="mt-0.5 text-brand-600">ℹ</span>
-                        <span>
-                          The application fee of USD 1,000 is non-refundable. By creating an account
-                          you acknowledge the{" "}
-                          <Link href="/terms" className="font-semibold underline text-brand-700">
-                            UNOC Land Allocation Policy
-                          </Link>
-                          .
-                        </span>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setStep(1)}
-                          className="w-1/3 rounded-md border border-ink-300 py-3 text-sm font-medium text-ink-700 transition hover:bg-ink-50"
-                        >
-                          Back
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="w-2/3 rounded-md bg-brand-400 py-3 text-sm font-bold text-black transition hover:bg-brand-300 disabled:opacity-60"
-                        >
-                          {loading ? "Submitting…" : "Submit Registration"}
-                        </button>
-                      </div>
-                    </>
+                  {error && (
+                    <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
+                      {error}
+                    </p>
                   )}
+
+                  <div className="flex gap-2 rounded-md bg-brand-50 px-4 py-3 text-xs text-ink-700">
+                    <span className="mt-0.5 text-brand-600">ℹ</span>
+                    <span>
+                      By creating an account you acknowledge the{" "}
+                      <Link href="/terms" className="font-semibold underline text-brand-700">
+                        UNOC Land Allocation Policy
+                      </Link>
+                      .
+                    </span>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full rounded-md bg-brand-400 py-3 text-sm font-bold text-black transition hover:bg-brand-300 disabled:opacity-60"
+                  >
+                    {loading ? "Creating account…" : "Create Account"}
+                  </button>
                 </form>
               </>
             )}

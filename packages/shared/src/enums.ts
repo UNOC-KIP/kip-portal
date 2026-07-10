@@ -175,6 +175,22 @@ export const InquiryStatus = {
 } as const;
 export type InquiryStatus = (typeof InquiryStatus)[keyof typeof InquiryStatus];
 
+/** Follow-up state of an investor's site-visit booking request. */
+export const SiteVisitStatus = {
+  NEW:       "NEW",
+  SCHEDULED: "SCHEDULED",
+  COMPLETED: "COMPLETED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type SiteVisitStatus = (typeof SiteVisitStatus)[keyof typeof SiteVisitStatus];
+
+export const SITE_VISIT_STATUS_LABELS: Record<SiteVisitStatus, string> = {
+  NEW:       "New Request",
+  SCHEDULED: "Visit Scheduled",
+  COMPLETED: "Visit Completed",
+  CANCELLED: "Cancelled",
+};
+
 /** Application window lifecycle. */
 export const ApplicationWindowStatus = {
   DRAFT:    "DRAFT",

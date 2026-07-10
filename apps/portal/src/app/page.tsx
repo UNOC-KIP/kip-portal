@@ -16,8 +16,8 @@ import {
   Home as HomeIcon,
   Cpu,
 } from "lucide-react";
-import nodemailer from "nodemailer";
 import { NotifySignup } from "@kip/db";
+import { SECRETARIAT_EMAIL, escapeHtml, sendMail } from "@/lib/mailer";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { CountdownTimer } from "@/components/countdown-timer";
@@ -44,19 +44,10 @@ async function subscribeNotifications(formData: FormData) {
     // fall through to the email attempt
   }
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_SERVER_HOST || "localhost",
-      port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
-      secure: false,
-      auth: process.env.EMAIL_SERVER_USER
-        ? { user: process.env.EMAIL_SERVER_USER, pass: process.env.EMAIL_SERVER_PASSWORD }
-        : undefined,
-    });
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || "noreply@kip.local",
-      to: "kipinvestorrelations@unoc.com",
+    await sendMail({
+      to: SECRETARIAT_EMAIL,
       subject: "KIP Investor Portal: New Window Notification Signup",
-      html: `<p>Investor signed up for KIP window notifications: <strong>${email}</strong></p>`,
+      html: `<p>Investor signed up for KIP window notifications: <strong>${escapeHtml(email)}</strong></p>`,
     });
   } catch {
     // non-critical
@@ -171,10 +162,10 @@ export default async function HomePage({
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">
                 <Link
-                  href="/sign-up"
+                  href="/dashboard/site-visit"
                   className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110"
                 >
-                  Start Application
+                  Book Site Visit
                 </Link>
                 <Link
                   href="/land-map"
@@ -385,8 +376,8 @@ export default async function HomePage({
                 ))}
               </ul>
               <div className="mt-7">
-                <Link href="/sign-up" className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
-                  Start Application
+                <Link href="/dashboard/site-visit" className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
+                  Book Site Visit
                 </Link>
               </div>
             </div>

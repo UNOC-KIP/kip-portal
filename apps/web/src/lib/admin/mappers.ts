@@ -16,9 +16,12 @@ import {
   BUSINESS_SECTOR_LABELS,
   INQUIRY_CHANNEL_LABELS,
   InquiryStatus,
+  KIP_ZONES,
+  SITE_VISIT_STATUS_LABELS,
   type CompanyType,
   type BusinessSector,
   type InquiryChannel,
+  type SiteVisitStatus,
 } from "@kip/shared";
 import { formatDateTime, formatShortDate } from "../format";
 
@@ -389,6 +392,56 @@ export function toInquiryRow(i: {
     respondedBy: i.respondedByName ?? DASH,
     respondedAt: i.respondedAt ? formatDateTime(i.respondedAt) : DASH,
     receivedAt: formatDateTime(i.createdAt),
+  };
+}
+
+export type SiteVisitRow = {
+  id: string;
+  companyName: string;
+  contactName: string;
+  contactEmail: string;
+  zone: string;
+  zoneColor: string;
+  landUse: string;
+  description: string;
+  acresLabel: string;
+  status: string;
+  rawStatus: string;
+  handledBy: string;
+  scheduledAt: string;
+  requestedAt: string;
+};
+
+export function toSiteVisitRow(b: {
+  id: string;
+  companyName: string | null;
+  contactName: string | null;
+  contactEmail: string;
+  zone: string;
+  landUse: string;
+  description: string;
+  acres: number;
+  rawStatus: string;
+  handledByName: string | null;
+  scheduledAt: Date | string | null;
+  createdAt: Date | string;
+}): SiteVisitRow {
+  const zoneMeta = KIP_ZONES.find((z) => z.key === b.zone);
+  return {
+    id: b.id,
+    companyName: b.companyName ?? DASH,
+    contactName: b.contactName ?? DASH,
+    contactEmail: b.contactEmail,
+    zone: zoneMeta?.label ?? b.zone,
+    zoneColor: zoneMeta?.color ?? "bg-ink-300",
+    landUse: b.landUse,
+    description: b.description,
+    acresLabel: `${b.acres} acre${b.acres === 1 ? "" : "s"}`,
+    status: SITE_VISIT_STATUS_LABELS[b.rawStatus as SiteVisitStatus] ?? b.rawStatus,
+    rawStatus: b.rawStatus,
+    handledBy: b.handledByName ?? DASH,
+    scheduledAt: b.scheduledAt ? formatShortDate(b.scheduledAt) : DASH,
+    requestedAt: formatDateTime(b.createdAt),
   };
 }
 

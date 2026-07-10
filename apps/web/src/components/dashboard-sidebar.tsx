@@ -16,6 +16,7 @@ import {
   Settings,
   Smartphone,
   Users,
+  CalendarDays,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -45,6 +46,7 @@ const FULL_NAV = [
   { icon: BarChart2,      href: "/console/report",        label: "Reports" },
   { icon: Users,          href: "/console/users",         label: "Investors" },
   { icon: Inbox,          href: "/console/inquiries",     label: "Inquiries" },
+  { icon: CalendarDays,   href: "/console/site-visits",   label: "Site Visits" },
 ];
 
 const TC_NAV = [
