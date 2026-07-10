@@ -4,11 +4,15 @@ WORKDIR /repo
 
 RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 
-# NEXT_PUBLIC_* vars are baked into the client bundle at build time
+# NEXT_PUBLIC_* vars are baked into the client bundle at build time.
+# The `:-` default is a production safety net: if the build-arg arrives empty
+# (e.g. the GitHub Actions `vars.NEXT_PUBLIC_API_URL` variable is unset), we bake
+# the real prod origin instead of silently falling back to localhost. A build-arg
+# with a non-empty value still overrides it.
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_PORTAL_URL
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_PORTAL_URL=$NEXT_PUBLIC_PORTAL_URL
+ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://api.kip.unoc.com}
+ENV NEXT_PUBLIC_PORTAL_URL=${NEXT_PUBLIC_PORTAL_URL:-https://kip.unoc.com}
 
 # Copy workspace manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
