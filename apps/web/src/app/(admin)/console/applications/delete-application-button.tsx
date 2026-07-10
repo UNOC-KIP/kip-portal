@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
-import { apiUrl } from "@/lib/api";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 interface Props {
   applicationId: string;
@@ -27,7 +28,7 @@ export function DeleteApplicationButton({ applicationId, reference, company, red
     setDeleting(true);
     setError(null);
     try {
-      const res = await fetch(apiUrl(`/applications/${applicationId}`), {
+      const res = await fetch(`${API_BASE}/applications/${applicationId}`, {
         method: "DELETE",
         credentials: "include",
       });
