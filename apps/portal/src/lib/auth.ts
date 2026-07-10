@@ -133,8 +133,30 @@ function SequelizeAdapter(): Adapter {
 
 // ─── NextAuth config ──────────────────────────────────────────────────────────
 
+// Cross-subdomain session cookie. In production the investor portal
+// (kip.unoc.com) and the API (api.kip.unoc.com) are different subdomains, so the
+// browser only sends the session cookie to the API if it carries
+// Domain=.kip.unoc.com — set via COOKIE_DOMAIN. A distinct name per app keeps the
+// admin and investor portals from clobbering each other's cookie on the shared
+// parent domain. When COOKIE_DOMAIN is unset (local dev) the cookie stays
+// host-only, as before.
+const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
+const sessionCookieName = `${useSecureCookies ? "__Secure-" : ""}kip-investor.session-token`;
+
 export const authOptions: NextAuthOptions = {
   adapter: SequelizeAdapter(),
+  cookies: {
+    sessionToken: {
+      name: sessionCookieName,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+        domain: process.env.COOKIE_DOMAIN || undefined,
+      },
+    },
+  },
   session: {
     strategy: "jwt",
     maxAge: 8 * 60 * 60,
