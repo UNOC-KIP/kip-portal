@@ -81,6 +81,8 @@ API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the Ne
 
 **`NEXTAUTH_SECRET` must be identical across `apps/web`, `apps/portal`, and `apps/api`.**
 
+**Cross-subdomain session cookie.** In production the portals and API live on different subdomains (`portal.kip.unoc.com`, `kip.unoc.com`, `api.kip.unoc.com`), so browser `fetch` calls to the API only carry the session cookie if it has `Domain=.kip.unoc.com`. Set **`COOKIE_DOMAIN=.kip.unoc.com`** for both `apps/web` and `apps/portal` (runtime env; leave unset in local dev so the cookie stays host-only). Each app names its cookie distinctly to avoid clobbering on the shared domain — `kip-admin.session-token` (web) and `kip-investor.session-token` (portal), each `__Secure-`-prefixed under HTTPS. The API's `SESSION_COOKIE_NAMES` list must include both. Symptom when misconfigured: API returns 401 `Missing session token` on admin/investor actions.
+
 **Always include `UserRole.ADMIN` in `requireRole(...)` calls.**
 
 ---

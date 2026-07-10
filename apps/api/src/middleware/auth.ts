@@ -25,9 +25,16 @@ declare global {
   }
 }
 
+// Accept the NextAuth default names (local dev / older builds) plus the
+// per-app names the web + portal set in production so the cookie can be shared
+// across the *.kip.unoc.com subdomains (see COOKIE_DOMAIN in each app's auth.ts).
 const SESSION_COOKIE_NAMES = [
   "next-auth.session-token",
   "__Secure-next-auth.session-token",
+  "kip-admin.session-token",
+  "__Secure-kip-admin.session-token",
+  "kip-investor.session-token",
+  "__Secure-kip-investor.session-token",
 ];
 
 function extractToken(req: Request): string | null {
