@@ -5,12 +5,22 @@ import { allowedRolesForPath, homePathForRole, roleSatisfies } from "@/lib/rbac"
 
 const AUTH_PAGES = ["/sign-in", "/sign-up"];
 
+// Must match the custom session cookie name set in lib/auth.ts. getToken()
+// otherwise defaults to NextAuth's name and can't find our renamed cookie, so
+// every request looks unauthenticated → /dashboard redirect loop.
+const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
+const SESSION_COOKIE_NAME = `${useSecureCookies ? "__Secure-" : ""}kip-investor.session-token`;
+
 /**
  * Edge RBAC gate. Investor portal only — no /console routes.
  */
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    cookieName: SESSION_COOKIE_NAME,
+  });
   const role = token?.role;
 
   // Authenticated users should never sit on the sign-in/up pages.
