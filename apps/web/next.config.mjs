@@ -1,3 +1,18 @@
+// Fail the build if the API URL wasn't supplied. NEXT_PUBLIC_API_URL is inlined
+// into the browser bundle at build time (Dockerfile build-arg <- deploy.yml
+// `vars.NEXT_PUBLIC_API_URL`). If it's missing, admin actions silently fall back
+// to http://localhost:4001 and every mutation fails in the deployed browser.
+// Erroring here stops a URL-less image from ever shipping — you find out in CI,
+// not after a click in production. Only enforced for production builds so
+// `next dev` still works without it.
+if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL is not set for this production build. Set it to the API " +
+      "origin (e.g. https://api.kip.unoc.com) before `next build`. In CI this comes " +
+      "from the GitHub Actions variable NEXT_PUBLIC_API_URL, passed as a Docker build-arg.",
+  );
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
