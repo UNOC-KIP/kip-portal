@@ -14,11 +14,16 @@ function escapeHtml(s: string): string {
 const transport = nodemailer.createTransport({
   host: env.EMAIL_SERVER_HOST,
   port: env.EMAIL_SERVER_PORT,
-  secure: false,
+  // Office 365 submission is STARTTLS on 587; implicit TLS is 465 only.
+  secure: env.EMAIL_SERVER_PORT === 465,
+  // Never let a credentialed login fall back to plaintext. MailHog advertises
+  // no STARTTLS, so demand it only when there are credentials to protect.
+  requireTLS: Boolean(env.EMAIL_SERVER_USER),
   auth:
     env.EMAIL_SERVER_USER
       ? { user: env.EMAIL_SERVER_USER, pass: env.EMAIL_SERVER_PASSWORD ?? "" }
       : undefined,
+  tls: { minVersion: "TLSv1.2" },
 });
 
 export async function sendMail(opts: {

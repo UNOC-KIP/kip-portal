@@ -16,8 +16,8 @@ import {
   Home as HomeIcon,
   Cpu,
 } from "lucide-react";
-import nodemailer from "nodemailer";
 import { NotifySignup } from "@kip/db";
+import { SECRETARIAT_EMAIL, escapeHtml, sendMail } from "@/lib/mailer";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { CountdownTimer } from "@/components/countdown-timer";
@@ -44,19 +44,10 @@ async function subscribeNotifications(formData: FormData) {
     // fall through to the email attempt
   }
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_SERVER_HOST || "localhost",
-      port: parseInt(process.env.EMAIL_SERVER_PORT || "1025"),
-      secure: false,
-      auth: process.env.EMAIL_SERVER_USER
-        ? { user: process.env.EMAIL_SERVER_USER, pass: process.env.EMAIL_SERVER_PASSWORD }
-        : undefined,
-    });
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM || "noreply@kip.local",
-      to: "kipinvestorrelations@unoc.com",
+    await sendMail({
+      to: SECRETARIAT_EMAIL,
       subject: "KIP Investor Portal: New Window Notification Signup",
-      html: `<p>Investor signed up for KIP window notifications: <strong>${email}</strong></p>`,
+      html: `<p>Investor signed up for KIP window notifications: <strong>${escapeHtml(email)}</strong></p>`,
     });
   } catch {
     // non-critical

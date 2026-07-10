@@ -1,5 +1,6 @@
 import "server-only";
 import nodemailer from "nodemailer";
+import { smtpTransportOptions } from "./smtp";
 
 /**
  * Portal-side transactional email.
@@ -20,14 +21,7 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-const transport = nodemailer.createTransport({
-  host: process.env.EMAIL_SERVER_HOST || "localhost",
-  port: parseInt(process.env.EMAIL_SERVER_PORT || "1025", 10),
-  secure: false,
-  auth: process.env.EMAIL_SERVER_USER
-    ? { user: process.env.EMAIL_SERVER_USER, pass: process.env.EMAIL_SERVER_PASSWORD }
-    : undefined,
-});
+const transport = nodemailer.createTransport(smtpTransportOptions());
 
 export async function sendMail(opts: {
   to: string;
