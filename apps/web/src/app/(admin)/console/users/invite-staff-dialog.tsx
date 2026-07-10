@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { apiUrl } from "@/lib/api";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 const STAFF_ROLES = [
   { value: "ADMIN",        label: "Administrator" },
@@ -43,7 +44,7 @@ export function InviteStaffDialog({ open, onClose }: Props) {
     setError(null);
 
     try {
-      const res = await fetch(apiUrl("/users/staff"), {
+      const res = await fetch(`${API_BASE}/users/staff`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },

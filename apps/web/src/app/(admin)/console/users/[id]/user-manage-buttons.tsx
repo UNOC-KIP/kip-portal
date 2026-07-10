@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Edit2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
-import { apiUrl } from "@/lib/api";
 import { EditUserDialog, type UserEditData } from "./edit-user-dialog";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
 interface Props {
   userId: string;
@@ -43,7 +44,7 @@ export function UserManageButtons({ userId, displayName, applicationRef, edit }:
     setDeleting(true);
     setError(null);
     try {
-      const res = await fetch(apiUrl(`/users/${userId}`), {
+      const res = await fetch(`${API_BASE}/users/${userId}`, {
         method: "DELETE",
         credentials: "include",
       });
