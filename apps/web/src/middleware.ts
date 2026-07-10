@@ -5,6 +5,12 @@ import { allowedRolesForPath, homePathForRole, roleSatisfies } from "@/lib/rbac"
 
 const AUTH_PAGES = ["/sign-in", "/sign-up"];
 
+// Must match the custom session cookie name set in lib/auth.ts. getToken()
+// otherwise defaults to NextAuth's name and can't find our renamed cookie, so
+// every request looks unauthenticated → /console redirect loop.
+const useSecureCookies = process.env.NEXTAUTH_URL?.startsWith("https://") ?? false;
+const SESSION_COOKIE_NAME = `${useSecureCookies ? "__Secure-" : ""}kip-admin.session-token`;
+
 /**
  * Edge RBAC gate. Runs before every matched route and enforces the policy in
  * `lib/rbac.ts`. There is deliberately NO global auth-bypass flag — server
@@ -12,7 +18,11 @@ const AUTH_PAGES = ["/sign-in", "/sign-up"];
  */
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    cookieName: SESSION_COOKIE_NAME,
+  });
   const role = token?.role;
 
   // Authenticated users should never sit on the sign-in/up pages.
