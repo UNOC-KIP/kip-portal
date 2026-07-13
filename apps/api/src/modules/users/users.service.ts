@@ -69,8 +69,11 @@ async function fetchPendingInvestorForUpdate(
   action: string,
   t: Transaction,
 ): Promise<{ user: User; org: InvestorOrg | undefined }> {
+  // Lock only the User row. A FOR UPDATE that also joins InvestorOrg would put
+  // the lock on the nullable side of a LEFT OUTER JOIN, which Postgres rejects
+  // with "FOR UPDATE cannot be applied to the nullable side of an outer join".
+  // Load the org in a separate, unlocked read.
   const user = await User.findByPk(userId, {
-    include: [{ model: InvestorOrg, as: "investorOrg" }],
     lock: true,
     transaction: t,
   });
@@ -78,10 +81,10 @@ async function fetchPendingInvestorForUpdate(
   if (user.status !== UserStatus.PENDING_REVIEW) {
     throw Conflict(`Cannot ${action} a user with status ${user.status}`);
   }
-  return {
-    user,
-    org: (user as User & { investorOrg?: InvestorOrg }).investorOrg,
-  };
+  const org = user.investorOrgId
+    ? ((await InvestorOrg.findByPk(user.investorOrgId, { transaction: t })) ?? undefined)
+    : undefined;
+  return { user, org };
 }
 
 export async function approveUser(userId: string): Promise<void> {
