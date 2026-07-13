@@ -267,7 +267,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `users/` | **Self-service (any authenticated user, declared before `/:id`):** `PATCH /me` (own rep details + own org contact block — never email/role/status/legal identity); `POST /me/password` (verify current → set new, stamps `passwordChangedAt`, best-effort confirmation email). **ADMIN only:** `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject` |
 | `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
-| `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `POST /:id/status` schedule/complete/cancel (ADMIN). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
+| `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `health/` | complete |
 
 ---
@@ -415,11 +415,11 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/api/src/modules/payments/` | Initiate payment |
 | `apps/api/src/modules/users/` | Approve + reject investor accounts |
 | `apps/api/src/modules/site-visits/` | Create / list / schedule site-visit bookings |
-| `apps/api/src/mailer.ts` | `sendMail()` + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail`, `siteVisitNotificationEmail`, `passwordChangedEmail` |
+| `apps/api/src/mailer.ts` | `sendMail()` + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail` (request received), `siteVisitScheduledEmail` (admin confirmed the visit), `siteVisitNotificationEmail`, `passwordChangedEmail` |
 | `apps/portal/src/lib/mailer.ts` | Portal-side `sendMail()` + `escapeHtml()` + `credentialsEmail` (registration). Shared transport for contact form + live chat |
 | `apps/portal/src/lib/smtp.ts` | `smtpTransportOptions()` — single source for the portal's SMTP options (mailer, NextAuth EmailProvider, notify-me action) |
 | `apps/web/src/lib/smtp.ts` | `smtpTransportOptions()` — same, for the admin app's NextAuth EmailProvider |
-| `apps/portal/src/app/(investor)/dashboard/site-visit/` | Investor booking form (zone → land use → description → acres slider) + booking status view |
+| `apps/portal/src/app/(investor)/dashboard/site-visit/` | Investor booking form (zone → land use → description → acres slider) + booking status view. The booking summary + status block is the shared `components/site-visit-summary.tsx`, also rendered on the dashboard overview so a scheduled visit shows on sign-in |
 | `apps/portal/src/app/(investor)/dashboard/settings/` | Investor account settings — profile + company-contact edit (`PATCH /users/me`) and change password (`POST /users/me/password`); read-only legal identity + account meta. `settings-ui.tsx` = shared card/field primitives. Sidebar "Settings" nav + a dashboard nudge appear while `passwordChangedAt` is NULL |
 | `apps/web/src/app/(admin)/console/site-visits/` | Admin site-visit tracker — schedule / complete / cancel via `POST /site-visits/:id/status` |
 | `apps/web/src/lib/auth.ts` | NextAuth config — Email + Credentials, custom SequelizeAdapter |

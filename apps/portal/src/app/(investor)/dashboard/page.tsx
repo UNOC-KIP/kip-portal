@@ -23,6 +23,7 @@ import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { CountdownTimer } from "@/components/countdown-timer";
+import { SiteVisitSummary } from "@/components/site-visit-summary";
 import {
   getInvestorDashboardData,
   getSiteVisitBooking,
@@ -656,29 +657,6 @@ export default async function InvestorDashboardPage() {
               </>
             )}
 
-            {/* ── Book a site visit ────────────────────────────────── */}
-            {/* Shown for any pre-submission investor without a booking — it is the
-                primary call to action when no application window is open, and a
-                secondary one (below the EOI journey) when a window is open. */}
-            {isPreSubmission && !siteVisit && (
-              <div className="flex flex-col gap-3 rounded-xl border border-brand-300 bg-brand-50/60 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-3">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
-                    <CalendarDays size={16} />
-                  </span>
-                  <div>
-                    <h3 className="text-sm font-bold">See the park in person</h3>
-                    <p className="mt-0.5 text-xs text-ink-500">
-                      Tell us the zone, land use and acreage you need — we&apos;ll arrange a visit.
-                    </p>
-                  </div>
-                </div>
-                <Button asChild size="sm" className="shrink-0">
-                  <Link href="/dashboard/site-visit">Book Site Visit →</Link>
-                </Button>
-              </div>
-            )}
-
             {/* ── Post-submission ──────────────────────────────────── */}
             {app && !isPreSubmission && (
               <>
@@ -763,6 +741,31 @@ export default async function InvestorDashboardPage() {
                 </Card>
               </>
             )}
+
+            {/* ── Site visit ───────────────────────────────────────── */}
+            {/* The full booking summary once a visit is booked (so a scheduled
+                visit is visible at a glance on sign-in), otherwise the booking
+                CTA for any pre-submission investor. */}
+            {siteVisit ? (
+              <SiteVisitSummary booking={siteVisit} />
+            ) : isPreSubmission ? (
+              <div className="flex flex-col gap-3 rounded-xl border border-brand-300 bg-brand-50/60 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                    <CalendarDays size={16} />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-bold">See the park in person</h3>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      Tell us the zone, land use and acreage you need — we&apos;ll arrange a visit.
+                    </p>
+                  </div>
+                </div>
+                <Button asChild size="sm" className="shrink-0">
+                  <Link href="/dashboard/site-visit">Book Site Visit →</Link>
+                </Button>
+              </div>
+            ) : null}
 
             {/* ── Recent activity ──────────────────────────────────── */}
             {app && recentActivity.length > 0 && (
