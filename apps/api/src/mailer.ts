@@ -247,6 +247,56 @@ export function siteVisitNotificationEmail(opts: {
   `;
 }
 
+/** Security confirmation sent after a user changes their own password. */
+export function passwordChangedEmail(opts: { name: string; when: string }): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
+
+        <tr>
+          <td style="background:#000;padding:28px 36px">
+            <p style="margin:0;color:#fff;font-size:18px;font-weight:700">UNOC / KIP Investor Portal</p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:36px">
+            <p style="margin:0 0 16px;color:#09090b;font-size:16px;font-weight:600">
+              Your password was changed
+            </p>
+            <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6">
+              Hi <strong>${escapeHtml(opts.name)}</strong>, this confirms that the password for your
+              KIP Investor Portal account was changed on <strong>${escapeHtml(opts.when)}</strong>.
+            </p>
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px 20px;margin-bottom:24px">
+              <p style="margin:0;font-size:13px;color:#991b1b">
+                If you did not make this change, contact the KIP secretariat immediately at
+                <a href="mailto:kipinvestorrelations@unoc.com" style="color:#991b1b;font-weight:600">kipinvestorrelations@unoc.com</a>.
+              </p>
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="background:#f4f4f5;padding:18px 36px;border-top:1px solid #e4e4e7">
+            <p style="margin:0;font-size:11px;color:#a1a1aa">
+              Uganda National Oil Company (UNOC) · Kabalega Industrial Park Secretariat ·
+              This is an automated message — please do not reply directly.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 export function rejectionEmail(opts: {
   companyName: string;
   reason?: string | null;

@@ -28,14 +28,26 @@ declare global {
 // Accept the NextAuth default names (local dev / older builds) plus the
 // per-app names the web + portal set in production so the cookie can be shared
 // across the *.kip.unoc.com subdomains (see COOKIE_DOMAIN in each app's auth.ts).
-const SESSION_COOKIE_NAMES = [
-  "next-auth.session-token",
-  "__Secure-next-auth.session-token",
-  "kip-admin.session-token",
-  "__Secure-kip-admin.session-token",
-  "kip-investor.session-token",
-  "__Secure-kip-investor.session-token",
-];
+const ADMIN_COOKIES = ["kip-admin.session-token", "__Secure-kip-admin.session-token"];
+const INVESTOR_COOKIES = ["kip-investor.session-token", "__Secure-kip-investor.session-token"];
+const DEFAULT_COOKIES = ["next-auth.session-token", "__Secure-next-auth.session-token"];
+const SESSION_COOKIE_NAMES = [...ADMIN_COOKIES, ...INVESTOR_COOKIES, ...DEFAULT_COOKIES];
+
+// The admin and investor session cookies coexist on the browser — on a shared
+// host in dev (cookies ignore port) and on the shared parent domain in prod
+// (Domain=.kip.unoc.com) — so a request can carry BOTH. Pick the cookie that
+// belongs to the calling app by its Origin, otherwise a user signed into both
+// portals authenticates as whichever cookie happens to come first, executing
+// e.g. an investor's write as the admin. Bearer tokens still win outright.
+function cookiePreferenceForOrigin(origin: string | undefined): string[] {
+  if (origin && origin === env.PORTAL_PUBLIC_URL) {
+    return [...INVESTOR_COOKIES, ...DEFAULT_COOKIES, ...ADMIN_COOKIES];
+  }
+  if (origin && origin === env.WEB_PUBLIC_URL) {
+    return [...ADMIN_COOKIES, ...DEFAULT_COOKIES, ...INVESTOR_COOKIES];
+  }
+  return SESSION_COOKIE_NAMES;
+}
 
 function extractToken(req: Request): string | null {
   const authHeader = req.header("authorization");
@@ -44,15 +56,20 @@ function extractToken(req: Request): string | null {
   }
 
   const cookieHeader = req.headers.cookie;
-  if (cookieHeader) {
-    for (const part of cookieHeader.split(";")) {
-      const eq = part.indexOf("=");
-      if (eq === -1) continue;
-      const name = part.slice(0, eq).trim();
-      if (SESSION_COOKIE_NAMES.includes(name)) {
-        return decodeURIComponent(part.slice(eq + 1).trim());
-      }
+  if (!cookieHeader) return null;
+
+  const jar: Record<string, string> = {};
+  for (const part of cookieHeader.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq === -1) continue;
+    const name = part.slice(0, eq).trim();
+    if (SESSION_COOKIE_NAMES.includes(name)) {
+      jar[name] = decodeURIComponent(part.slice(eq + 1).trim());
     }
+  }
+
+  for (const name of cookiePreferenceForOrigin(req.header("origin") ?? undefined)) {
+    if (jar[name]) return jar[name]!;
   }
   return null;
 }

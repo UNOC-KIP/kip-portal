@@ -18,6 +18,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
   declare role: CreationOptional<string>
   declare status: CreationOptional<string>
   declare investorOrgId: CreationOptional<string | null>
+  declare passwordChangedAt: CreationOptional<Date | null>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
   declare deletedAt: CreationOptional<Date | null>
@@ -35,6 +36,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
         role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'INVESTOR' },
         status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'PENDING_REVIEW' },
         investorOrgId: { type: DataTypes.UUID, allowNull: true },
+        passwordChangedAt: { type: DataTypes.DATE, allowNull: true },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,
         deletedAt: DataTypes.DATE,

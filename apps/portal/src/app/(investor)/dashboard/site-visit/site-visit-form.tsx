@@ -35,6 +35,7 @@ export function SiteVisitForm() {
   const descriptionShort = description.trim().length < MIN_DESCRIPTION;
   const canSubmit = !!zone && !!landUse && !descriptionShort && !loading;
 
+  
   const acresFillPct =
     ((acres - SITE_VISIT_MIN_ACRES) /
       (SITE_VISIT_MAX_ACRES - SITE_VISIT_MIN_ACRES)) *

@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  Settings,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -29,6 +30,7 @@ const INVESTOR_NAV = [
   { icon: LayoutDashboard, href: "/dashboard",            label: "Overview" },
   { icon: CalendarDays,    href: "/dashboard/site-visit", label: "Site Visit" },
   { icon: FolderOpen,      href: "/dashboard/documents",  label: "Documents" },
+  { icon: Settings,        href: "/dashboard/settings",   label: "Settings" },
 ];
 
 function NavLink({

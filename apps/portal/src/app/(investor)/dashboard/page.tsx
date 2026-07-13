@@ -8,6 +8,15 @@ import {
   ChevronRight,
   Clock,
   CalendarDays,
+  Layers,
+  Wallet,
+  FileText,
+  Download,
+  LifeBuoy,
+  MapPin,
+  Activity,
+  ArrowRight,
+  ShieldAlert,
 } from "lucide-react";
 import { KIP_ZONE_LABELS, type KipZone } from "@kip/shared";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
@@ -17,10 +26,138 @@ import { CountdownTimer } from "@/components/countdown-timer";
 import {
   getInvestorDashboardData,
   getSiteVisitBooking,
-  siteVisitBadgeProps,
   statusBadgeProps,
+  type ActivityItem,
 } from "@/lib/investor-data";
+import { getPhase2Timeline } from "@/lib/timeline";
 import Link from "next/link";
+
+// ─── Local formatters ─────────────────────────────────────────────────────────
+
+const DOC_KIND_LABELS: Record<string, string> = {
+  CERTIFICATE_OF_INCORPORATION: "Certificate of Incorporation",
+  POWER_OF_ATTORNEY: "Power of Attorney",
+  SHAREHOLDER_ID: "Shareholder ID",
+  ORGANOGRAM: "Organogram",
+  LETTER_OF_INTEREST: "Letter of Interest",
+  BUSINESS_EVIDENCE: "Business Evidence",
+  SIMILAR_PROJECT_EVIDENCE: "Similar Project Evidence",
+  H3SE_RECORD: "H3SE Record",
+  H3SE_POLICY: "H3SE Policy",
+  NATIONAL_CONTENT_EVIDENCE: "National Content Evidence",
+  PAYMENT_PROOF: "Proof of Payment",
+  OTHER: "Document",
+};
+
+function docLabel(kind: string) {
+  return DOC_KIND_LABELS[kind] ?? kind.replace(/_/g, " ");
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+function shortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function shortDateYear(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
+// ─── Stat tile ────────────────────────────────────────────────────────────────
+
+const TILE_TONE: Record<string, { ic: string; bar: string }> = {
+  gold:   { ic: "bg-brand-100 text-brand-700",   bar: "bg-brand-400" },
+  green:  { ic: "bg-green-100 text-green-700",    bar: "bg-green-500" },
+  amber:  { ic: "bg-amber-100 text-amber-700",    bar: "bg-amber-500" },
+  blue:   { ic: "bg-blue-100 text-blue-700",      bar: "bg-blue-500" },
+  purple: { ic: "bg-purple-100 text-purple-700",  bar: "bg-purple-500" },
+  ink:    { ic: "bg-ink-100 text-ink-500",        bar: "bg-ink-300" },
+};
+
+function StatTile({
+  icon: Icon,
+  tone,
+  value,
+  unit,
+  label,
+  pct,
+  numeric = true,
+}: {
+  icon: React.ElementType;
+  tone: keyof typeof TILE_TONE;
+  value: string;
+  unit?: string;
+  label: string;
+  pct?: number;
+  numeric?: boolean;
+}) {
+  const t = TILE_TONE[tone]!;
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${t.ic}`}>
+        <Icon size={16} />
+      </span>
+      <p
+        className={`mt-3 font-bold leading-none tracking-tight ${
+          numeric ? "text-2xl tabular-nums" : "text-lg"
+        }`}
+      >
+        {value}
+        {unit && <span className="text-sm font-semibold text-ink-500">{unit}</span>}
+      </p>
+      <p className="mt-1.5 text-xs font-medium text-ink-500">{label}</p>
+      {pct != null && (
+        <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-ink-100">
+          <div className={`h-full rounded-full ${t.bar}`} style={{ width: `${pct}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Section card shell ───────────────────────────────────────────────────────
+
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`rounded-xl border border-gray-200 bg-white p-5 shadow-sm ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+// ─── Recent activity feed ─────────────────────────────────────────────────────
+
+function ActivityFeed({ items }: { items: ActivityItem[] }) {
+  const recent = [...items].reverse().slice(0, 5);
+  return (
+    <div className="flex flex-col">
+      {recent.map((a, i) => (
+        <div
+          key={i}
+          className="flex items-start gap-3 border-b border-ink-100 py-2.5 last:border-0"
+        >
+          <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-ink-100 text-ink-500">
+            <CheckCircle2 size={14} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold leading-snug text-ink-900">{a.text}</p>
+            <p className="text-[11px] text-ink-500">{a.actor}</p>
+          </div>
+          <span className="shrink-0 whitespace-nowrap text-[11px] text-ink-500">
+            {shortDate(a.time)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function InvestorDashboardPage() {
   const session = await getServerSession(authOptions);
@@ -31,11 +168,16 @@ export default async function InvestorDashboardPage() {
     getInvestorDashboardData(userId),
     getSiteVisitBooking(userId),
   ]);
-  const { orgName, application: app, windowCloseAt, windowName } = data;
+  const {
+    orgName,
+    application: app,
+    windowCloseAt,
+    windowName,
+    recentActivity,
+    documents,
+    mustChangePassword,
+  } = data;
 
-  // `windowCloseAt` is null exactly when no ApplicationWindow is OPEN. With no
-  // window there is nothing to apply for, so the EOI journey is hidden and the
-  // site visit becomes the primary call to action.
   const windowOpen = !!windowCloseAt;
 
   const paymentStatus = app?.paymentStatus ?? null;
@@ -53,544 +195,722 @@ export default async function InvestorDashboardPage() {
   const progressPct = Math.round((completedCount / totalSections) * 100);
 
   const canSubmit =
-    paymentConfirmed &&
-    allSectionsComplete &&
-    app?.status === "DRAFT" &&
-    !!windowCloseAt;
+    paymentConfirmed && allSectionsComplete && app?.status === "DRAFT" && !!windowCloseAt;
 
   const firstIncompleteIdx = sections.findIndex((s) => !s.complete);
   const nextSectionNum = firstIncompleteIdx >= 0 ? firstIncompleteIdx + 1 : 1;
+  const nextSectionLabel = firstIncompleteIdx >= 0 ? sections[firstIncompleteIdx]?.label ?? null : null;
+  const remaining = totalSections - completedCount;
 
   const daysToClose = windowCloseAt
-    ? Math.ceil(
-        (new Date(windowCloseAt).getTime() - Date.now()) / 86_400_000,
-      )
+    ? Math.ceil((new Date(windowCloseAt).getTime() - Date.now()) / 86_400_000)
     : null;
   const urgentDeadline = daysToClose !== null && daysToClose <= 7;
 
-  const closeDate = windowCloseAt
-    ? new Date(windowCloseAt).toLocaleDateString("en-GB", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : null;
+  const closeDate = windowCloseAt ? shortDateYear(windowCloseAt) : null;
+
+  const payAmount = app?.paymentAmount ? parseFloat(app.paymentAmount).toLocaleString() : "1,000";
+  const payCurrency = app?.paymentCurrency ?? "USD";
+
+  // Post-submission review pipeline — single source for both the KPI tile and
+  // the pipeline card so the "stage N of M" and the timeline never disagree.
+  const pipelineSteps = app
+    ? [
+        { label: "EOI Submitted", sub: app.submittedAt ? shortDateYear(app.submittedAt) : "Reference assigned", done: true, active: false },
+        {
+          label: "Technical Committee Review",
+          sub: "Scoring & shortlisting",
+          done: ["SHORTLISTED", "NOT_SHORTLISTED", "LAC_REVIEW", "LAC_APPROVED", "LAC_REJECTED", "EXCO_REVIEW", "ALLOCATED"].includes(app.status),
+          active: app.status === "UNDER_TC_REVIEW" || app.status === "TC_CLARIFICATION_REQUESTED",
+        },
+        {
+          label: "Land Allocation Committee",
+          sub: "Suitability review",
+          done: ["LAC_APPROVED", "LAC_REJECTED", "EXCO_REVIEW", "ALLOCATED"].includes(app.status),
+          active: app.status === "LAC_REVIEW",
+        },
+        {
+          label: "ExCo Decision",
+          sub: "Final approval",
+          done: ["ALLOCATED"].includes(app.status),
+          active: app.status === "EXCO_REVIEW",
+        },
+        { label: "Plot Allocation", sub: "Welcome to KIP", done: app.status === "ALLOCATED", active: false },
+      ]
+    : [];
+  const stagesDone = pipelineSteps.filter((s) => s.done).length;
+
+  const timeline = getPhase2Timeline(new Date());
+  const activeTimelineIdx = timeline.findIndex((t) => t.active);
+
+  const firstName = (orgName ?? session.user?.name ?? "there").split(" ")[0];
 
   return (
     <div className="flex min-h-screen flex-col">
       <DashboardTopbar />
 
-      <main className="mx-auto w-full max-w-4xl flex-1 p-4 sm:p-6">
-        {/* ── Hero ─────────────────────────────────────────────── */}
-        <div className="mb-5 flex flex-col gap-3 rounded-2xl bg-black p-5 text-white sm:flex-row sm:items-start sm:justify-between sm:p-6">
+      <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
+        {/* ── Greeting ──────────────────────────────────────────── */}
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-white/40">
-              {windowName ?? "KIP Investor Portal"}
-            </p>
-            <h1 className="mt-1 text-xl font-bold">
-              {orgName ?? session.user?.name ?? "Your Organisation"}
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+              Welcome back, {firstName}
             </h1>
-            <p className="mt-1 text-sm text-white/40">
-              Kabalega Industrial Park · Account verified ✓
+            <p className="text-sm text-ink-500">Here&apos;s where your KIP application stands.</p>
+          </div>
+          {app?.reference && (
+            <p className="text-xs font-semibold text-ink-500">
+              Ref <span className="font-black tracking-tight text-ink-900">{app.reference}</span>
             </p>
-          </div>
-          <div className="shrink-0 sm:text-right">
-            {app?.reference && (
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-widest text-white/40">
-                  Reference
-                </p>
-                <p className="mt-1 text-lg font-black tracking-tight">
-                  {app.reference}
-                </p>
-              </div>
-            )}
-            {!app?.reference && app && (
-              <p className="text-xs text-white/30">Application in progress</p>
-            )}
-            {statusBadge && (
-              <div className="mt-2">
-                <StatusBadge variant={statusBadge.variant}>
-                  {statusBadge.label}
-                </StatusBadge>
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* ── Site visit ───────────────────────────────────────── */}
-        {isPreSubmission && (
-          <div className="mb-5 rounded-xl border border-brand-300 bg-white p-5">
-            {siteVisit ? (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <CalendarDays size={16} className="shrink-0 text-brand-600" />
-                    <h3 className="text-sm font-bold">Site Visit</h3>
-                    <StatusBadge variant={siteVisitBadgeProps(siteVisit.status).variant}>
-                      {siteVisitBadgeProps(siteVisit.status).label}
-                    </StatusBadge>
-                  </div>
-                  <p className="mt-1.5 text-xs text-ink-500">
-                    {KIP_ZONE_LABELS[siteVisit.zone as KipZone] ?? siteVisit.zone} ·{" "}
-                    {siteVisit.landUse} · {siteVisit.acres} acre
-                    {siteVisit.acres === 1 ? "" : "s"}
-                  </p>
-                </div>
-                <Button asChild variant="outline" size="sm" className="shrink-0">
-                  <Link href="/dashboard/site-visit">View request →</Link>
-                </Button>
+        {/* Nudge investors still on the auto-generated password. */}
+        {mustChangePassword && (
+          <Link
+            href="/dashboard/settings#password"
+            className="mb-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 transition hover:bg-amber-100"
+          >
+            <ShieldAlert size={18} className="shrink-0 text-amber-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-amber-800">
+                Secure your account — change your password
+              </p>
+              <p className="text-xs text-amber-700">
+                You&apos;re still using the password we emailed you. Set one only you know.
+              </p>
+            </div>
+            <ChevronRight size={16} className="shrink-0 text-amber-600" />
+          </Link>
+        )}
+
+        {/* No application at all while a window is open — unexpected. */}
+        {!app && windowOpen && (
+          <Card className="text-center">
+            <p className="text-sm text-ink-500">
+              No EOI application found. Contact the KIP secretariat at{" "}
+              <a href="mailto:kipinvestorrelations@unoc.com" className="font-medium underline">
+                kipinvestorrelations@unoc.com
+              </a>{" "}
+              if this is unexpected.
+            </p>
+          </Card>
+        )}
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          {/* ═══════════ MAIN COLUMN ═══════════ */}
+          <div className="flex flex-col gap-4">
+            {/* ── Hero ────────────────────────────────────────────── */}
+            <div className="relative flex flex-col gap-3 overflow-hidden rounded-2xl bg-black p-5 text-white sm:flex-row sm:items-center sm:justify-between sm:p-6">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                  {windowName ?? "Kabalega Industrial Park"}
+                </p>
+                <h2 className="mt-1 truncate text-xl font-bold">
+                  {orgName ?? session.user?.name ?? "Your Organisation"}
+                </h2>
+                <p className="mt-1 text-sm text-white/50">
+                  Hoima, Uganda · <span className="text-white/80">Account verified</span>
+                </p>
               </div>
-            ) : (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <CalendarDays size={16} className="shrink-0 text-brand-600" />
-                    <h3 className="text-sm font-bold">Book a Site Visit</h3>
+              <div className="shrink-0 sm:text-right">
+                {app?.reference ? (
+                  <>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+                      Reference
+                    </p>
+                    <p className="mt-1 text-lg font-black tracking-tight">{app.reference}</p>
+                  </>
+                ) : app ? (
+                  <p className="text-xs text-white/40">Reference assigned on submission</p>
+                ) : null}
+                {statusBadge && (
+                  <div className="mt-2">
+                    <StatusBadge variant={statusBadge.variant}>{statusBadge.label}</StatusBadge>
                   </div>
-                  <p className="mt-1.5 text-xs text-ink-500">
-                    See the park in person. Tell us the zone, land use and acreage you
-                    need, and we&apos;ll arrange a visit.
-                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* ── KPI row ──────────────────────────────────────────── */}
+            {app && isPreSubmission && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatTile
+                  icon={Layers}
+                  tone="gold"
+                  value={String(completedCount)}
+                  unit={`/${totalSections}`}
+                  label="EOI sections complete"
+                  pct={progressPct}
+                />
+                <StatTile
+                  icon={paymentConfirmed ? CheckCircle2 : Wallet}
+                  tone={paymentConfirmed ? "green" : "amber"}
+                  value={paymentConfirmed ? "Paid" : paymentProofUploaded ? "Pending" : "Due"}
+                  numeric={false}
+                  label={`Fee · ${payCurrency} ${payAmount}`}
+                  pct={paymentConfirmed ? 100 : paymentProofUploaded ? 66 : 0}
+                />
+                <StatTile
+                  icon={Clock}
+                  tone={urgentDeadline ? "amber" : windowOpen ? "blue" : "ink"}
+                  value={windowOpen ? String(daysToClose) : "—"}
+                  unit={windowOpen ? " days" : undefined}
+                  label={windowOpen ? "Until window closes" : "Window not open"}
+                />
+                <StatTile
+                  icon={MapPin}
+                  tone="blue"
+                  value={
+                    siteVisit
+                      ? siteVisit.scheduledAt
+                        ? shortDate(siteVisit.scheduledAt)
+                        : "Requested"
+                      : "Not booked"
+                  }
+                  numeric={false}
+                  label={
+                    siteVisit
+                      ? KIP_ZONE_LABELS[siteVisit.zone as KipZone] ?? "Site visit"
+                      : "Book a site visit"
+                  }
+                />
+              </div>
+            )}
+
+            {app && !isPreSubmission && (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatTile
+                  icon={Activity}
+                  tone="purple"
+                  value={statusBadge!.label}
+                  numeric={false}
+                  label="Current review stage"
+                />
+                <StatTile
+                  icon={Layers}
+                  tone="gold"
+                  value={String(stagesDone)}
+                  unit={`/${pipelineSteps.length}`}
+                  label="Pipeline stage reached"
+                  pct={Math.round((stagesDone / pipelineSteps.length) * 100)}
+                />
+                <StatTile
+                  icon={CheckCircle2}
+                  tone="green"
+                  value={app.submittedAt ? shortDate(app.submittedAt) : "—"}
+                  numeric={false}
+                  label={`Submitted${app.submittedAt ? ` · ${new Date(app.submittedAt).getFullYear()}` : ""}`}
+                />
+                <StatTile
+                  icon={FileText}
+                  tone="blue"
+                  value={String(documents.length)}
+                  label="Documents on file"
+                />
+              </div>
+            )}
+
+            {/* ── Window closed notice ─────────────────────────────── */}
+            {isPreSubmission && !windowOpen && (
+              <Card>
+                <p className="text-sm font-semibold text-ink-900">
+                  The EOI application window is not currently open
+                </p>
+                <p className="mt-1 text-xs text-ink-500">
+                  We&apos;ll email you as soon as the next Call for Expressions of Interest opens.
+                  In the meantime, book a site visit to see the park for yourself.
+                </p>
+              </Card>
+            )}
+
+            {/* ── Pre-submission journey ───────────────────────────── */}
+            {isPreSubmission && windowOpen && (
+              <>
+                {/* 3 steps */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {/* Step 1 — Fee */}
+                  <div
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      paymentConfirmed ? "border-green-200 bg-green-50/40" : "border-amber-300 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                          paymentConfirmed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
+                        {paymentConfirmed ? "✓" : "1"}
+                      </span>
+                      {paymentConfirmed ? (
+                        <CheckCircle2 size={18} className="text-green-500" />
+                      ) : (
+                        <AlertCircle size={18} className="text-amber-500" />
+                      )}
+                    </div>
+                    <h3 className="mt-3 text-sm font-bold">Application Fee</h3>
+                    {paymentConfirmed ? (
+                      <>
+                        <p className="mt-1 text-xs text-ink-500">
+                          {payCurrency} {payAmount} · confirmed
+                        </p>
+                        <Link
+                          href="/dashboard/payment"
+                          className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
+                        >
+                          View receipt →
+                        </Link>
+                      </>
+                    ) : paymentProofUploaded ? (
+                      <>
+                        <p className="mt-1 text-xs text-amber-700">Proof submitted — awaiting confirmation</p>
+                        <Link
+                          href="/dashboard/payment"
+                          className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
+                        >
+                          Check status →
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <p className="mt-1 text-xs text-ink-500">
+                          {payCurrency} {payAmount} · Stanbic transfer · non-refundable
+                        </p>
+                        <Button asChild size="sm" className="mt-3 w-full">
+                          <Link href="/dashboard/payment">Pay Now →</Link>
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Step 2 — EOI */}
+                  <div
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      allSectionsComplete
+                        ? "border-green-200 bg-green-50/40"
+                        : "border-brand-400 bg-white ring-2 ring-brand-400/20"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                          allSectionsComplete ? "bg-green-100 text-green-700" : "bg-brand-100 text-brand-700"
+                        }`}
+                      >
+                        {allSectionsComplete ? "✓" : "2"}
+                      </span>
+                      {allSectionsComplete && <CheckCircle2 size={18} className="text-green-500" />}
+                    </div>
+                    <h3 className="mt-3 text-sm font-bold">Complete your EOI</h3>
+                    <p className="mt-1 text-xs text-ink-500">
+                      {allSectionsComplete
+                        ? "All 6 sections complete"
+                        : `${remaining} of ${totalSections} remaining${nextSectionLabel ? ` · next: ${nextSectionLabel}` : ""}`}
+                    </p>
+                    <Button
+                      asChild
+                      size="sm"
+                      className="mt-3 w-full"
+                      variant={allSectionsComplete ? "outline" : "default"}
+                    >
+                      <Link href={`/dashboard/eoi/${nextSectionNum}`}>
+                        {completedCount === 0
+                          ? "Start EOI →"
+                          : allSectionsComplete
+                            ? "Review EOI"
+                            : "Continue EOI →"}
+                      </Link>
+                    </Button>
+                  </div>
+
+                  {/* Step 3 — Submit */}
+                  <div
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      canSubmit ? "border-brand-400 bg-white" : "border-gray-200 bg-white opacity-70"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                          canSubmit ? "bg-brand-100 text-brand-700" : "bg-ink-100 text-ink-500"
+                        }`}
+                      >
+                        3
+                      </span>
+                      {!canSubmit && <Lock size={14} className="text-ink-500" />}
+                    </div>
+                    <h3 className="mt-3 text-sm font-bold">Submit EOI</h3>
+                    <p className="mt-1 text-xs text-ink-500">
+                      {!allSectionsComplete
+                        ? `${remaining} section${remaining !== 1 ? "s" : ""} remaining`
+                        : !paymentConfirmed
+                          ? "Pay the fee to submit"
+                          : "Ready to submit!"}
+                    </p>
+                    {canSubmit ? (
+                      <Button asChild size="sm" className="mt-3 w-full bg-green-600 hover:bg-green-700">
+                        <Link href="/dashboard/eoi/6">Submit EOI →</Link>
+                      </Button>
+                    ) : (
+                      <Button size="sm" disabled className="mt-3 w-full bg-green-600 hover:bg-green-700">
+                        Submit EOI →
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* EOI section checklist */}
+                {app && (
+                  <Card>
+                    <div className="mb-3 flex items-center justify-between">
+                      <h2 className="text-sm font-bold">EOI Application Sections</h2>
+                      <span className="text-xs font-semibold text-ink-500">
+                        {completedCount}/{totalSections} complete
+                      </span>
+                    </div>
+
+                    <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-ink-100">
+                      <div
+                        className="h-full rounded-full bg-green-500 transition-all duration-500"
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+
+                    <div className="flex flex-col">
+                      {sections.map((s, idx) => {
+                        const sectionNum = idx + 1;
+                        const isNextUp = !s.complete && sections.slice(0, idx).every((p) => p.complete);
+                        return (
+                          <Link
+                            key={s.key}
+                            href={`/dashboard/eoi/${sectionNum}`}
+                            className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-ink-100/60"
+                          >
+                            <span
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                                s.complete
+                                  ? "bg-green-100 text-green-700"
+                                  : isNextUp
+                                    ? "bg-brand-100 text-brand-700"
+                                    : "bg-ink-100 text-ink-500"
+                              }`}
+                            >
+                              {s.complete ? "✓" : sectionNum}
+                            </span>
+                            <span
+                              className={`flex-1 text-sm ${
+                                s.complete
+                                  ? "text-ink-500 line-through"
+                                  : isNextUp
+                                    ? "font-semibold text-ink-900"
+                                    : "text-ink-500"
+                              }`}
+                            >
+                              {s.label}
+                            </span>
+                            {isNextUp && (
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-brand-600">
+                                Next up
+                              </span>
+                            )}
+                            <ChevronRight size={14} className={isNextUp ? "text-brand-600" : "text-ink-300"} />
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    {allSectionsComplete && !paymentConfirmed && (
+                      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-amber-800">
+                            All sections complete — one step left
+                          </p>
+                          <p className="mt-0.5 text-xs text-amber-700">
+                            Pay the {payCurrency} {payAmount} application fee to submit your EOI.
+                          </p>
+                        </div>
+                        <Button asChild className="shrink-0">
+                          <Link href="/dashboard/payment">Pay Application Fee →</Link>
+                        </Button>
+                      </div>
+                    )}
+
+                    {canSubmit && (
+                      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-green-800">
+                            All sections complete — ready to submit!
+                          </p>
+                          {closeDate && (
+                            <p className="mt-0.5 text-xs text-green-700">Submit before {closeDate}</p>
+                          )}
+                        </div>
+                        <Button asChild className="shrink-0 bg-green-600 hover:bg-green-700">
+                          <Link href="/dashboard/eoi/6">Submit EOI →</Link>
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
+                )}
+              </>
+            )}
+
+            {/* ── Book a site visit ────────────────────────────────── */}
+            {/* Shown for any pre-submission investor without a booking — it is the
+                primary call to action when no application window is open, and a
+                secondary one (below the EOI journey) when a window is open. */}
+            {isPreSubmission && !siteVisit && (
+              <div className="flex flex-col gap-3 rounded-xl border border-brand-300 bg-brand-50/60 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">
+                    <CalendarDays size={16} />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-bold">See the park in person</h3>
+                    <p className="mt-0.5 text-xs text-ink-500">
+                      Tell us the zone, land use and acreage you need — we&apos;ll arrange a visit.
+                    </p>
+                  </div>
                 </div>
                 <Button asChild size="sm" className="shrink-0">
                   <Link href="/dashboard/site-visit">Book Site Visit →</Link>
                 </Button>
               </div>
             )}
-          </div>
-        )}
 
-        {/* ── Application window closed ────────────────────────── */}
-        {isPreSubmission && !windowOpen && (
-          <div className="rounded-xl border border-ink-200 bg-white px-5 py-4">
-            <p className="text-sm font-semibold text-ink-800">
-              The EOI application window is not currently open
-            </p>
-            <p className="mt-1 text-xs text-ink-500">
-              We&apos;ll email you as soon as the next Call for Expressions of Interest
-              opens. In the meantime, book a site visit to see the park for yourself.
-            </p>
-          </div>
-        )}
-
-        {/* ── Deadline banner ──────────────────────────────────── */}
-        {windowCloseAt && isPreSubmission && (
-          <div
-            className={`mb-5 flex flex-col gap-3 rounded-xl border px-5 py-4 sm:flex-row sm:items-center sm:justify-between ${
-              urgentDeadline
-                ? "border-red-200 bg-red-50"
-                : "border-amber-200 bg-amber-50"
-            }`}
-          >
-            <div>
-              <p
-                className={`text-sm font-semibold ${urgentDeadline ? "text-red-700" : "text-amber-700"}`}
-              >
-                {urgentDeadline
-                  ? "⚠️ Deadline approaching — submit soon!"
-                  : "⏰ Application window is open"}
-              </p>
-              <p className="mt-0.5 text-xs text-ink-600">
-                Window closes{" "}
-                <strong>{closeDate}</strong>
-                {daysToClose !== null && ` · ${daysToClose} day${daysToClose !== 1 ? "s" : ""} left`}
-              </p>
-            </div>
-            <CountdownTimer closeAt={windowCloseAt} />
-          </div>
-        )}
-
-        {/* ── Pre-submission journey ────────────────────────────── */}
-        {isPreSubmission && windowOpen && (
-          <>
-            {/* 3-step cards */}
-            <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              {/* Step 1 — EOI Form (fillable straight away) */}
-              <div
-                className={`rounded-xl border bg-white p-5 ${
-                  allSectionsComplete
-                    ? "border-green-200 bg-green-50/30"
-                    : "border-brand-300"
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                      allSectionsComplete
-                        ? "bg-green-100 text-green-700"
-                        : "bg-brand-100 text-brand-700"
-                    }`}
-                  >
-                    1
-                  </span>
-                  {allSectionsComplete && (
-                    <CheckCircle2 size={18} className="text-green-500" />
-                  )}
-                </div>
-                <h3 className="mt-3 text-sm font-bold">EOI Application</h3>
-                <p className="mt-1 text-xs text-ink-500">
-                  {completedCount} of {totalSections} sections complete
-                </p>
-                <Button
-                  asChild
-                  size="sm"
-                  className="mt-3 w-full"
-                  variant={allSectionsComplete ? "outline" : "default"}
-                >
-                  <Link href={`/dashboard/eoi/${nextSectionNum}`}>
-                    {completedCount === 0
-                      ? "Start EOI →"
-                      : allSectionsComplete
-                        ? "Review EOI"
-                        : "Continue EOI →"}
-                  </Link>
-                </Button>
-              </div>
-
-              {/* Step 2 — Payment */}
-              <div
-                className={`rounded-xl border bg-white p-5 ${
-                  paymentConfirmed
-                    ? "border-green-200 bg-green-50/30"
-                    : "border-amber-300"
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                      paymentConfirmed
-                        ? "bg-green-100 text-green-700"
-                        : "bg-amber-100 text-amber-700"
-                    }`}
-                  >
-                    2
-                  </span>
-                  {paymentConfirmed ? (
-                    <CheckCircle2 size={18} className="text-green-500" />
-                  ) : (
-                    <AlertCircle size={18} className="text-amber-500" />
-                  )}
-                </div>
-                <h3 className="mt-3 text-sm font-bold">Application Fee</h3>
-
-                {paymentConfirmed && (
-                  <>
-                    <p className="mt-1 text-xs font-medium text-green-700">
-                      ✓ Payment confirmed
-                    </p>
-                    <p className="mt-0.5 text-xs text-ink-500">
-                      {app?.paymentCurrency}{" "}
-                      {parseFloat(app?.paymentAmount ?? "1000").toLocaleString()}{" "}
-                      · Bank transfer
-                    </p>
-                    <Link
-                      href="/dashboard/payment"
-                      className="mt-3 inline-block text-xs text-ink-400 underline hover:text-ink-600"
-                    >
-                      View receipt →
-                    </Link>
-                  </>
-                )}
-
-                {paymentProofUploaded && !paymentConfirmed && (
-                  <>
-                    <p className="mt-1 text-xs font-medium text-amber-700">
-                      Proof submitted — awaiting admin confirmation
-                    </p>
-                    <Link
-                      href="/dashboard/payment"
-                      className="mt-3 inline-block text-xs text-ink-400 underline hover:text-ink-600"
-                    >
-                      Check status →
-                    </Link>
-                  </>
-                )}
-
-                {!paymentConfirmed && !paymentProofUploaded && (
-                  <>
-                    <p className="mt-1 text-xs text-ink-500">
-                      USD 1,000 · Stanbic Bank transfer · Non-refundable
-                    </p>
-                    <Button asChild size="sm" className="mt-3 w-full">
-                      <Link href="/dashboard/payment">Pay Now →</Link>
-                    </Button>
-                  </>
-                )}
-              </div>
-
-              {/* Step 3 — Submit */}
-              <div
-                className={`rounded-xl border bg-white p-5 ${
-                  canSubmit ? "border-brand-400" : "border-ink-200 opacity-60"
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                      canSubmit
-                        ? "bg-brand-100 text-brand-700"
-                        : "bg-ink-100 text-ink-400"
-                    }`}
-                  >
-                    3
-                  </span>
-                  {!canSubmit && <Lock size={14} className="text-ink-400" />}
-                </div>
-                <h3 className="mt-3 text-sm font-bold">Submit EOI</h3>
-                <p className="mt-1 text-xs text-ink-500">
-                  {!allSectionsComplete
-                    ? `${totalSections - completedCount} section${totalSections - completedCount !== 1 ? "s" : ""} remaining`
-                    : !paymentConfirmed
-                      ? "Pay the application fee to submit"
-                      : "Ready to submit!"}
-                </p>
-
-                {canSubmit ? (
-                  <Button
-                    asChild
-                    size="sm"
-                    className="mt-3 w-full bg-green-600 hover:bg-green-700"
-                  >
-                    <Link href="/dashboard/eoi/6">Submit EOI →</Link>
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    disabled
-                    className="mt-3 w-full bg-green-600 hover:bg-green-700"
-                  >
-                    Submit EOI →
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            {/* EOI section checklist */}
-            {app && (
-              <div className="rounded-xl border border-ink-200 bg-white p-5">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-sm font-bold">EOI Application Sections</h2>
-                  <span className="text-xs text-ink-500">
-                    {completedCount}/{totalSections} complete
-                  </span>
-                </div>
-
-                {/* Progress bar */}
-                <div className="mb-4 h-1.5 overflow-hidden rounded-full bg-ink-100">
-                  <div
-                    className="h-full rounded-full bg-green-500 transition-all duration-500"
-                    style={{ width: `${progressPct}%` }}
-                  />
-                </div>
-
-                <div className="space-y-0.5">
-                  {sections.map((s, idx) => {
-                    const sectionNum = idx + 1;
-                    const isNextUp =
-                      !s.complete &&
-                      sections.slice(0, idx).every((prev) => prev.complete);
-
-                    return (
-                      <Link
-                        key={s.key}
-                        href={`/dashboard/eoi/${sectionNum}`}
-                        className="flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors hover:bg-ink-50"
-                      >
-                        <span
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                            s.complete
-                              ? "bg-green-100 text-green-700"
-                              : isNextUp
-                                ? "bg-brand-100 text-brand-700"
-                                : "bg-ink-100 text-ink-500"
-                          }`}
-                        >
-                          {s.complete ? "✓" : sectionNum}
-                        </span>
-                        <span
-                          className={`flex-1 text-sm ${
-                            s.complete
-                              ? "text-ink-600 line-through"
-                              : isNextUp
-                                ? "font-semibold text-ink-900"
-                                : "text-ink-500"
-                          }`}
-                        >
-                          {s.label}
-                        </span>
-                        <ChevronRight
-                          size={14}
-                          className={isNextUp ? "text-brand-500" : "text-ink-300"}
-                        />
-                      </Link>
-                    );
-                  })}
-                </div>
-
-                {!allSectionsComplete && (
-                  <div className="mt-4">
-                    <Button asChild className="w-full sm:w-auto">
-                      <Link href={`/dashboard/eoi/${nextSectionNum}`}>
-                        {completedCount === 0
-                          ? "Start Section 1 →"
-                          : `Continue — Section ${nextSectionNum} →`}
-                      </Link>
-                    </Button>
-                  </div>
-                )}
-
-                {allSectionsComplete && !paymentConfirmed && (
-                  <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            {/* ── Post-submission ──────────────────────────────────── */}
+            {app && !isPreSubmission && (
+              <>
+                <Card>
+                  <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-amber-800">
-                        All sections complete — one step left
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-ink-500">
+                        Application
                       </p>
-                      <p className="mt-0.5 text-xs text-amber-700">
-                        Pay the USD 1,000 application fee to submit your EOI.
-                      </p>
+                      <h2 className="mt-1 text-lg font-bold">{app.reference}</h2>
                     </div>
-                    <Button asChild className="shrink-0">
-                      <Link href="/dashboard/payment">Pay Application Fee →</Link>
-                    </Button>
+                    <StatusBadge variant={statusBadge!.variant}>{statusBadge!.label}</StatusBadge>
                   </div>
-                )}
-
-                {canSubmit && (
-                  <div className="mt-4 flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-green-800">
-                        All sections complete — ready to submit!
-                      </p>
-                      {closeDate && (
-                        <p className="mt-0.5 text-xs text-green-700">
-                          Submit before {closeDate}
-                        </p>
-                      )}
-                    </div>
-                    <Button
-                      asChild
-                      className="shrink-0 bg-green-600 hover:bg-green-700"
-                    >
-                      <Link href="/dashboard/eoi/6">Submit EOI →</Link>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ── Post-submission view ─────────────────────────────── */}
-        {app && !isPreSubmission && (
-          <div className="space-y-4">
-            <div className="rounded-xl border border-ink-200 bg-white p-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-ink-500">
-                    Application Status
+                  <p className="mt-3 text-sm text-ink-500">
+                    Your EOI is progressing through the KIP review pipeline. You&apos;ll be notified
+                    by email of any updates or requests for clarification.
                   </p>
-                  <h2 className="mt-1 text-lg font-bold">{app.reference}</h2>
+                  <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/dashboard/application/${app.reference}`}>
+                        View application details →
+                      </Link>
+                    </Button>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link href="/dashboard/documents">My documents</Link>
+                    </Button>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div className="mb-4 flex items-center justify-between">
+                    <h3 className="text-sm font-bold">Review Pipeline</h3>
+                    <span className="text-xs font-semibold text-ink-500">
+                      Stage {stagesDone} of {pipelineSteps.length}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    {pipelineSteps.map((step, i) => (
+                      <div key={i} className="flex items-stretch gap-3">
+                        <div className="flex flex-col items-center">
+                          <span
+                            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                              step.done
+                                ? "bg-green-100 text-green-700"
+                                : step.active
+                                  ? "bg-brand-100 text-brand-700"
+                                  : "bg-ink-100 text-ink-500"
+                            }`}
+                          >
+                            {step.done ? "✓" : i + 1}
+                          </span>
+                          {i < pipelineSteps.length - 1 && (
+                            <span
+                              className={`w-0.5 flex-1 ${step.done ? "bg-green-200" : "bg-ink-100"}`}
+                            />
+                          )}
+                        </div>
+                        <div className={i < pipelineSteps.length - 1 ? "pb-4" : ""}>
+                          <div className="flex items-center gap-2">
+                            <p
+                              className={`text-sm ${
+                                step.done
+                                  ? "font-semibold text-ink-900"
+                                  : step.active
+                                    ? "font-semibold text-ink-900"
+                                    : "text-ink-500"
+                              }`}
+                            >
+                              {step.label}
+                            </p>
+                            {step.active && (
+                              <span className="flex items-center gap-1 text-[11px] font-medium text-brand-600">
+                                <Clock size={11} /> In progress
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-ink-500">{step.sub}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </>
+            )}
+
+            {/* ── Recent activity ──────────────────────────────────── */}
+            {app && recentActivity.length > 0 && (
+              <Card>
+                <div className="mb-1 flex items-center justify-between">
+                  <h3 className="text-sm font-bold">Recent Activity</h3>
+                  {app.reference && (
+                    <Link
+                      href={`/dashboard/application/${app.reference}`}
+                      className="text-[11px] font-semibold text-ink-500 hover:text-ink-900"
+                    >
+                      View all
+                    </Link>
+                  )}
                 </div>
-                <StatusBadge variant={statusBadge!.variant}>
-                  {statusBadge!.label}
-                </StatusBadge>
-              </div>
+                <ActivityFeed items={recentActivity} />
+              </Card>
+            )}
+          </div>
 
-              <p className="mt-3 text-sm text-ink-600">
-                Your EOI application has been submitted and is progressing
-                through the KIP review pipeline. You will be notified by email
-                of any updates or requests for clarification.
-              </p>
+          {/* ═══════════ RIGHT RAIL ═══════════ */}
+          <div className="flex flex-col gap-4">
+            {/* Countdown (pre) / What's next (post) */}
+            {isPreSubmission && windowOpen && (
+              <Card>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-bold">Submission Deadline</h3>
+                  <StatusBadge variant={urgentDeadline ? "status-rejected" : "window-active"}>
+                    {urgentDeadline ? "Closing soon" : "Open"}
+                  </StatusBadge>
+                </div>
+                <div className="text-center">
+                  <CountdownTimer closeAt={windowCloseAt} />
+                </div>
+                <p className="mt-3 text-center text-xs text-ink-500">
+                  Window closes <span className="font-semibold text-ink-900">{closeDate}</span>
+                </p>
+              </Card>
+            )}
 
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-                <Button asChild variant="outline">
-                  <Link href={`/dashboard/application/${app.reference}`}>
-                    View Application Details →
-                  </Link>
-                </Button>
-                <Button asChild variant="ghost">
-                  <Link href="/dashboard/documents">My Documents</Link>
-                </Button>
-              </div>
-            </div>
+            {app && !isPreSubmission && (
+              <Card>
+                <h3 className="mb-2 text-sm font-bold">What happens next</h3>
+                <p className="text-xs leading-relaxed text-ink-500">
+                  {app.status === "ALLOCATED"
+                    ? "Your plot has been allocated. The KIP secretariat will be in touch about lease signing and site handover."
+                    : app.status === "NOT_SHORTLISTED" || app.status === "LAC_REJECTED"
+                      ? "A decision has been reached on your application. See the details page for the full audit trail."
+                      : "Your application is under committee review. You'll be emailed the moment a decision is made or if clarification is needed."}
+                </p>
+              </Card>
+            )}
 
-            {/* Pipeline progress indicator */}
-            <div className="rounded-xl border border-ink-200 bg-white p-5">
-              <h3 className="mb-4 text-sm font-bold">Review Pipeline</h3>
-              <ol className="space-y-3">
-                {[
-                  { label: "EOI Submitted", done: true },
-                  {
-                    label: "Technical Committee Review",
-                    done: ["SHORTLISTED", "NOT_SHORTLISTED", "LAC_REVIEW", "LAC_APPROVED", "LAC_REJECTED", "EXCO_REVIEW", "ALLOCATED"].includes(app.status),
-                    active: app.status === "UNDER_TC_REVIEW" || app.status === "TC_CLARIFICATION_REQUESTED",
-                  },
-                  {
-                    label: "Land Allocation Committee",
-                    done: ["LAC_APPROVED", "LAC_REJECTED", "EXCO_REVIEW", "ALLOCATED"].includes(app.status),
-                    active: app.status === "LAC_REVIEW",
-                  },
-                  {
-                    label: "ExCo Decision",
-                    done: ["ALLOCATED"].includes(app.status),
-                    active: app.status === "EXCO_REVIEW",
-                  },
-                  {
-                    label: "Plot Allocation",
-                    done: app.status === "ALLOCATED",
-                  },
-                ].map((step, i) => (
-                  <li key={i} className="flex items-center gap-3">
-                    <span
-                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                        step.done
-                          ? "bg-green-100 text-green-700"
-                          : step.active
-                            ? "bg-brand-100 text-brand-700"
-                            : "bg-ink-100 text-ink-400"
-                      }`}
-                    >
-                      {step.done ? "✓" : i + 1}
-                    </span>
-                    <span
-                      className={`text-sm ${
-                        step.done
-                          ? "text-ink-600"
-                          : step.active
-                            ? "font-semibold text-ink-900"
-                            : "text-ink-400"
-                      }`}
-                    >
-                      {step.label}
-                    </span>
-                    {step.active && (
-                      <span className="ml-auto flex items-center gap-1 text-xs font-medium text-brand-600">
-                        <Clock size={12} /> In progress
+            {/* Phase 2 key dates */}
+            <Card>
+              <h3 className="mb-3 text-sm font-bold">Phase 2 Key Dates</h3>
+              <div className="flex flex-col">
+                {timeline.map((t, i) => {
+                  const past = activeTimelineIdx >= 0 && i < activeTimelineIdx;
+                  return (
+                    <div key={i} className="flex gap-3 border-b border-ink-100 py-2 last:border-0">
+                      <span
+                        className={`w-16 shrink-0 pt-0.5 text-[10px] font-bold ${
+                          t.active ? "text-brand-600" : "text-ink-500"
+                        }`}
+                      >
+                        {t.date}
                       </span>
-                    )}
-                  </li>
-                ))}
-              </ol>
+                      <div className="min-w-0">
+                        <p
+                          className={`text-xs leading-snug ${
+                            t.active
+                              ? "font-semibold text-ink-900"
+                              : past
+                                ? "text-ink-500"
+                                : "text-ink-700"
+                          }`}
+                        >
+                          {t.label}
+                        </p>
+                        {t.active && (
+                          <span className="text-[9px] font-bold uppercase tracking-wide text-brand-600">
+                            You are here
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+
+            {/* Documents preview */}
+            <Card>
+              <div className="mb-1 flex items-center justify-between">
+                <h3 className="text-sm font-bold">Documents</h3>
+                <Link
+                  href="/dashboard/documents"
+                  className="text-[11px] font-semibold text-ink-500 hover:text-ink-900"
+                >
+                  Open library
+                </Link>
+              </div>
+              {documents.length === 0 ? (
+                <p className="py-2 text-xs text-ink-500">
+                  Documents you upload with your EOI will appear here.
+                </p>
+              ) : (
+                <div className="flex flex-col">
+                  {documents.slice(0, 4).map((d) => (
+                    <Link
+                      key={d.id}
+                      href="/dashboard/documents"
+                      className="flex items-center gap-3 border-b border-ink-100 py-2.5 last:border-0"
+                    >
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-[9px] font-black text-red-600">
+                        {d.filename.split(".").pop()?.slice(0, 4).toUpperCase() ?? "DOC"}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-ink-900">{docLabel(d.kind)}</p>
+                        <p className="text-[10px] text-ink-500">
+                          {formatFileSize(d.sizeBytes)} · {shortDate(d.uploadedAt)}
+                        </p>
+                      </div>
+                      <Download size={14} className="shrink-0 text-ink-300" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {/* Support */}
+            <div className="rounded-xl border-0 bg-gradient-to-br from-black to-ink-800 p-5 text-white shadow-sm">
+              <div className="mb-2 flex items-center gap-2">
+                <LifeBuoy size={16} className="text-brand-400" />
+                <h3 className="text-sm font-bold">Need a hand?</h3>
+              </div>
+              <p className="mb-3 text-xs leading-relaxed text-white/60">
+                KIP Investor Relations is available Mon–Fri, 8am–5pm EAT to help with your application.
+              </p>
+              <Button asChild size="sm" className="w-full bg-brand-400 text-black hover:bg-brand-300">
+                <a href="mailto:kipinvestorrelations@unoc.com">
+                  Contact secretariat <ArrowRight size={14} className="ml-1" />
+                </a>
+              </Button>
             </div>
           </div>
-        )}
-
-        {/* No application yet — only unexpected while a window is actually open. */}
-        {!app && windowOpen && (
-          <div className="rounded-xl border border-ink-200 bg-white p-8 text-center">
-            <p className="text-sm text-ink-500">
-              No EOI application found. Contact the KIP secretariat at{" "}
-              <a
-                href="mailto:kipinvestorrelations@unoc.com"
-                className="font-medium underline"
-              >
-                kipinvestorrelations@unoc.com
-              </a>{" "}
-              if this is unexpected.
-            </p>
-          </div>
-        )}
+        </div>
       </main>
     </div>
   );
