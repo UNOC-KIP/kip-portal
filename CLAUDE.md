@@ -1,5 +1,5 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 10 July 2026. Update this file in the same commit as any architectural change.
+> Last updated: 13 July 2026. Update this file in the same commit as any architectural change.
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
 ---
@@ -83,11 +83,15 @@ API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the Ne
 
 **Cross-subdomain session cookie.** In production the portals and API live on different subdomains (`portal.kip.unoc.com`, `kip.unoc.com`, `api.kip.unoc.com`), so browser `fetch` calls to the API only carry the session cookie if it has `Domain=.kip.unoc.com`. Set **`COOKIE_DOMAIN=.kip.unoc.com`** for both `apps/web` and `apps/portal` (runtime env; leave unset in local dev so the cookie stays host-only). Each app names its cookie distinctly to avoid clobbering on the shared domain — `kip-admin.session-token` (web) and `kip-investor.session-token` (portal), each `__Secure-`-prefixed under HTTPS. The API's `SESSION_COOKIE_NAMES` list must include both. Symptom when misconfigured: API returns 401 `Missing session token` on admin/investor actions.
 
+**A browser can carry BOTH cookies** — on a shared host in dev (cookies ignore port, so `localhost:4000` and `localhost:4002` share a jar) and on the shared parent domain in prod. So the API's `extractToken` picks the cookie matching the request **`Origin`** (portal Origin → investor cookie, web Origin → admin cookie; `Bearer` still wins outright). Without this, a user signed into both portals authenticates as whichever cookie comes first in the header — e.g. an investor's write executes as the admin. Symptom: mutations attributed to the wrong user (a new investor gets "You already have an active site visit request" because the request ran as an admin who has one).
+
 **Always include `UserRole.ADMIN` in `requireRole(...)` calls.**
 
 **Investor registration self-activates.** `POST /api/register` (portal) creates the `InvestorOrg` + `User` with **`status = ACTIVE`**, generates a random password, bcrypt-hashes it, and emails the plaintext straight to the authorized representative. There is no admin approval gate — this was removed to shorten time-to-portal-access. `POST /users/:id/approve` and `/reject` remain in the API for legacy `PENDING_REVIEW` rows and for deactivating accounts; `approveUser` throws `Conflict` on an already-`ACTIVE` user. The `authorize()` guard still blocks `REJECTED` and `PENDING_REVIEW` sign-ins.
 
 **Never put a generated password in a webhook payload from the register route.** (`investor-approved` still carries `generatedPassword` for the legacy admin-approval path.)
+
+**Self-service credentials.** Because the password is auto-generated and emailed, users change it themselves via **`POST /users/me/password`** (verify current → bcrypt-rehash → stamp `User.passwordChangedAt` → best-effort `passwordChangedEmail`). Changing the password does **not** invalidate the current JWT session (JWT strategy), so the user stays signed in. `PATCH /users/me` edits own rep details + own org contact block only. Both live on `usersRouter` and **must stay declared before `/:id`** so `me` isn't parsed as a user id. The investor Settings page (`/dashboard/settings`) drives both; the dashboard shows a change-password nudge while `passwordChangedAt` is NULL.
 
 ---
 
@@ -109,6 +113,7 @@ Two layers per portal, each with its own policy file:
 |---|---|---|---|
 | portal | Investor dashboard | `/dashboard/*` | `INVESTOR` |
 | portal | Site-visit booking | `/dashboard/site-visit` | `INVESTOR` |
+| portal | Account settings | `/dashboard/settings` | `INVESTOR` |
 | web | Admin console | `/console/*` (non-TC) | `ADMIN` |
 | web | TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
 | both | Post-login router | `/launch` | any authenticated |
@@ -193,7 +198,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 
 | Model | Key columns / notes |
 |---|---|
-| `User` | `email`, `passwordHash`, `name`, `designation`, `phone`, `role`, `status (UserStatus)`, `investorOrgId` — for INVESTOR, `name/designation/phone/email` describe the authorized representative (email = login) |
+| `User` | `email`, `passwordHash`, `name`, `designation`, `phone`, `role`, `status (UserStatus)`, `investorOrgId`, `passwordChangedAt` (NULL = still on the auto-generated password; drives the portal's "change your password" nudge) — for INVESTOR, `name/designation/phone/email` describe the authorized representative (email = login) |
 | `Account`, `Session`, `VerificationToken` | NextAuth tables |
 | `InvestorOrg` | `legalName`, `tradingName`, `registrationNumber`, `ursbRegistrationNumber`, `companyType (CompanyType)`, `businessSector (BusinessSector)`, `countryOfIncorporation`, `tin`, `address`, `phone`, `email` — company-official contact, distinct from the rep's on `User` |
 | `ApplicationWindow` | open/close period, `sequenceCounter` |
@@ -259,10 +264,10 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 |---|---|
 | `applications/` | create draft, get, update section (owner or ADMIN), submit (DRAFT→SUBMITTED assigns ref); `DELETE /:id` soft delete + payments (ADMIN only) |
 | `payments/` | initiate only |
-| `users/` | `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject` (all ADMIN only) |
+| `users/` | **Self-service (any authenticated user, declared before `/:id`):** `PATCH /me` (own rep details + own org contact block — never email/role/status/legal identity); `POST /me/password` (verify current → set new, stamps `passwordChangedAt`, best-effort confirmation email). **ADMIN only:** `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject` |
 | `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
-| `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `POST /:id/status` schedule/complete/cancel (ADMIN). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
+| `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `health/` | complete |
 
 ---
@@ -395,7 +400,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 |---|---|
 | `packages/db/src/index.ts` | Sequelize singleton + 14 model inits + associations |
 | `packages/db/src/models/` | 14 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings) |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
@@ -410,11 +415,12 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/api/src/modules/payments/` | Initiate payment |
 | `apps/api/src/modules/users/` | Approve + reject investor accounts |
 | `apps/api/src/modules/site-visits/` | Create / list / schedule site-visit bookings |
-| `apps/api/src/mailer.ts` | `sendMail()` + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail`, `siteVisitNotificationEmail` |
+| `apps/api/src/mailer.ts` | `sendMail()` + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail` (request received), `siteVisitScheduledEmail` (admin confirmed the visit), `siteVisitNotificationEmail`, `passwordChangedEmail` |
 | `apps/portal/src/lib/mailer.ts` | Portal-side `sendMail()` + `escapeHtml()` + `credentialsEmail` (registration). Shared transport for contact form + live chat |
 | `apps/portal/src/lib/smtp.ts` | `smtpTransportOptions()` — single source for the portal's SMTP options (mailer, NextAuth EmailProvider, notify-me action) |
 | `apps/web/src/lib/smtp.ts` | `smtpTransportOptions()` — same, for the admin app's NextAuth EmailProvider |
-| `apps/portal/src/app/(investor)/dashboard/site-visit/` | Investor booking form (zone → land use → description → acres slider) + booking status view |
+| `apps/portal/src/app/(investor)/dashboard/site-visit/` | Investor booking form (zone → land use → description → acres slider) + booking status view. The booking summary + status block is the shared `components/site-visit-summary.tsx`, also rendered on the dashboard overview so a scheduled visit shows on sign-in |
+| `apps/portal/src/app/(investor)/dashboard/settings/` | Investor account settings — profile + company-contact edit (`PATCH /users/me`) and change password (`POST /users/me/password`); read-only legal identity + account meta. `settings-ui.tsx` = shared card/field primitives. Sidebar "Settings" nav + a dashboard nudge appear while `passwordChangedAt` is NULL |
 | `apps/web/src/app/(admin)/console/site-visits/` | Admin site-visit tracker — schedule / complete / cancel via `POST /site-visits/:id/status` |
 | `apps/web/src/lib/auth.ts` | NextAuth config — Email + Credentials, custom SequelizeAdapter |
 | `apps/web/src/lib/rbac.ts` | RBAC policy — single source for both middleware + server guards |

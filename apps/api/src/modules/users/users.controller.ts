@@ -4,6 +4,8 @@ import {
   rejectBodySchema,
   createStaffUserSchema,
   updateUserSchema,
+  updateOwnProfileSchema,
+  changePasswordSchema,
 } from "./users.schema.js";
 import {
   approveUser,
@@ -11,6 +13,8 @@ import {
   createStaffUser,
   updateUser,
   deleteUser,
+  updateOwnProfile,
+  changeOwnPassword,
 } from "./users.service.js";
 
 export const handleApprove: RequestHandler = async (req, res, next) => {
@@ -49,6 +53,26 @@ export const handleDelete: RequestHandler = async (req, res, next) => {
   try {
     const { id } = userIdParamSchema.parse(req.params);
     await deleteUser(id, req.user!);
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+};
+
+export const handleUpdateMe: RequestHandler = async (req, res, next) => {
+  try {
+    const body = updateOwnProfileSchema.parse(req.body);
+    await updateOwnProfile(req.user!.id, body);
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+};
+
+export const handleChangePassword: RequestHandler = async (req, res, next) => {
+  try {
+    const body = changePasswordSchema.parse(req.body);
+    await changeOwnPassword(req.user!.id, body);
     res.json({ ok: true });
   } catch (e) {
     next(e);

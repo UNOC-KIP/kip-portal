@@ -6,6 +6,7 @@ import {
   sendMail,
   siteVisitConfirmationEmail,
   siteVisitNotificationEmail,
+  siteVisitScheduledEmail,
 } from "../../mailer.js";
 import type { CreateBookingInput } from "./site-visits.schema.js";
 
@@ -177,4 +178,37 @@ export async function updateBookingStatus(
     handledAt: new Date(),
     ...(scheduledAt ? { scheduledAt: new Date(scheduledAt) } : {}),
   });
+
+  // On confirmation (SCHEDULED with a date), email the investor the details.
+  // Best-effort — the status change is already committed and the portal shows
+  // it regardless of mail delivery.
+  if (status === SiteVisitStatus.SCHEDULED && booking.scheduledAt) {
+    const user = await User.findByPk(booking.userId, {
+      include: [{ model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] }],
+    });
+    if (user) {
+      const org = (user as User & { investorOrg?: InvestorOrg }).investorOrg;
+      const companyName = org?.legalName ?? user.name ?? user.email;
+      try {
+        await sendMail({
+          to: user.email,
+          subject: "Your KIP site visit is confirmed",
+          html: siteVisitScheduledEmail({
+            companyName,
+            zoneLabel: KIP_ZONE_LABELS[booking.zone as KipZone] ?? booking.zone,
+            landUse: booking.landUse,
+            acres: booking.acres,
+            scheduledAt: booking.scheduledAt.toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+              timeZone: "Africa/Kampala",
+            }),
+          }),
+        });
+      } catch {
+        // Logged inside sendMail.
+      }
+    }
+  }
 }

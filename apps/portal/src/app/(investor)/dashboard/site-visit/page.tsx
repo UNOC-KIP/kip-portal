@@ -2,22 +2,13 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CalendarDays, MapPin } from "lucide-react";
-import { KIP_ZONE_LABELS, type KipZone } from "@kip/shared";
 import { authOptions } from "@/lib/auth";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
-import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { getSiteVisitBooking, siteVisitBadgeProps } from "@/lib/investor-data";
+import { getSiteVisitBooking } from "@/lib/investor-data";
 import { SITE_VISIT } from "@/lib/timeline";
+import { SiteVisitSummary } from "@/components/site-visit-summary";
 import { SiteVisitForm } from "./site-visit-form";
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
 
 export default async function SiteVisitPage() {
   const session = await getServerSession(authOptions);
@@ -56,69 +47,7 @@ export default async function SiteVisitPage() {
 
         {booking ? (
           <div className="space-y-4">
-            <div className="rounded-xl border border-ink-200 bg-white p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-widest text-ink-500">
-                    Your request
-                  </p>
-                  <h2 className="mt-1 text-lg font-bold">
-                    {KIP_ZONE_LABELS[booking.zone as KipZone] ?? booking.zone}
-                  </h2>
-                </div>
-                <StatusBadge variant={siteVisitBadgeProps(booking.status).variant}>
-                  {siteVisitBadgeProps(booking.status).label}
-                </StatusBadge>
-              </div>
-
-              <dl className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <dt className="text-xs font-medium text-ink-500">Intended land use</dt>
-                  <dd className="mt-0.5 text-sm font-semibold text-ink-900">{booking.landUse}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-ink-500">Land required</dt>
-                  <dd className="mt-0.5 text-sm font-semibold text-ink-900">
-                    {booking.acres} acre{booking.acres === 1 ? "" : "s"}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs font-medium text-ink-500">Requested on</dt>
-                  <dd className="mt-0.5 text-sm font-semibold text-ink-900">
-                    {formatDate(booking.createdAt)}
-                  </dd>
-                </div>
-              </dl>
-
-              <div className="mt-5">
-                <dt className="text-xs font-medium text-ink-500">Intended activity</dt>
-                <dd className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-700">
-                  {booking.description}
-                </dd>
-              </div>
-            </div>
-
-            {booking.status === "SCHEDULED" && booking.scheduledAt ? (
-              <div className="rounded-xl border border-green-200 bg-green-50 px-5 py-4">
-                <p className="text-sm font-semibold text-green-800">
-                  Your visit is scheduled for {formatDate(booking.scheduledAt)}
-                </p>
-                <p className="mt-0.5 text-xs text-green-700">
-                  Check your email for the formal invitation and directions.
-                </p>
-              </div>
-            ) : booking.status === "NEW" ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4">
-                <p className="text-sm font-semibold text-amber-800">
-                  We&apos;ve received your request
-                </p>
-                <p className="mt-0.5 text-xs text-amber-700">
-                  The KIP team will get back to you shortly with available dates and a
-                  formal invitation.
-                </p>
-              </div>
-            ) : null}
-
+            <SiteVisitSummary booking={booking} />
             <p className="text-center text-xs text-ink-500">
               Need to change your request? Contact us at{" "}
               <a href="mailto:kipinvestorrelations@unoc.com" className="font-medium underline">

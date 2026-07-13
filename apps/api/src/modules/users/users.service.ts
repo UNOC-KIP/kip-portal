@@ -12,9 +12,18 @@ import {
 } from "@kip/db";
 import { UserRole, UserStatus } from "@kip/shared";
 import { BadRequest, Conflict, NotFound } from "../../errors.js";
-import type { UpdateUserInput } from "./users.schema.js";
+import type {
+  UpdateUserInput,
+  UpdateOwnProfileInput,
+  ChangePasswordInput,
+} from "./users.schema.js";
 import { fireWebhook } from "../../webhooks.js";
-import { sendMail, credentialsEmail, rejectionEmail } from "../../mailer.js";
+import {
+  sendMail,
+  credentialsEmail,
+  rejectionEmail,
+  passwordChangedEmail,
+} from "../../mailer.js";
 import { env } from "../../env.js";
 
 export async function createStaffUser(input: {
@@ -158,6 +167,79 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
       await org.update(input.org, { transaction: t });
     }
   });
+}
+
+/**
+ * Self-service profile edit — a user updating their own representative details
+ * and, for investors, their company's contact block. Never touches email, role,
+ * status or the org's legal identity; those stay admin-controlled.
+ */
+export async function updateOwnProfile(
+  userId: string,
+  input: UpdateOwnProfileInput,
+): Promise<void> {
+  await sequelize.transaction(async (t) => {
+    const user = await User.findByPk(userId, { lock: true, transaction: t });
+    if (!user) throw NotFound("User");
+
+    await user.update(
+      {
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.designation !== undefined ? { designation: input.designation } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+      },
+      { transaction: t },
+    );
+
+    if (input.org) {
+      if (!user.investorOrgId) {
+        throw BadRequest("This account has no organisation to update");
+      }
+      const org = await InvestorOrg.findByPk(user.investorOrgId, { transaction: t });
+      if (!org) throw NotFound("Investor organisation");
+      await org.update(input.org, { transaction: t });
+    }
+  });
+}
+
+/**
+ * Self-service password change — verifies the current password before setting a
+ * new one, stamps `passwordChangedAt`, and sends a best-effort security
+ * confirmation. Investors start on an auto-generated password, so this is the
+ * primary way they take ownership of their credentials.
+ */
+export async function changeOwnPassword(
+  userId: string,
+  input: ChangePasswordInput,
+): Promise<void> {
+  const user = await User.findByPk(userId);
+  if (!user) throw NotFound("User");
+  if (!user.passwordHash) {
+    throw BadRequest("This account signs in with a magic link and has no password to change");
+  }
+
+  const currentOk = await bcrypt.compare(input.currentPassword, user.passwordHash);
+  if (!currentOk) throw BadRequest("Your current password is incorrect");
+
+  const reused = await bcrypt.compare(input.newPassword, user.passwordHash);
+  if (reused) throw BadRequest("Your new password must be different from your current one");
+
+  const passwordHash = await bcrypt.hash(input.newPassword, 12);
+  const changedAt = new Date();
+  await user.update({ passwordHash, passwordChangedAt: changedAt });
+
+  try {
+    await sendMail({
+      to: user.email,
+      subject: "Your KIP Investor Portal password was changed",
+      html: passwordChangedEmail({
+        name: user.name ?? user.email,
+        when: changedAt.toLocaleString("en-GB", { timeZone: "Africa/Kampala" }) + " EAT",
+      }),
+    });
+  } catch {
+    // sendMail already logs — a mail failure must not undo a committed change.
+  }
 }
 
 /**

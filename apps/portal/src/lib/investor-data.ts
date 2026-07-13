@@ -8,8 +8,17 @@ import {
   Payment,
   ReviewAction,
   SiteVisitBooking,
+  Document,
 } from "@kip/db";
-import { ApplicationWindowStatus, ReviewActionType, UserRole } from "@kip/shared";
+import {
+  ApplicationWindowStatus,
+  ReviewActionType,
+  UserRole,
+  COMPANY_TYPE_LABELS,
+  BUSINESS_SECTOR_LABELS,
+  type CompanyType,
+  type BusinessSector,
+} from "@kip/shared";
 import type { StatusVariant } from "@/components/status-badge";
 
 // ─── Section metadata ─────────────────────────────────────────────────────────
@@ -77,7 +86,55 @@ const ACTOR_TEXT: Partial<Record<UserRole, string>> = {
   [UserRole.INVESTOR]:    "You",
 };
 
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
+export type ActivityItem = { time: string; text: string; actor: string };
+
+/**
+ * Build the investor-facing, anonymised audit trail from a loaded application's
+ * payment + review actions. Chronological (oldest → newest). Shared by the
+ * dashboard "Recent Activity" feed and the full application-detail page so the
+ * two never diverge.
+ */
+function buildAuditTrail(
+  reviewActions: (ReviewAction & { actor: User })[],
+  payment: Payment | null,
+  submittedAt: Date | null,
+): ActivityItem[] {
+  const trail: ActivityItem[] = [];
+
+  if (payment?.paidAt) {
+    trail.push({ time: payment.paidAt.toISOString(), text: "Payment initiated", actor: "You" });
+  }
+  if (payment?.confirmedAt) {
+    trail.push({ time: payment.confirmedAt.toISOString(), text: "Payment confirmed", actor: "KIP Admin" });
+  }
+  if (submittedAt) {
+    trail.push({ time: submittedAt.toISOString(), text: "EOI submitted", actor: "You" });
+  }
+  for (const action of reviewActions) {
+    const text = ACTION_TEXT[action.type as ReviewActionType];
+    if (!text) continue;
+    trail.push({
+      time:  action.createdAt!.toISOString(),
+      text,
+      actor: ACTOR_TEXT[action.actor.role as UserRole] ?? "KIP Admin",
+    });
+  }
+
+  trail.sort((x, y) => new Date(x.time).getTime() - new Date(y.time).getTime());
+  return trail;
+}
+
 // ─── Return types ─────────────────────────────────────────────────────────────
+
+export type DocumentItem = {
+  id: string
+  kind: string
+  filename: string
+  sizeBytes: number
+  uploadedAt: string
+}
 
 export type DashboardData = {
   orgName: string | null
@@ -94,8 +151,12 @@ export type DashboardData = {
     paymentAmount: string | null
     paymentConfirmedAt: string | null
   } | null
+  recentActivity: ActivityItem[]
+  documents: DocumentItem[]
   windowCloseAt: string | null
   windowName: string | null
+  /** True while the investor is still on the auto-generated password. */
+  mustChangePassword: boolean
 }
 
 export type ApplicationDetail = {
@@ -195,19 +256,34 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
         as: "sections",
         attributes: ["section", "completedAt"],
       },
+      {
+        model: ReviewAction,
+        as: "reviewActions",
+        include: [{ model: User, as: "actor", attributes: ["role"] }],
+      },
     ],
   });
 
-  const payment = app
-    ? await Payment.findOne({
-        where: { applicationId: app.id },
-        order: [["createdAt", "DESC"]],
-        attributes: ["id", "method", "status", "currency", "amount", "confirmedAt"],
-      })
-    : null;
+  // Payment + documents both hang off the application; fetch them together.
+  const [payment, documents] = app
+    ? await Promise.all([
+        Payment.findOne({
+          where: { applicationId: app.id },
+          order: [["createdAt", "DESC"]],
+        }),
+        Document.findAll({
+          where: { applicationId: app.id },
+          order: [["uploadedAt", "DESC"]],
+        }),
+      ])
+    : [null, [] as Document[]];
 
   const org = (user as (User & { investorOrg?: InvestorOrg }) | null)?.investorOrg;
-  const sections = (app as (Application & { sections?: ApplicationSection[] }) | null)?.sections ?? [];
+  const appWith = app as (Application & {
+    sections?: ApplicationSection[];
+    reviewActions?: (ReviewAction & { actor: User })[];
+  }) | null;
+  const sections = appWith?.sections ?? [];
 
   const sectionList = SECTION_ORDER.map((key) => ({
     key,
@@ -215,6 +291,10 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
     complete:
       sections.some((s) => s.section === key && s.completedAt !== null) ?? false,
   }));
+
+  const recentActivity = app
+    ? buildAuditTrail(appWith?.reviewActions ?? [], payment, app.submittedAt ?? null)
+    : [];
 
   return {
     orgName: org?.legalName ?? null,
@@ -233,8 +313,17 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
           paymentConfirmedAt: payment?.confirmedAt?.toISOString() ?? null,
         }
       : null,
+    recentActivity,
+    documents: documents.map((d) => ({
+      id: d.id,
+      kind: d.kind,
+      filename: d.filename,
+      sizeBytes: d.sizeBytes,
+      uploadedAt: d.uploadedAt.toISOString(),
+    })),
     windowCloseAt: windowIsOpen ? activeWindow!.closeAt.toISOString() : null,
     windowName:    windowIsOpen ? activeWindow!.name : null,
+    mustChangePassword: user ? user.passwordChangedAt == null : false,
   } satisfies DashboardData;
 }
 
@@ -270,29 +359,7 @@ export async function getApplicationDetail(userId: string, ref: string): Promise
 
   const a = app as AppWithIncludes;
 
-  const auditTrail: { time: string; text: string; actor: string }[] = [];
-
-  if (payment?.paidAt) {
-    auditTrail.push({ time: payment.paidAt.toISOString(), text: "Payment initiated", actor: "You" });
-  }
-  if (payment?.confirmedAt) {
-    auditTrail.push({ time: payment.confirmedAt.toISOString(), text: "Payment confirmed", actor: "KIP Admin" });
-  }
-  if (app.submittedAt) {
-    auditTrail.push({ time: app.submittedAt.toISOString(), text: "EOI submitted", actor: "You" });
-  }
-
-  for (const action of a.reviewActions) {
-    const text = ACTION_TEXT[action.type as ReviewActionType];
-    if (!text) continue;
-    auditTrail.push({
-      time:  action.createdAt!.toISOString(),
-      text,
-      actor: ACTOR_TEXT[action.actor.role as UserRole] ?? "KIP Admin",
-    });
-  }
-
-  auditTrail.sort((x, y) => new Date(x.time).getTime() - new Date(y.time).getTime());
+  const auditTrail = buildAuditTrail(a.reviewActions, payment, app.submittedAt ?? null);
 
   return {
     reference:   app.reference,
@@ -317,5 +384,73 @@ export async function getApplicationDetail(userId: string, ref: string): Promise
         }
       : null,
     auditTrail,
+  };
+}
+
+// ─── Investor profile (settings) ──────────────────────────────────────────────
+
+export type InvestorProfile = {
+  name: string
+  email: string
+  designation: string | null
+  phone: string | null
+  role: string
+  memberSince: string
+  passwordChangedAt: string | null
+  org: {
+    legalName: string
+    tradingName: string | null
+    registrationNumber: string | null
+    ursbRegistrationNumber: string | null
+    companyType: string | null
+    companyTypeLabel: string | null
+    businessSector: string | null
+    businessSectorLabel: string | null
+    countryOfIncorporation: string | null
+    tin: string | null
+    address: string | null
+    phone: string | null
+    email: string | null
+  } | null
+}
+
+/** The signed-in investor's own account + company profile, for the settings page. */
+export async function getInvestorProfile(userId: string): Promise<InvestorProfile | null> {
+  const user = await User.findByPk(userId, {
+    include: [{ model: InvestorOrg, as: "investorOrg" }],
+  });
+  if (!user) return null;
+
+  const org = (user as User & { investorOrg?: InvestorOrg }).investorOrg;
+
+  return {
+    name: user.name ?? "",
+    email: user.email,
+    designation: user.designation ?? null,
+    phone: user.phone ?? null,
+    role: user.role,
+    memberSince: user.createdAt.toISOString(),
+    passwordChangedAt: user.passwordChangedAt?.toISOString() ?? null,
+    org: org
+      ? {
+          legalName: org.legalName,
+          tradingName: org.tradingName ?? null,
+          registrationNumber: org.registrationNumber ?? null,
+          ursbRegistrationNumber: org.ursbRegistrationNumber ?? null,
+          companyType: org.companyType ?? null,
+          companyTypeLabel: org.companyType
+            ? COMPANY_TYPE_LABELS[org.companyType as CompanyType] ?? org.companyType
+            : null,
+          businessSector: org.businessSector ?? null,
+          businessSectorLabel: org.businessSector
+            ? BUSINESS_SECTOR_LABELS[org.businessSector as BusinessSector] ?? org.businessSector
+            : null,
+          countryOfIncorporation: org.countryOfIncorporation ?? null,
+          tin: org.tin ?? null,
+          address: org.address ?? null,
+          phone: org.phone ?? null,
+          email: org.email ?? null,
+        }
+      : null,
   };
 }

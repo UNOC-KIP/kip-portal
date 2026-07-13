@@ -35,6 +35,34 @@ export const updateUserSchema = z.object({
 });
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
+// Self-service profile edit (any authenticated user, acting on themselves).
+// Legal-identity org fields (legalName, registration numbers, type, sector,
+// country, TIN) are intentionally NOT editable here — they are verified at
+// registration and only an admin may amend them.
+export const updateOwnProfileSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200).optional(),
+  designation: z.string().max(200).nullable().optional(),
+  phone: z.string().max(50).nullable().optional(),
+  org: z
+    .object({
+      tradingName: z.string().max(300).nullable().optional(),
+      address: z.string().max(500).nullable().optional(),
+      phone: z.string().max(50).nullable().optional(),
+      email: z.string().email("Must be a valid email address").nullable().optional(),
+    })
+    .optional(),
+});
+export type UpdateOwnProfileInput = z.infer<typeof updateOwnProfileSchema>;
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Enter your current password").max(200),
+  newPassword: z
+    .string()
+    .min(8, "New password must be at least 8 characters")
+    .max(200, "Password is too long"),
+});
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
 export const createStaffUserSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(200),
   email: z.string().email("Must be a valid email address"),
