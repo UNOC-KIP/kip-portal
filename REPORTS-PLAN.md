@@ -72,3 +72,14 @@ Each phase: `pnpm --filter @kip/web typecheck && pnpm --filter @kip/web test` (r
 2. **Route naming** — keep `/console/report` (no URL break) or rename to `/console/reports`? Default: keep `report`.
 3. **Charts** — stay with the current pure-CSS bars (zero deps, print-safe) or add a chart library? Default: pure CSS.
 4. Phase order — payments before applications if finance visibility is the more urgent ask.
+
+---
+
+## 5. Implementation status (14 July 2026)
+
+All phases implemented in `feat/dashboar-report`. One deviation: the `?window=`
+filter was **dropped** — `Application` has no `windowId` FK (the reference year
+is derived at submit time), so a per-window slice would need a date-range
+approximation that could mislead. If wanted later, add a `windowId` column via
+migration first. Engagement weekly trends were also skipped (view rows carry
+formatted dates); breakdowns cover the need at current data scale.

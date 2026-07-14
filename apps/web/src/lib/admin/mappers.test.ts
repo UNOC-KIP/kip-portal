@@ -451,3 +451,119 @@ describe("toInvestorReportRow", () => {
     expect(row.reference).toBe("KIP-EOI-2026-0001");
   });
 });
+
+// ─── Reports hub aggregation helpers ─────────────────────────────────────────
+
+import {
+  bucketWeekly,
+  computeStageDurations,
+  countRowsBy,
+  toAppsReportRow,
+  toPaymentReportRow,
+  paymentMethodLabel,
+  paymentStatusLabel,
+} from "./mappers";
+
+const NOW = new Date("2026-07-14T12:00:00Z");
+const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000);
+
+describe("countRowsBy", () => {
+  it("counts, sorts desc and limits", () => {
+    const rows = [{ zone: "A" }, { zone: "B" }, { zone: "B" }, { zone: null }];
+    expect(countRowsBy(rows, "zone")).toEqual([
+      { label: "B", count: 2 },
+      { label: "A", count: 1 },
+      { label: "Unknown", count: 1 },
+    ]);
+    expect(countRowsBy(rows, "zone", 1)).toHaveLength(1);
+  });
+});
+
+describe("bucketWeekly", () => {
+  it("buckets into trailing weeks, oldest first", () => {
+    const buckets = bucketWeekly([daysAgo(1), daysAgo(2), daysAgo(8), daysAgo(200), null], NOW, 4);
+    expect(buckets).toHaveLength(4);
+    expect(buckets[3]).toBe(2); // this week
+    expect(buckets[2]).toBe(1); // last week
+    expect(buckets.reduce((a, b) => a + b, 0)).toBe(3); // 200d ago + null skipped
+  });
+});
+
+describe("computeStageDurations", () => {
+  it("averages submission→TC, shortlist→LAC, LAC→allocation", () => {
+    const apps = [{ id: "a1", submittedAt: daysAgo(30) }];
+    const actions = [
+      { applicationId: "a1", type: "SHORTLISTED", createdAt: daysAgo(20) },
+      { applicationId: "a1", type: "LAC_APPROVED", createdAt: daysAgo(10) },
+      { applicationId: "a1", type: "ALLOCATED", createdAt: daysAgo(5) },
+    ];
+    const [tc, lac, exco] = computeStageDurations(apps, actions);
+    expect(tc).toEqual({ label: "Submission → TC decision", days: 10, samples: 1 });
+    expect(lac?.days).toBe(10);
+    expect(exco?.days).toBe(5);
+  });
+
+  it("returns null days with no samples", () => {
+    const [tc, lac, exco] = computeStageDurations([], []);
+    expect(tc?.days).toBeNull();
+    expect(lac?.samples).toBe(0);
+    expect(exco?.days).toBeNull();
+  });
+});
+
+describe("toAppsReportRow", () => {
+  it("ages live applications from submission and dashes terminal ones", () => {
+    const base = {
+      id: "a1",
+      reference: "KIP-EOI-2026-0001",
+      orgName: "Gulf",
+      country: "UAE",
+      submittedAt: daysAgo(14),
+      createdAt: daysAgo(30),
+    };
+    const live = toAppsReportRow({ ...base, status: "LAC_REVIEW" }, NOW);
+    expect(live.ageDays).toBe(14);
+    expect(live.ageLabel).toBe("14d");
+    expect(live.stage).toBe("LAC review");
+    const done = toAppsReportRow({ ...base, status: "ALLOCATED" }, NOW);
+    expect(done.ageDays).toBeNull();
+    expect(done.ageLabel).toBe("—");
+  });
+});
+
+describe("payments report mappers", () => {
+  it("labels methods and statuses", () => {
+    expect(paymentMethodLabel("STANBIC_TRANSFER")).toBe("Stanbic Transfer");
+    expect(paymentStatusLabel("PROOF_UPLOADED")).toBe("Proof Uploaded");
+  });
+
+  it("toPaymentReportRow computes confirmation lag in days", () => {
+    const row = toPaymentReportRow({
+      id: "p1",
+      amount: "1000.00",
+      currency: "USD",
+      method: "STANBIC_TRANSFER",
+      status: "CONFIRMED",
+      createdAt: daysAgo(10),
+      confirmedAt: daysAgo(7),
+      orgName: "Gulf",
+      reference: "KIP-EOI-2026-0001",
+    });
+    expect(row.lagDays).toBe(3);
+    expect(row.amount).toContain("1,000");
+    expect(row.status).toBe("Confirmed");
+    const pending = toPaymentReportRow({
+      id: "p2",
+      amount: 500,
+      currency: "USD",
+      method: "CARD",
+      status: "PENDING",
+      createdAt: daysAgo(1),
+      confirmedAt: null,
+      orgName: null,
+      reference: null,
+    });
+    expect(pending.lagDays).toBeNull();
+    expect(pending.company).toBe("—");
+  });
+});

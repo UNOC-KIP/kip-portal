@@ -11,32 +11,37 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ReportData } from "@/lib/admin/mappers";
-import {
-  buildInvestorCsv,
-  buildOnboardingSummary,
-  reportFilename,
-} from "@/lib/report-export";
+import { buildCsv, datestampedFilename } from "@/lib/report-export";
 
 /**
- * Export/share control for the investor-onboarding report. All three actions
- * run entirely in the browser (no API call), so they work even on the read-only
- * demo where the Express API isn't deployed:
- *   • CSV     — Blob download of the per-investor table
+ * Generic export/share control for every report tab. All actions run entirely
+ * in the browser (no API call), so they work on the read-only demo:
+ *   • CSV     — Blob download of `rows` serialised through the `columns` spec
  *   • PDF     — window.print() against the page's print stylesheet
- *   • Summary — plain-text digest copied to the clipboard
+ *   • Summary — plain-text digest (built server-side) copied to the clipboard
+ * Omit `csv` for reports without a detail table (e.g. the Overview).
  */
-export function ReportExportActions({ report }: { report: ReportData }) {
+export function ReportExportActions({
+  filenamePrefix,
+  summary,
+  csv,
+}: {
+  filenamePrefix: string;
+  summary: string;
+  csv?: { columns: { header: string; key: string }[]; rows: Record<string, unknown>[] };
+}) {
   const [copied, setCopied] = useState(false);
 
   const downloadCsv = () => {
-    const csv = buildInvestorCsv(report.investors);
+    if (!csv) return;
     // Prepend a BOM so Excel opens UTF-8 (accented names, — dashes) correctly.
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const blob = new Blob(["﻿" + buildCsv(csv.columns, csv.rows)], {
+      type: "text/csv;charset=utf-8;",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = reportFilename(new Date(), "csv");
+    a.download = datestampedFilename(filenamePrefix, new Date());
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -45,12 +50,12 @@ export function ReportExportActions({ report }: { report: ReportData }) {
 
   const copySummary = async () => {
     try {
-      await navigator.clipboard.writeText(buildOnboardingSummary(report));
+      await navigator.clipboard.writeText(summary);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Clipboard blocked (insecure context / permissions) — no-op; the CSV and
-      // print paths remain available.
+      // Clipboard blocked (insecure context / permissions) — no-op; the CSV
+      // and print paths remain available.
     }
   };
 
@@ -65,11 +70,13 @@ export function ReportExportActions({ report }: { report: ReportData }) {
       <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>Export this report</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={downloadCsv}>
-          <Download size={14} />
-          Download CSV
-          <span className="ml-auto text-[10px] text-ink-400">{report.investors.length} rows</span>
-        </DropdownMenuItem>
+        {csv ? (
+          <DropdownMenuItem onClick={downloadCsv}>
+            <Download size={14} />
+            Download CSV
+            <span className="ml-auto text-[10px] text-ink-400">{csv.rows.length} rows</span>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuItem onClick={() => window.print()}>
           <Printer size={14} />
           Print / Save as PDF

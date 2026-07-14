@@ -120,3 +120,138 @@ export function buildCsv(
   }
   return lines.join("\r\n");
 }
+
+// ─── Reports-hub export specs & summaries ────────────────────────────────────
+
+/** Column spec for the investors CSV — mirrors `CSV_HEADERS` for the generic exporter. */
+export const INVESTOR_EXPORT_COLUMNS: { header: string; key: string }[] = [
+  { header: "Company", key: "company" },
+  { header: "Representative", key: "rep" },
+  { header: "Email", key: "email" },
+  { header: "Country", key: "country" },
+  { header: "Sector", key: "sector" },
+  { header: "Company Type", key: "companyType" },
+  { header: "Account", key: "accountStatus" },
+  { header: "Payment", key: "paymentStatus" },
+  { header: "EOI Stage", key: "eoiStage" },
+  { header: "Reference", key: "reference" },
+  { header: "Registered", key: "registeredAt" },
+];
+
+type Line = string;
+const kv = (label: string, value: string | number): Line => `${label}: ${value}`;
+const section = (title: string, rows: { label: string; count: number }[]): Line[] =>
+  rows.length === 0 ? [] : ["", `${title}:`, ...rows.map((r) => `  - ${r.label}: ${r.count}`)];
+
+/** Text digest for the Applications & Review Pipeline report. */
+export function buildApplicationsSummary(data: {
+  generatedAt: string;
+  stats: { total: number; submitted: number; inReview: number; decided: number; clarifications: number };
+  byStatus: { label: string; count: number }[];
+  stageDurations: { label: string; days: number | null; samples: number }[];
+}): string {
+  const s = data.stats;
+  return [
+    "KIP APPLICATIONS & REVIEW PIPELINE REPORT",
+    kv("Generated", data.generatedAt),
+    "",
+    kv("Total applications", s.total),
+    kv("Submitted", s.submitted),
+    kv("In review", s.inReview),
+    kv("Decided", s.decided),
+    kv("Clarification requests raised", s.clarifications),
+    "",
+    "Average days per stage:",
+    ...data.stageDurations.map((d) =>
+      `  - ${d.label}: ${d.days == null ? "no data yet" : `${d.days} days (${d.samples} apps)`}`,
+    ),
+    ...section("By status", data.byStatus),
+  ].join("\n");
+}
+
+/** Text digest for the Payments & Fees report. */
+export function buildPaymentsSummary(data: {
+  generatedAt: string;
+  stats: {
+    confirmedCount: number;
+    feesCollected: string;
+    pendingCount: number;
+    proofUploadedCount: number;
+    agingOver7: number;
+    avgLagDays: number | null;
+  };
+  methodSplit: { label: string; count: number }[];
+}): string {
+  const s = data.stats;
+  return [
+    "KIP PAYMENTS & FEES REPORT",
+    kv("Generated", data.generatedAt),
+    "",
+    kv("Payments confirmed", `${s.confirmedCount}   Fees collected: ${s.feesCollected}`),
+    kv("Awaiting confirmation", `${s.pendingCount} (proof uploaded: ${s.proofUploadedCount})`),
+    kv("Unconfirmed older than 7 days", s.agingOver7),
+    kv("Avg days to confirmation", s.avgLagDays == null ? "no data yet" : s.avgLagDays),
+    ...section("By method", data.methodSplit),
+  ].join("\n");
+}
+
+/** Text digest for the Engagement (site visits + inquiries) report. */
+export function buildEngagementSummary(data: {
+  generatedAt: string;
+  stats: {
+    totalVisits: number;
+    newVisits: number;
+    scheduledVisits: number;
+    completedVisits: number;
+    totalInquiries: number;
+    openInquiries: number;
+    signups: number;
+  };
+  visitsByZone: { label: string; count: number }[];
+  inquiriesByChannel: { label: string; count: number }[];
+}): string {
+  const s = data.stats;
+  return [
+    "KIP ENGAGEMENT REPORT — SITE VISITS & INQUIRIES",
+    kv("Generated", data.generatedAt),
+    "",
+    kv(
+      "Site-visit requests",
+      `${s.totalVisits} (new ${s.newVisits}, scheduled ${s.scheduledVisits}, completed ${s.completedVisits})`,
+    ),
+    kv("Inquiries", `${s.totalInquiries} (open ${s.openInquiries})`),
+    kv("Notify-me signups", s.signups),
+    ...section("Visits by zone", data.visitsByZone),
+    ...section("Inquiries by channel", data.inquiriesByChannel),
+  ].join("\n");
+}
+
+/** Text digest for the Overview report. */
+export function buildOverviewSummary(data: {
+  generatedAt: string;
+  stats: {
+    investors: number;
+    eoisSubmitted: number;
+    feesCollected: string;
+    siteVisits: number;
+    openInquiries: number;
+    daysToClose: number | null;
+  };
+  funnel: { label: string; count: number; pct: number }[];
+}): string {
+  const s = data.stats;
+  const lines = [
+    "KIP PORTAL PERFORMANCE OVERVIEW",
+    kv("Generated", data.generatedAt),
+    "",
+    kv("Registered investors", s.investors),
+    kv("EOIs submitted", s.eoisSubmitted),
+    kv("Fees collected", s.feesCollected),
+    kv("Site-visit requests", s.siteVisits),
+    kv("Open inquiries", s.openInquiries),
+  ];
+  if (s.daysToClose != null) lines.push(kv("Days to window close", s.daysToClose));
+  lines.push("", "Funnel:");
+  for (const f of data.funnel) lines.push(`  - ${f.label}: ${f.count} (${f.pct}%)`);
+  return lines.join("\n");
+}

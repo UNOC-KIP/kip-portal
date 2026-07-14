@@ -16,6 +16,7 @@ import {
   BUSINESS_SECTOR_LABELS,
   INQUIRY_CHANNEL_LABELS,
   InquiryStatus,
+  ReviewActionType,
   KIP_ZONES,
   SITE_VISIT_STATUS_LABELS,
   type CompanyType,
@@ -23,7 +24,7 @@ import {
   type InquiryChannel,
   type SiteVisitStatus,
 } from "@kip/shared";
-import { formatDateTime, formatShortDate } from "../format";
+import { formatDateTime, formatMoney, formatShortDate } from "../format";
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
@@ -614,4 +615,229 @@ export function toWindowRow(w: {
     default:
       return { ...base, statusVariant: null, statusLabel: null, detail: span };
   }
+}
+
+// ─── Reports hub: pure aggregation helpers ───────────────────────────────────
+
+const DAY_MS = 86_400_000;
+
+/** Terminal pipeline states — an application here is no longer "aging". */
+export const TERMINAL_STATUSES = new Set<string>([
+  ApplicationStatus.NOT_SHORTLISTED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.ALLOCATED,
+  ApplicationStatus.WITHDRAWN,
+]);
+
+/** Sorted label/count breakdown from view rows, keyed by a string field. */
+export function countRowsBy<T extends Record<string, unknown>>(
+  rows: T[],
+  key: keyof T,
+  limit = 8,
+): BreakdownRow[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    const label = String(r[key] ?? "Unknown");
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, count]) => ({ label, count }));
+}
+
+/**
+ * Bucket timestamps into trailing calendar weeks ending at `now`.
+ * Index 0 = oldest week, last index = the week containing `now`.
+ */
+export function bucketWeekly(
+  dates: (Date | string | null | undefined)[],
+  now: Date,
+  weeks = 12,
+): number[] {
+  const WEEK = 7 * DAY_MS;
+  const end = now.getTime();
+  const start = end - weeks * WEEK;
+  const buckets: number[] = new Array(weeks).fill(0);
+  for (const d of dates) {
+    if (d == null) continue;
+    const t = new Date(d).getTime();
+    if (Number.isNaN(t) || t <= start || t > end) continue;
+    const idx = Math.min(weeks - 1, Math.floor((t - start) / WEEK));
+    buckets[idx] = (buckets[idx] ?? 0) + 1;
+  }
+  return buckets;
+}
+
+// ─── Applications & review-pipeline report ───────────────────────────────────
+
+export type StageDuration = { label: string; days: number | null; samples: number };
+
+const TC_DECISIONS = new Set<string>([
+  ReviewActionType.SHORTLISTED,
+  ReviewActionType.NOT_SHORTLISTED,
+]);
+const LAC_DECISIONS = new Set<string>([
+  ReviewActionType.LAC_APPROVED,
+  ReviewActionType.LAC_REJECTED,
+]);
+
+/**
+ * Average days spent in each review stage, mined from the append-only
+ * `ReviewAction` log: submission → first TC decision, TC shortlisting → LAC
+ * decision, LAC approval → ExCo allocation. `days: null` = no samples yet.
+ */
+export function computeStageDurations(
+  apps: { id: string; submittedAt: Date | string | null }[],
+  actions: { applicationId: string; type: string; createdAt: Date | string }[],
+): StageDuration[] {
+  // Earliest timestamp per application for each milestone.
+  const first = (types: Set<string> | string) => {
+    const m = new Map<string, number>();
+    for (const a of actions) {
+      const hit = typeof types === "string" ? a.type === types : types.has(a.type);
+      if (!hit) continue;
+      const t = new Date(a.createdAt).getTime();
+      const prev = m.get(a.applicationId);
+      if (prev === undefined || t < prev) m.set(a.applicationId, t);
+    }
+    return m;
+  };
+  const tcAt = first(TC_DECISIONS);
+  const shortlistedAt = first(ReviewActionType.SHORTLISTED);
+  const lacAt = first(LAC_DECISIONS);
+  const lacApprovedAt = first(ReviewActionType.LAC_APPROVED);
+  const allocatedAt = first(ReviewActionType.ALLOCATED);
+
+  const spans = { tc: [] as number[], lac: [] as number[], exco: [] as number[] };
+  for (const app of apps) {
+    const submitted = app.submittedAt ? new Date(app.submittedAt).getTime() : null;
+    const tc = tcAt.get(app.id);
+    if (submitted != null && tc !== undefined && tc >= submitted) spans.tc.push(tc - submitted);
+    const sl = shortlistedAt.get(app.id);
+    const lac = lacAt.get(app.id);
+    if (sl !== undefined && lac !== undefined && lac >= sl) spans.lac.push(lac - sl);
+    const lacOk = lacApprovedAt.get(app.id);
+    const alloc = allocatedAt.get(app.id);
+    if (lacOk !== undefined && alloc !== undefined && alloc >= lacOk) spans.exco.push(alloc - lacOk);
+  }
+  const avg = (xs: number[]): number | null =>
+    xs.length === 0 ? null : Math.round((xs.reduce((a, b) => a + b, 0) / xs.length / DAY_MS) * 10) / 10;
+
+  return [
+    { label: "Submission → TC decision", days: avg(spans.tc), samples: spans.tc.length },
+    { label: "Shortlisted → LAC decision", days: avg(spans.lac), samples: spans.lac.length },
+    { label: "LAC approval → allocation", days: avg(spans.exco), samples: spans.exco.length },
+  ];
+}
+
+/** One row in the applications report table + CSV. */
+export type AppsReportRow = {
+  id: string;
+  reference: string;
+  company: string;
+  country: string;
+  stage: string;
+  rawStatus: string;
+  submitted: string;
+  /** Days since submission (or creation) for non-terminal apps; null when decided. */
+  ageDays: number | null;
+  ageLabel: string;
+};
+
+export function toAppsReportRow(
+  a: {
+    id: string;
+    reference: string | null;
+    status: string;
+    orgName: string | null;
+    country: string | null;
+    submittedAt: Date | string | null;
+    createdAt: Date | string;
+  },
+  now: Date,
+): AppsReportRow {
+  const terminal = TERMINAL_STATUSES.has(a.status);
+  const since = a.submittedAt ?? a.createdAt;
+  const ageDays = terminal
+    ? null
+    : Math.max(0, Math.floor((now.getTime() - new Date(since).getTime()) / DAY_MS));
+  return {
+    id: a.id,
+    reference: a.reference ?? DASH,
+    company: a.orgName ?? DASH,
+    country: a.country ?? DASH,
+    stage: applicationStageLabel(a.status),
+    rawStatus: a.status,
+    submitted: a.submittedAt ? formatShortDate(a.submittedAt) : DASH,
+    ageDays,
+    ageLabel: ageDays == null ? DASH : `${ageDays}d`,
+  };
+}
+
+// ─── Payments report ─────────────────────────────────────────────────────────
+
+export function paymentMethodLabel(method: string): string {
+  if (method === "STANBIC_TRANSFER") return "Stanbic Transfer";
+  if (method === "CARD") return "Card";
+  return method;
+}
+
+export function paymentStatusLabel(status: string): string {
+  switch (status) {
+    case PaymentStatus.PENDING:        return "Pending";
+    case PaymentStatus.PROOF_UPLOADED: return "Proof Uploaded";
+    case PaymentStatus.CONFIRMED:      return "Confirmed";
+    case PaymentStatus.FAILED:         return "Failed";
+    case PaymentStatus.REFUNDED:       return "Refunded";
+    default:                           return status;
+  }
+}
+
+/** One row in the payments report table + CSV. */
+export type PaymentReportRow = {
+  id: string;
+  company: string;
+  reference: string;
+  amount: string;
+  method: string;
+  status: string;
+  rawStatus: string;
+  initiated: string;
+  confirmed: string;
+  /** Days from initiation to confirmation; null while unconfirmed. */
+  lagDays: number | null;
+};
+
+export function toPaymentReportRow(p: {
+  id: string;
+  amount: string | number;
+  currency: string;
+  method: string;
+  status: string;
+  createdAt: Date | string;
+  confirmedAt: Date | string | null;
+  orgName: string | null;
+  reference: string | null;
+}): PaymentReportRow {
+  const lagDays = p.confirmedAt
+    ? Math.max(
+        0,
+        Math.round(
+          ((new Date(p.confirmedAt).getTime() - new Date(p.createdAt).getTime()) / DAY_MS) * 10,
+        ) / 10,
+      )
+    : null;
+  return {
+    id: p.id,
+    company: p.orgName ?? DASH,
+    reference: p.reference ?? DASH,
+    amount: formatMoney(Number(p.amount), p.currency),
+    method: paymentMethodLabel(p.method),
+    status: paymentStatusLabel(p.status),
+    rawStatus: p.status,
+    initiated: formatShortDate(p.createdAt),
+    confirmed: p.confirmedAt ? formatShortDate(p.confirmedAt) : DASH,
+    lagDays,
+  };
 }
