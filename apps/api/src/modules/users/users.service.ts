@@ -21,6 +21,7 @@ import { fireWebhook } from "../../webhooks.js";
 import {
   sendMail,
   credentialsEmail,
+  passwordResetEmail,
   rejectionEmail,
   passwordChangedEmail,
 } from "../../mailer.js";
@@ -325,4 +326,52 @@ export async function rejectUser(
     companyName: capturedOrg?.legalName ?? "",
     reason: reason ?? null,
   });
+}
+
+/**
+ * Admin-initiated password reset for a user locked out of their account.
+ * Generates a fresh temporary password, clears `passwordChangedAt` (so the
+ * portal shows the change-password nudge again), and emails the credentials to
+ * the account's login address. The plaintext never leaves this function except
+ * inside that email — no webhook carries it, and it is not returned to the
+ * admin's browser.
+ */
+export async function resetUserPassword(userId: string): Promise<void> {
+  const plainPassword = generatePassword();
+  const passwordHash = await bcrypt.hash(plainPassword, 12);
+
+  let capturedEmail = "";
+  let capturedName = "";
+  let capturedRole = "";
+
+  await sequelize.transaction(async (t) => {
+    const user = await User.findByPk(userId, { lock: true, transaction: t });
+    if (!user) throw NotFound("User");
+    if (user.status !== UserStatus.ACTIVE) {
+      throw Conflict(`Cannot reset the password of a ${user.status} account`);
+    }
+    const org = user.investorOrgId
+      ? await InvestorOrg.findByPk(user.investorOrgId, { transaction: t })
+      : null;
+    await user.update({ passwordHash, passwordChangedAt: null }, { transaction: t });
+    capturedEmail = user.email;
+    capturedName = user.name ?? org?.legalName ?? user.email;
+    capturedRole = user.role;
+  });
+
+  try {
+    await sendMail({
+      to: capturedEmail,
+      subject: "Your KIP Investor Portal password has been reset",
+      html: passwordResetEmail({
+        recipientName: capturedName,
+        email: capturedEmail,
+        tempPassword: plainPassword,
+        signInUrl:
+          capturedRole === UserRole.INVESTOR ? env.PORTAL_PUBLIC_URL : env.WEB_PUBLIC_URL,
+      }),
+    });
+  } catch {
+    // Delivery failure is logged inside sendMail; the reset itself stands.
+  }
 }

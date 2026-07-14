@@ -39,9 +39,12 @@ import {
   businessSectorLabel,
   companyTypeLabel,
   hectaresFromSqm,
+  isShortlistedOrBeyond,
+  isSubmitted,
   roleLabel,
   toApplicationRow,
   toInquiryRow,
+  toInvestorReportRow,
   toNotifySignupRow,
   toSiteVisitRow,
   toStaffRow,
@@ -51,8 +54,12 @@ import {
   toWindowRow,
   userStatusLabel,
   type ApplicationRow,
+  type BreakdownRow,
+  type FunnelRow,
   type InquiryRow,
+  type InvestorReportRow,
   type NotifySignupRow,
+  type ReportData,
   type SiteVisitRow,
   type StaffRow,
   type TcAppRow,
@@ -240,6 +247,10 @@ export type UserDetail = {
   status: string;
   rawStatus: string;
   registeredAt: string;
+  /** Formatted date of the last self-service password change; null = still on the emailed password. */
+  passwordChangedAt: string | null;
+  isInvestor: boolean;
+  appStage: string;
   company: string;
   tradingName: string;
   registrationNumber: string;
@@ -282,7 +293,9 @@ export type UserDetail = {
 
 export async function getUserDetail(id: string): Promise<UserDetail | null> {
   const user = await User.findByPk(id, {
-    attributes: ["id", "email", "name", "designation", "phone", "role", "status", "createdAt"],
+    attributes: [
+      "id", "email", "name", "designation", "phone", "role", "status", "createdAt", "passwordChangedAt",
+    ],
     include: [
       { model: InvestorOrg, as: "investorOrg" },
       {
@@ -309,6 +322,9 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
     status: userStatusLabel(rawStatus),
     rawStatus,
     registeredAt: formatDateTime(u.createdAt),
+    passwordChangedAt: u.passwordChangedAt ? formatDateTime(u.passwordChangedAt) : null,
+    isInvestor: u.role === UserRole.INVESTOR,
+    appStage: applicationStageLabel(latestApp?.status ?? null),
     company: u.investorOrg?.legalName ?? "—",
     tradingName: u.investorOrg?.tradingName ?? "—",
     registrationNumber: u.investorOrg?.registrationNumber ?? "—",
@@ -484,9 +500,22 @@ export type SiteVisitsView = {
 export async function getSiteVisitsView(): Promise<SiteVisitsView> {
   const rows = await SiteVisitBooking.findAll({
     include: [
-      { model: User, as: "user", attributes: ["name", "email"], required: false },
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "name", "email", "designation", "phone", "status", "createdAt"],
+        required: false,
+        include: [
+          { model: Application, as: "applications", attributes: ["reference", "status"], required: false },
+        ],
+      },
       { model: User, as: "handledBy", attributes: ["name", "email"], required: false },
-      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"], required: false },
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType", "registrationNumber"],
+        required: false,
+      },
     ],
     order: [["createdAt", "DESC"]],
     limit: 500,
@@ -494,11 +523,32 @@ export async function getSiteVisitsView(): Promise<SiteVisitsView> {
 
   const bookings = rows.map((row) => {
     const b = row as SiteVisitBooking & {
-      user?: User;
+      user?: User & { applications?: Application[] };
       handledBy?: User;
       investorOrg?: InvestorOrg;
     };
+    const investor = b.user
+      ? toSiteVisitInvestor({
+          userId: b.user.id,
+          name: b.user.name ?? null,
+          designation: b.user.designation ?? null,
+          email: b.user.email,
+          phone: b.user.phone ?? null,
+          rawStatus: b.user.status,
+          createdAt: b.user.createdAt,
+          orgName: b.investorOrg?.legalName ?? null,
+          country: b.investorOrg?.countryOfIncorporation ?? null,
+          businessSector: b.investorOrg?.businessSector ?? null,
+          companyType: b.investorOrg?.companyType ?? null,
+          registrationNumber: b.investorOrg?.registrationNumber ?? null,
+          applications: (b.user.applications ?? []).map((a) => ({
+            reference: a.reference,
+            status: a.status,
+          })),
+        })
+      : undefined;
     return toSiteVisitRow({
+      investor,
       id: b.id,
       companyName: b.investorOrg?.legalName ?? null,
       contactName: b.user?.name ?? null,
@@ -733,34 +783,456 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
   };
 }
 
-// ─── Pipeline report data ─────────────────────────────────────────────────────
+// ─── Investor onboarding report ──────────────────────────────────────────────
 
-export type ReportData = {
-  stats: {
-    totalRegistered: number;
-    eoisSubmitted: number;
-    feesCollected: string;
-    daysToClose: number | null;
+/**
+ * Everything the /console/report page and its CSV / PDF / summary exports need
+ * to convey how investors are moving through onboarding. All INVESTOR users are
+ * fetched once (with their org + applications + payments) and the aggregates,
+ * breakdowns, funnel and per-investor rows are derived in JS — cheaper than a
+ * fan-out of `count({ group })` queries at this data scale and keeps the "reads
+ * → direct DB" rule with all shaping delegated to the pure `./mappers` helpers.
+ */
+export async function getReportData(now: Date = new Date()): Promise<ReportData> {
+  const [investorUsers, confirmedAmountSum, dominantCurrencyRow, activeWindow, siteVisitsRequested] =
+    await Promise.all([
+      User.findAll({
+        where: { role: UserRole.INVESTOR },
+        attributes: ["id", "name", "email", "status", "createdAt"],
+        include: [
+          {
+            model: InvestorOrg,
+            as: "investorOrg",
+            attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType"],
+          },
+          {
+            model: Application,
+            as: "applications",
+            attributes: ["reference", "status", "createdAt"],
+            required: false,
+            include: [{ model: Payment, as: "payments", attributes: ["status"], required: false }],
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+      }),
+      Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
+      Payment.findOne({
+        where: { status: PaymentStatus.CONFIRMED },
+        attributes: ["currency"],
+        order: [["createdAt", "ASC"]],
+      }),
+      ApplicationWindow.findOne({
+        where: { status: ApplicationWindowStatus.OPEN },
+        order: [["openAt", "DESC"]],
+      }),
+      SiteVisitBooking.count(),
+    ]);
+
+  const DAY = 86_400_000;
+  const last7 = now.getTime() - 7 * DAY;
+  const last30 = now.getTime() - 30 * DAY;
+
+  const countryCounts = new Map<string, number>();
+  const sectorCounts = new Map<string, number>();
+  const typeCounts = new Map<string, number>();
+
+  let activeAccounts = 0;
+  let pendingAccounts = 0;
+  let newLast7Days = 0;
+  let newLast30Days = 0;
+  let paymentsConfirmed = 0;
+  let eoisSubmitted = 0;
+  let shortlisted = 0;
+  let allocated = 0;
+
+  const investors: InvestorReportRow[] = [];
+
+  for (const row of investorUsers) {
+    const u = row as User & {
+      investorOrg?: InvestorOrg;
+      applications?: (Application & { payments?: Payment[] })[];
+    };
+    const org = u.investorOrg;
+    const apps = u.applications ?? [];
+    // Primary application: the one that reached a reference, else the newest.
+    const primary = apps.find((a) => a.reference) ?? apps[0] ?? null;
+    const primaryPayments = (primary?.payments ?? []).map((p) => ({ status: p.status }));
+
+    if (u.status === UserStatus.ACTIVE) activeAccounts++;
+    else if (u.status === UserStatus.PENDING_REVIEW) pendingAccounts++;
+
+    const created = new Date(u.createdAt).getTime();
+    if (created >= last7) newLast7Days++;
+    if (created >= last30) newLast30Days++;
+
+    // Funnel: an investor "reaches" a stage if any of their applications did.
+    if (apps.some((a) => (a.payments ?? []).some((p) => p.status === PaymentStatus.CONFIRMED))) paymentsConfirmed++;
+    if (apps.some((a) => isSubmitted(a.status))) eoisSubmitted++;
+    if (apps.some((a) => isShortlistedOrBeyond(a.status))) shortlisted++;
+    if (apps.some((a) => a.status === ApplicationStatus.ALLOCATED)) allocated++;
+
+    const country = org?.countryOfIncorporation ?? "Unknown";
+    countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
+    const sectorKey = org?.businessSector ? businessSectorLabel(org.businessSector) : "Unspecified";
+    sectorCounts.set(sectorKey, (sectorCounts.get(sectorKey) ?? 0) + 1);
+    const typeKey = org?.companyType ? companyTypeLabel(org.companyType) : "Unspecified";
+    typeCounts.set(typeKey, (typeCounts.get(typeKey) ?? 0) + 1);
+
+    investors.push(
+      toInvestorReportRow({
+        id: u.id,
+        name: u.name ?? null,
+        email: u.email,
+        rawStatus: u.status as string,
+        orgName: org?.legalName ?? null,
+        country: org?.countryOfIncorporation ?? null,
+        businessSector: org?.businessSector ?? null,
+        companyType: org?.companyType ?? null,
+        reference: primary?.reference ?? null,
+        appStatus: primary?.status ?? null,
+        payments: primaryPayments,
+        createdAt: u.createdAt,
+      }),
+    );
+  }
+
+  const totalRegistered = investorUsers.length;
+
+  const toSortedBreakdown = (m: Map<string, number>, limit = 8): BreakdownRow[] =>
+    Array.from(m.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([label, count]) => ({ label, count }));
+
+  const currency = dominantCurrencyRow?.currency ?? "USD";
+  const total = confirmedAmountSum ?? 0;
+
+  const daysToClose = activeWindow
+    ? Math.max(0, Math.floor((new Date(activeWindow.closeAt).getTime() - now.getTime()) / DAY))
+    : null;
+
+  const conversionFunnel: FunnelRow[] = [
+    { label: "Registered", count: totalRegistered },
+    { label: "Payment confirmed", count: paymentsConfirmed },
+    { label: "EOI submitted", count: eoisSubmitted },
+    { label: "Shortlisted", count: shortlisted },
+    { label: "Allocated", count: allocated },
+  ].map((r) => ({ ...r, pct: totalRegistered > 0 ? Math.round((r.count / totalRegistered) * 100) : 0 }));
+
+  return {
+    generatedAt: formatDateTime(now),
+    windowName: activeWindow?.name ?? "",
+    stats: {
+      totalRegistered,
+      activeAccounts,
+      pendingAccounts,
+      newLast7Days,
+      newLast30Days,
+      paymentsConfirmed,
+      eoisSubmitted,
+      shortlisted,
+      allocated,
+      siteVisitsRequested,
+      feesCollected: formatMoney(total, currency),
+      feesCollectedRaw: total,
+      daysToClose,
+    },
+    byCountry: toSortedBreakdown(countryCounts),
+    bySector: toSortedBreakdown(sectorCounts),
+    byCompanyType: toSortedBreakdown(typeCounts),
+    conversionFunnel,
+    investors,
   };
-  byCountry: { country: string; count: number }[];
-  conversionFunnel: { label: string; count: number; pct: number }[];
-  applications: ApplicationRow[];
+}
+
+// ─── Reports hub — applications / payments / engagement / overview ───────────
+
+import { InquiryStatus } from "@kip/shared";
+import {
+  applicationStageLabel,
+  bucketWeekly,
+  computeStageDurations,
+  countRowsBy,
+  toAppsReportRow,
+  toPaymentReportRow,
+  toSiteVisitInvestor,
+  type AppsReportRow,
+  type PaymentReportRow,
+  type StageDuration,
+} from "./mappers";
+
+/** Statuses at or beyond SHORTLISTED — for aggregate counts (mirror of mappers). */
+const SHORTLISTED_PLUS_STATUSES = [
+  ApplicationStatus.SHORTLISTED,
+  ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_APPROVED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.EXCO_REVIEW,
+  ApplicationStatus.ALLOCATED,
+];
+
+const IN_REVIEW_STATUSES = new Set<string>([
+  ApplicationStatus.UNDER_TC_REVIEW,
+  ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ApplicationStatus.SHORTLISTED,
+  ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_APPROVED,
+  ApplicationStatus.EXCO_REVIEW,
+]);
+const DECIDED_STATUSES = new Set<string>([
+  ApplicationStatus.NOT_SHORTLISTED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.ALLOCATED,
+]);
+
+export type ApplicationsReport = {
+  generatedAt: string;
+  stats: { total: number; submitted: number; inReview: number; decided: number; clarifications: number };
+  byStatus: BreakdownRow[];
+  decisions: BreakdownRow[];
+  stageDurations: StageDuration[];
+  rows: AppsReportRow[];
 };
 
-export async function getReportData(now: Date = new Date()): Promise<ReportData> {
+export async function getApplicationsReportData(now: Date = new Date()): Promise<ApplicationsReport> {
+  const [apps, actions] = await Promise.all([
+    Application.findAll({
+      attributes: ["id", "reference", "status", "submittedAt", "createdAt"],
+      include: [
+        { model: InvestorOrg, as: "investorOrg", attributes: ["legalName", "countryOfIncorporation"] },
+      ],
+      order: [["createdAt", "DESC"]],
+      limit: 500,
+    }),
+    ReviewAction.findAll({ attributes: ["applicationId", "type", "createdAt"], limit: 5000 }),
+  ]);
+
+  let submitted = 0;
+  let inReview = 0;
+  let decided = 0;
+  const rows: AppsReportRow[] = [];
+  for (const row of apps) {
+    const a = row as Application & { investorOrg?: InvestorOrg };
+    if (isSubmitted(a.status)) submitted++;
+    if (IN_REVIEW_STATUSES.has(a.status)) inReview++;
+    if (DECIDED_STATUSES.has(a.status)) decided++;
+    rows.push(
+      toAppsReportRow(
+        {
+          id: a.id,
+          reference: a.reference,
+          status: a.status,
+          orgName: a.investorOrg?.legalName ?? null,
+          country: a.investorOrg?.countryOfIncorporation ?? null,
+          submittedAt: a.submittedAt,
+          createdAt: a.createdAt,
+        },
+        now,
+      ),
+    );
+  }
+
+  const actionInputs = actions.map((ra) => ({
+    applicationId: ra.applicationId,
+    type: ra.type,
+    createdAt: ra.createdAt,
+  }));
+  const DECISION_LABELS: [string, string][] = [
+    [ReviewActionType.SHORTLISTED, "TC shortlisted"],
+    [ReviewActionType.NOT_SHORTLISTED, "TC not shortlisted"],
+    [ReviewActionType.LAC_APPROVED, "LAC approved"],
+    [ReviewActionType.LAC_REJECTED, "LAC rejected"],
+    [ReviewActionType.ALLOCATED, "ExCo allocated"],
+  ];
+  const decisions: BreakdownRow[] = DECISION_LABELS.map(([type, label]) => ({
+    label,
+    count: actionInputs.filter((a) => a.type === type).length,
+  })).filter((d) => d.count > 0);
+
+  return {
+    generatedAt: formatDateTime(now),
+    stats: {
+      total: apps.length,
+      submitted,
+      inReview,
+      decided,
+      clarifications: actionInputs.filter((a) => a.type === ReviewActionType.REQUESTED_CLARIFICATION).length,
+    },
+    byStatus: countRowsBy(rows as unknown as Record<string, unknown>[], "stage", 13),
+    decisions,
+    stageDurations: computeStageDurations(
+      apps.map((a) => ({ id: a.id, submittedAt: a.submittedAt })),
+      actionInputs,
+    ),
+    rows,
+  };
+}
+
+export type PaymentsReport = {
+  generatedAt: string;
+  stats: {
+    confirmedCount: number;
+    feesCollected: string;
+    pendingCount: number;
+    proofUploadedCount: number;
+    agingOver7: number;
+    avgLagDays: number | null;
+  };
+  methodSplit: BreakdownRow[];
+  weeklyConfirmed: number[];
+  rows: PaymentReportRow[];
+};
+
+export async function getPaymentsReportData(now: Date = new Date()): Promise<PaymentsReport> {
+  const payments = await Payment.findAll({
+    attributes: ["id", "amount", "currency", "method", "status", "createdAt", "confirmedAt"],
+    include: [
+      {
+        model: Application,
+        attributes: ["reference"],
+        include: [{ model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] }],
+      },
+    ],
+    order: [["createdAt", "DESC"]],
+    limit: 500,
+  });
+
+  const rows: PaymentReportRow[] = [];
+  const confirmedDates: (Date | string | null)[] = [];
+  let confirmedCount = 0;
+  let confirmedTotal = 0;
+  let pendingCount = 0;
+  let proofUploadedCount = 0;
+  let agingOver7 = 0;
+  let currency = "USD";
+  const lags: number[] = [];
+  const WEEK7 = now.getTime() - 7 * 86_400_000;
+
+  for (const row of payments) {
+    const p = row as Payment & { Application?: Application & { investorOrg?: InvestorOrg } };
+    const r = toPaymentReportRow({
+      id: p.id,
+      amount: p.amount,
+      currency: p.currency,
+      method: p.method,
+      status: p.status,
+      createdAt: p.createdAt,
+      confirmedAt: p.confirmedAt,
+      orgName: p.Application?.investorOrg?.legalName ?? null,
+      reference: p.Application?.reference ?? null,
+    });
+    rows.push(r);
+    if (p.status === PaymentStatus.CONFIRMED) {
+      confirmedCount++;
+      confirmedTotal += Number(p.amount);
+      currency = p.currency;
+      confirmedDates.push(p.confirmedAt ?? p.createdAt);
+      if (r.lagDays != null) lags.push(r.lagDays);
+    } else if (p.status === PaymentStatus.PENDING || p.status === PaymentStatus.PROOF_UPLOADED) {
+      pendingCount++;
+      if (p.status === PaymentStatus.PROOF_UPLOADED) proofUploadedCount++;
+      if (new Date(p.createdAt).getTime() < WEEK7) agingOver7++;
+    }
+  }
+
+  const avgLagDays =
+    lags.length === 0 ? null : Math.round((lags.reduce((a, b) => a + b, 0) / lags.length) * 10) / 10;
+
+  return {
+    generatedAt: formatDateTime(now),
+    stats: {
+      confirmedCount,
+      feesCollected: formatMoney(confirmedTotal, currency),
+      pendingCount,
+      proofUploadedCount,
+      agingOver7,
+      avgLagDays,
+    },
+    methodSplit: countRowsBy(rows as unknown as Record<string, unknown>[], "method", 4),
+    weeklyConfirmed: bucketWeekly(confirmedDates, now),
+    rows,
+  };
+}
+
+export type EngagementReport = {
+  generatedAt: string;
+  stats: {
+    totalVisits: number;
+    newVisits: number;
+    scheduledVisits: number;
+    completedVisits: number;
+    totalInquiries: number;
+    openInquiries: number;
+    respondedInquiries: number;
+    signups: number;
+  };
+  visitsByZone: BreakdownRow[];
+  visitsByLandUse: BreakdownRow[];
+  visitsByStatus: BreakdownRow[];
+  inquiriesByChannel: BreakdownRow[];
+  visits: SiteVisitRow[];
+  inquiries: InquiryRow[];
+};
+
+export async function getEngagementReportData(now: Date = new Date()): Promise<EngagementReport> {
+  const [sv, iq] = await Promise.all([getSiteVisitsView(), getInquiriesView()]);
+  const visits = sv.bookings;
+  const inquiries = iq.inquiries;
+
+  return {
+    generatedAt: formatDateTime(now),
+    stats: {
+      totalVisits: visits.length,
+      newVisits: sv.newCount,
+      scheduledVisits: sv.scheduledCount,
+      completedVisits: visits.filter((b) => b.rawStatus === "COMPLETED").length,
+      totalInquiries: inquiries.length,
+      openInquiries: iq.newCount,
+      respondedInquiries: inquiries.filter((i) => i.rawStatus === InquiryStatus.RESPONDED).length,
+      signups: iq.signups.length,
+    },
+    visitsByZone: countRowsBy(visits as unknown as Record<string, unknown>[], "zone", 6),
+    visitsByLandUse: countRowsBy(visits as unknown as Record<string, unknown>[], "landUse", 8),
+    visitsByStatus: countRowsBy(visits as unknown as Record<string, unknown>[], "status", 4),
+    inquiriesByChannel: countRowsBy(inquiries as unknown as Record<string, unknown>[], "channel", 2),
+    visits,
+    inquiries,
+  };
+}
+
+export type OverviewReport = {
+  generatedAt: string;
+  windowName: string;
+  stats: {
+    investors: number;
+    eoisSubmitted: number;
+    feesCollected: string;
+    siteVisits: number;
+    openInquiries: number;
+    daysToClose: number | null;
+  };
+  trends: { registrations: number[]; submissions: number[]; payments: number[] };
+  funnel: FunnelRow[];
+};
+
+export async function getOverviewReportData(now: Date = new Date()): Promise<OverviewReport> {
   const [
-    totalRegistered,
-    eoisSubmitted,
-    paymentsConfirmed,
+    investorCreated,
+    submittedApps,
+    confirmedPayments,
+    shortlistedCount,
+    allocatedCount,
     confirmedAmountSum,
     dominantCurrencyRow,
     activeWindow,
-    applications,
-    investorsWithOrgs,
+    siteVisits,
+    openInquiries,
   ] = await Promise.all([
-    User.count({ where: { role: UserRole.INVESTOR } }),
-    Application.count({ where: { status: [...SUBMITTED_STATUSES] } }),
-    Payment.count({ where: { status: PaymentStatus.CONFIRMED } }),
+    User.findAll({ where: { role: UserRole.INVESTOR }, attributes: ["createdAt"] }),
+    Application.findAll({ where: { status: [...SUBMITTED_STATUSES] }, attributes: ["submittedAt", "createdAt"] }),
+    Payment.findAll({ where: { status: PaymentStatus.CONFIRMED }, attributes: ["confirmedAt", "createdAt"] }),
+    Application.count({ where: { status: SHORTLISTED_PLUS_STATUSES } }),
+    Application.count({ where: { status: ApplicationStatus.ALLOCATED } }),
     Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
     Payment.findOne({
       where: { status: PaymentStatus.CONFIRMED },
@@ -771,52 +1243,42 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
       where: { status: ApplicationWindowStatus.OPEN },
       order: [["openAt", "DESC"]],
     }),
-    listApplications(),
-    User.findAll({
-      where: { role: UserRole.INVESTOR },
-      attributes: ["id"],
-      include: [
-        { model: InvestorOrg, as: "investorOrg", attributes: ["countryOfIncorporation"] },
-      ],
-    }),
+    SiteVisitBooking.count(),
+    Inquiry.count({ where: { status: InquiryStatus.NEW } }),
   ]);
 
+  const investors = investorCreated.length;
+  const eoisSubmitted = submittedApps.length;
+  const paymentsConfirmed = confirmedPayments.length;
+  const currency = dominantCurrencyRow?.currency ?? "USD";
   const daysToClose = activeWindow
     ? Math.max(0, Math.floor((new Date(activeWindow.closeAt).getTime() - now.getTime()) / 86_400_000))
     : null;
 
-  const countryCounts = new Map<string, number>();
-  for (const u of investorsWithOrgs) {
-    const usr = u as User & { investorOrg?: InvestorOrg };
-    const country = usr.investorOrg?.countryOfIncorporation ?? "Unknown";
-    countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
-  }
-  const byCountry = Array.from(countryCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([country, count]) => ({ country, count }));
-
-  const currency = dominantCurrencyRow?.currency ?? "USD";
-  const total = confirmedAmountSum ?? 0;
-
-  const conversionFunnel = [
-    { label: "Registered",       count: totalRegistered  },
-    { label: "Payment Confirmed", count: paymentsConfirmed },
-    { label: "EOI Submitted",     count: eoisSubmitted    },
-  ].map((row) => ({
-    ...row,
-    pct: totalRegistered > 0 ? Math.round((row.count / totalRegistered) * 100) : 0,
-  }));
+  const funnel: FunnelRow[] = [
+    { label: "Registered", count: investors },
+    { label: "Payment confirmed", count: paymentsConfirmed },
+    { label: "EOI submitted", count: eoisSubmitted },
+    { label: "Shortlisted", count: shortlistedCount },
+    { label: "Allocated", count: allocatedCount },
+  ].map((r) => ({ ...r, pct: investors > 0 ? Math.round((r.count / investors) * 100) : 0 }));
 
   return {
+    generatedAt: formatDateTime(now),
+    windowName: activeWindow?.name ?? "",
     stats: {
-      totalRegistered,
+      investors,
       eoisSubmitted,
-      feesCollected: formatMoney(total, currency),
+      feesCollected: formatMoney(confirmedAmountSum ?? 0, currency),
+      siteVisits,
+      openInquiries,
       daysToClose,
     },
-    byCountry,
-    conversionFunnel,
-    applications,
+    trends: {
+      registrations: bucketWeekly(investorCreated.map((u) => u.createdAt), now),
+      submissions: bucketWeekly(submittedApps.map((a) => a.submittedAt ?? a.createdAt), now),
+      payments: bucketWeekly(confirmedPayments.map((p) => p.confirmedAt ?? p.createdAt), now),
+    },
+    funnel,
   };
 }

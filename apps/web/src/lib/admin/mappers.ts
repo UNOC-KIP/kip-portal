@@ -16,6 +16,7 @@ import {
   BUSINESS_SECTOR_LABELS,
   INQUIRY_CHANNEL_LABELS,
   InquiryStatus,
+  ReviewActionType,
   KIP_ZONES,
   SITE_VISIT_STATUS_LABELS,
   type CompanyType,
@@ -23,7 +24,7 @@ import {
   type InquiryChannel,
   type SiteVisitStatus,
 } from "@kip/shared";
-import { formatDateTime, formatShortDate } from "../format";
+import { formatDateTime, formatMoney, formatShortDate } from "../format";
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
@@ -397,6 +398,8 @@ export function toInquiryRow(i: {
 
 export type SiteVisitRow = {
   id: string;
+  /** Present on the admin tracker (modal detail); absent in report contexts. */
+  investor?: SiteVisitInvestor;
   companyName: string;
   contactName: string;
   contactEmail: string;
@@ -414,6 +417,7 @@ export type SiteVisitRow = {
 
 export function toSiteVisitRow(b: {
   id: string;
+  investor?: SiteVisitInvestor;
   companyName: string | null;
   contactName: string | null;
   contactEmail: string;
@@ -429,6 +433,7 @@ export function toSiteVisitRow(b: {
   const zoneMeta = KIP_ZONES.find((z) => z.key === b.zone);
   return {
     id: b.id,
+    investor: b.investor,
     companyName: b.companyName ?? DASH,
     contactName: b.contactName ?? DASH,
     contactEmail: b.contactEmail,
@@ -463,6 +468,127 @@ export function toNotifySignupRow(s: {
   };
 }
 
+// ─── Investor onboarding report ──────────────────────────────────────────────
+
+/**
+ * Human-readable stage label for an investor's EOI, granular enough to track
+ * where each investor sits in the onboarding pipeline. `null` = the investor
+ * has registered but not started an application yet.
+ */
+export function applicationStageLabel(status: string | null | undefined): string {
+  if (!status) return "Not started";
+  switch (status) {
+    case ApplicationStatus.DRAFT_PAYMENT_PENDING:     return "Payment pending";
+    case ApplicationStatus.DRAFT:                     return "Draft";
+    case ApplicationStatus.SUBMITTED:                 return "Submitted";
+    case ApplicationStatus.UNDER_TC_REVIEW:           return "Under TC review";
+    case ApplicationStatus.TC_CLARIFICATION_REQUESTED:return "TC clarification";
+    case ApplicationStatus.SHORTLISTED:               return "Shortlisted";
+    case ApplicationStatus.NOT_SHORTLISTED:           return "Not shortlisted";
+    case ApplicationStatus.LAC_REVIEW:                return "LAC review";
+    case ApplicationStatus.LAC_APPROVED:              return "LAC approved";
+    case ApplicationStatus.LAC_REJECTED:              return "LAC rejected";
+    case ApplicationStatus.EXCO_REVIEW:               return "ExCo review";
+    case ApplicationStatus.ALLOCATED:                 return "Allocated";
+    case ApplicationStatus.WITHDRAWN:                 return "Withdrawn";
+    default:                                          return status;
+  }
+}
+
+/** Statuses at or beyond SHORTLISTED — i.e. the investor cleared TC screening. */
+const SHORTLISTED_PLUS = new Set<string>([
+  ApplicationStatus.SHORTLISTED,
+  ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_APPROVED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.EXCO_REVIEW,
+  ApplicationStatus.ALLOCATED,
+]);
+
+export function isShortlistedOrBeyond(status: string | null | undefined): boolean {
+  return status != null && SHORTLISTED_PLUS.has(status);
+}
+
+/** One row in the detailed investor-onboarding table + CSV export. */
+export type InvestorReportRow = {
+  id: string;
+  company: string;
+  rep: string;
+  email: string;
+  country: string;
+  sector: string;
+  companyType: string;
+  accountStatus: string; // Active / Pending / Rejected
+  paymentStatus: string; // Confirmed / Pending / Not Paid
+  eoiStage: string;      // applicationStageLabel(...)
+  reference: string;     // KIP-EOI-… or —
+  registeredAt: string;
+};
+
+export function toInvestorReportRow(u: {
+  id: string;
+  name: string | null;
+  email: string;
+  rawStatus: string;
+  orgName: string | null;
+  country: string | null;
+  businessSector: string | null;
+  companyType: string | null;
+  reference: string | null;
+  appStatus: string | null;
+  payments: { status: string }[];
+  createdAt: Date | string;
+}): InvestorReportRow {
+  return {
+    id: u.id,
+    company: u.orgName ?? u.name ?? u.email,
+    rep: u.name ?? DASH,
+    email: u.email,
+    country: u.country ?? DASH,
+    sector: businessSectorLabel(u.businessSector),
+    companyType: companyTypeLabel(u.companyType),
+    accountStatus: userStatusLabel(u.rawStatus),
+    paymentStatus: paymentLabel(u.payments),
+    eoiStage: applicationStageLabel(u.appStatus),
+    reference: u.reference ?? DASH,
+    registeredAt: formatShortDate(u.createdAt),
+  };
+}
+
+/** A labelled count — used for the country / sector / company-type breakdowns. */
+export type BreakdownRow = { label: string; count: number };
+
+/** A funnel step — count plus its share of the top-of-funnel total. */
+export type FunnelRow = { label: string; count: number; pct: number };
+
+export type ReportStats = {
+  totalRegistered: number;
+  activeAccounts: number;
+  pendingAccounts: number;
+  newLast7Days: number;
+  newLast30Days: number;
+  paymentsConfirmed: number;
+  eoisSubmitted: number;
+  shortlisted: number;
+  allocated: number;
+  siteVisitsRequested: number;
+  feesCollected: string;
+  feesCollectedRaw: number;
+  daysToClose: number | null;
+};
+
+/** Full payload for the investor-onboarding report page + its exports. */
+export type ReportData = {
+  generatedAt: string;
+  windowName: string;
+  stats: ReportStats;
+  byCountry: BreakdownRow[];
+  bySector: BreakdownRow[];
+  byCompanyType: BreakdownRow[];
+  conversionFunnel: FunnelRow[];
+  investors: InvestorReportRow[];
+};
+
 export function toWindowRow(w: {
   id: string;
   name: string;
@@ -493,4 +619,286 @@ export function toWindowRow(w: {
     default:
       return { ...base, statusVariant: null, statusLabel: null, detail: span };
   }
+}
+
+// ─── Reports hub: pure aggregation helpers ───────────────────────────────────
+
+const DAY_MS = 86_400_000;
+
+/** Terminal pipeline states — an application here is no longer "aging". */
+export const TERMINAL_STATUSES = new Set<string>([
+  ApplicationStatus.NOT_SHORTLISTED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.ALLOCATED,
+  ApplicationStatus.WITHDRAWN,
+]);
+
+/** Sorted label/count breakdown from view rows, keyed by a string field. */
+export function countRowsBy<T extends Record<string, unknown>>(
+  rows: T[],
+  key: keyof T,
+  limit = 8,
+): BreakdownRow[] {
+  const counts = new Map<string, number>();
+  for (const r of rows) {
+    const label = String(r[key] ?? "Unknown");
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, count]) => ({ label, count }));
+}
+
+/**
+ * Bucket timestamps into trailing calendar weeks ending at `now`.
+ * Index 0 = oldest week, last index = the week containing `now`.
+ */
+export function bucketWeekly(
+  dates: (Date | string | null | undefined)[],
+  now: Date,
+  weeks = 12,
+): number[] {
+  const WEEK = 7 * DAY_MS;
+  const end = now.getTime();
+  const start = end - weeks * WEEK;
+  const buckets: number[] = new Array(weeks).fill(0);
+  for (const d of dates) {
+    if (d == null) continue;
+    const t = new Date(d).getTime();
+    if (Number.isNaN(t) || t <= start || t > end) continue;
+    const idx = Math.min(weeks - 1, Math.floor((t - start) / WEEK));
+    buckets[idx] = (buckets[idx] ?? 0) + 1;
+  }
+  return buckets;
+}
+
+// ─── Applications & review-pipeline report ───────────────────────────────────
+
+export type StageDuration = { label: string; days: number | null; samples: number };
+
+const TC_DECISIONS = new Set<string>([
+  ReviewActionType.SHORTLISTED,
+  ReviewActionType.NOT_SHORTLISTED,
+]);
+const LAC_DECISIONS = new Set<string>([
+  ReviewActionType.LAC_APPROVED,
+  ReviewActionType.LAC_REJECTED,
+]);
+
+/**
+ * Average days spent in each review stage, mined from the append-only
+ * `ReviewAction` log: submission → first TC decision, TC shortlisting → LAC
+ * decision, LAC approval → ExCo allocation. `days: null` = no samples yet.
+ */
+export function computeStageDurations(
+  apps: { id: string; submittedAt: Date | string | null }[],
+  actions: { applicationId: string; type: string; createdAt: Date | string }[],
+): StageDuration[] {
+  // Earliest timestamp per application for each milestone.
+  const first = (types: Set<string> | string) => {
+    const m = new Map<string, number>();
+    for (const a of actions) {
+      const hit = typeof types === "string" ? a.type === types : types.has(a.type);
+      if (!hit) continue;
+      const t = new Date(a.createdAt).getTime();
+      const prev = m.get(a.applicationId);
+      if (prev === undefined || t < prev) m.set(a.applicationId, t);
+    }
+    return m;
+  };
+  const tcAt = first(TC_DECISIONS);
+  const shortlistedAt = first(ReviewActionType.SHORTLISTED);
+  const lacAt = first(LAC_DECISIONS);
+  const lacApprovedAt = first(ReviewActionType.LAC_APPROVED);
+  const allocatedAt = first(ReviewActionType.ALLOCATED);
+
+  const spans = { tc: [] as number[], lac: [] as number[], exco: [] as number[] };
+  for (const app of apps) {
+    const submitted = app.submittedAt ? new Date(app.submittedAt).getTime() : null;
+    const tc = tcAt.get(app.id);
+    if (submitted != null && tc !== undefined && tc >= submitted) spans.tc.push(tc - submitted);
+    const sl = shortlistedAt.get(app.id);
+    const lac = lacAt.get(app.id);
+    if (sl !== undefined && lac !== undefined && lac >= sl) spans.lac.push(lac - sl);
+    const lacOk = lacApprovedAt.get(app.id);
+    const alloc = allocatedAt.get(app.id);
+    if (lacOk !== undefined && alloc !== undefined && alloc >= lacOk) spans.exco.push(alloc - lacOk);
+  }
+  const avg = (xs: number[]): number | null =>
+    xs.length === 0 ? null : Math.round((xs.reduce((a, b) => a + b, 0) / xs.length / DAY_MS) * 10) / 10;
+
+  return [
+    { label: "Submission → TC decision", days: avg(spans.tc), samples: spans.tc.length },
+    { label: "Shortlisted → LAC decision", days: avg(spans.lac), samples: spans.lac.length },
+    { label: "LAC approval → allocation", days: avg(spans.exco), samples: spans.exco.length },
+  ];
+}
+
+/** One row in the applications report table + CSV. */
+export type AppsReportRow = {
+  id: string;
+  reference: string;
+  company: string;
+  country: string;
+  stage: string;
+  rawStatus: string;
+  submitted: string;
+  /** Days since submission (or creation) for non-terminal apps; null when decided. */
+  ageDays: number | null;
+  ageLabel: string;
+};
+
+export function toAppsReportRow(
+  a: {
+    id: string;
+    reference: string | null;
+    status: string;
+    orgName: string | null;
+    country: string | null;
+    submittedAt: Date | string | null;
+    createdAt: Date | string;
+  },
+  now: Date,
+): AppsReportRow {
+  const terminal = TERMINAL_STATUSES.has(a.status);
+  const since = a.submittedAt ?? a.createdAt;
+  const ageDays = terminal
+    ? null
+    : Math.max(0, Math.floor((now.getTime() - new Date(since).getTime()) / DAY_MS));
+  return {
+    id: a.id,
+    reference: a.reference ?? DASH,
+    company: a.orgName ?? DASH,
+    country: a.country ?? DASH,
+    stage: applicationStageLabel(a.status),
+    rawStatus: a.status,
+    submitted: a.submittedAt ? formatShortDate(a.submittedAt) : DASH,
+    ageDays,
+    ageLabel: ageDays == null ? DASH : `${ageDays}d`,
+  };
+}
+
+// ─── Payments report ─────────────────────────────────────────────────────────
+
+export function paymentMethodLabel(method: string): string {
+  if (method === "STANBIC_TRANSFER") return "Stanbic Transfer";
+  if (method === "CARD") return "Card";
+  return method;
+}
+
+export function paymentStatusLabel(status: string): string {
+  switch (status) {
+    case PaymentStatus.PENDING:        return "Pending";
+    case PaymentStatus.PROOF_UPLOADED: return "Proof Uploaded";
+    case PaymentStatus.CONFIRMED:      return "Confirmed";
+    case PaymentStatus.FAILED:         return "Failed";
+    case PaymentStatus.REFUNDED:       return "Refunded";
+    default:                           return status;
+  }
+}
+
+/** One row in the payments report table + CSV. */
+export type PaymentReportRow = {
+  id: string;
+  company: string;
+  reference: string;
+  amount: string;
+  method: string;
+  status: string;
+  rawStatus: string;
+  initiated: string;
+  confirmed: string;
+  /** Days from initiation to confirmation; null while unconfirmed. */
+  lagDays: number | null;
+};
+
+export function toPaymentReportRow(p: {
+  id: string;
+  amount: string | number;
+  currency: string;
+  method: string;
+  status: string;
+  createdAt: Date | string;
+  confirmedAt: Date | string | null;
+  orgName: string | null;
+  reference: string | null;
+}): PaymentReportRow {
+  const lagDays = p.confirmedAt
+    ? Math.max(
+        0,
+        Math.round(
+          ((new Date(p.confirmedAt).getTime() - new Date(p.createdAt).getTime()) / DAY_MS) * 10,
+        ) / 10,
+      )
+    : null;
+  return {
+    id: p.id,
+    company: p.orgName ?? DASH,
+    reference: p.reference ?? DASH,
+    amount: formatMoney(Number(p.amount), p.currency),
+    method: paymentMethodLabel(p.method),
+    status: paymentStatusLabel(p.status),
+    rawStatus: p.status,
+    initiated: formatShortDate(p.createdAt),
+    confirmed: p.confirmedAt ? formatShortDate(p.confirmedAt) : DASH,
+    lagDays,
+  };
+}
+
+// ─── Site-visit investor detail (admin tracker modal) ────────────────────────
+
+/** Investor profile block shown in the site-visit detail modal. */
+export type SiteVisitInvestor = {
+  userId: string;
+  repName: string;
+  designation: string;
+  email: string;
+  phone: string;
+  accountStatus: string;
+  rawAccountStatus: string;
+  memberSince: string;
+  orgName: string;
+  country: string;
+  sector: string;
+  companyType: string;
+  registrationNumber: string;
+  applicationRef: string;
+  applicationStage: string;
+};
+
+export function toSiteVisitInvestor(u: {
+  userId: string;
+  name: string | null;
+  designation: string | null;
+  email: string;
+  phone: string | null;
+  rawStatus: string;
+  createdAt: Date | string;
+  orgName: string | null;
+  country: string | null;
+  businessSector: string | null;
+  companyType: string | null;
+  registrationNumber: string | null;
+  /** The org's applications; the referenced one (else newest) is surfaced. */
+  applications: { reference: string | null; status: string }[];
+}): SiteVisitInvestor {
+  const primary = u.applications.find((a) => a.reference) ?? u.applications[0] ?? null;
+  return {
+    userId: u.userId,
+    repName: u.name ?? DASH,
+    designation: u.designation ?? DASH,
+    email: u.email,
+    phone: u.phone ?? DASH,
+    accountStatus: userStatusLabel(u.rawStatus),
+    rawAccountStatus: u.rawStatus,
+    memberSince: formatShortDate(u.createdAt),
+    orgName: u.orgName ?? DASH,
+    country: u.country ?? DASH,
+    sector: businessSectorLabel(u.businessSector),
+    companyType: companyTypeLabel(u.companyType),
+    registrationNumber: u.registrationNumber ?? DASH,
+    applicationRef: primary?.reference ?? DASH,
+    applicationStage: applicationStageLabel(primary?.status ?? null),
+  };
 }

@@ -9,7 +9,7 @@ export function SidebarInset({ children }: { children: ReactNode }) {
   return (
     <div
       className={cn(
-        "flex-1 transition-[padding-left] duration-200",
+        "flex-1 transition-[padding-left] duration-200 print:!pl-0",
         isCollapsed ? "md:pl-16" : "md:pl-56",
       )}
     >
