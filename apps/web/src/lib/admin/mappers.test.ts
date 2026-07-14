@@ -374,3 +374,80 @@ describe("inquiry mappers", () => {
     expect(row.signedUpAt).not.toBe("—");
   });
 });
+
+// ─── Investor onboarding report mappers ──────────────────────────────────────
+
+import {
+  applicationStageLabel,
+  isShortlistedOrBeyond,
+  toInvestorReportRow,
+} from "./mappers";
+
+describe("applicationStageLabel", () => {
+  it("maps every pipeline status to a readable stage", () => {
+    expect(applicationStageLabel(null)).toBe("Not started");
+    expect(applicationStageLabel(undefined)).toBe("Not started");
+    expect(applicationStageLabel("DRAFT_PAYMENT_PENDING")).toBe("Payment pending");
+    expect(applicationStageLabel("UNDER_TC_REVIEW")).toBe("Under TC review");
+    expect(applicationStageLabel("ALLOCATED")).toBe("Allocated");
+    expect(applicationStageLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
+  });
+});
+
+describe("isShortlistedOrBeyond", () => {
+  it("true from SHORTLISTED onwards, false before", () => {
+    expect(isShortlistedOrBeyond("SHORTLISTED")).toBe(true);
+    expect(isShortlistedOrBeyond("LAC_REVIEW")).toBe(true);
+    expect(isShortlistedOrBeyond("ALLOCATED")).toBe(true);
+    expect(isShortlistedOrBeyond("UNDER_TC_REVIEW")).toBe(false);
+    expect(isShortlistedOrBeyond("NOT_SHORTLISTED")).toBe(false);
+    expect(isShortlistedOrBeyond(null)).toBe(false);
+  });
+});
+
+describe("toInvestorReportRow", () => {
+  it("falls back company → name → email and dashes missing fields", () => {
+    const row = toInvestorReportRow({
+      id: "u1",
+      name: null,
+      email: "rep@acme.com",
+      rawStatus: "ACTIVE",
+      orgName: null,
+      country: null,
+      businessSector: null,
+      companyType: null,
+      reference: null,
+      appStatus: null,
+      payments: [],
+      createdAt: new Date("2026-07-01T00:00:00Z"),
+    });
+    expect(row.company).toBe("rep@acme.com");
+    expect(row.rep).toBe("—");
+    expect(row.country).toBe("—");
+    expect(row.paymentStatus).toBe("Not Paid");
+    expect(row.eoiStage).toBe("Not started");
+    expect(row.reference).toBe("—");
+  });
+
+  it("uses org + primary application when present", () => {
+    const row = toInvestorReportRow({
+      id: "u2",
+      name: "Jane Rep",
+      email: "jane@gulf.ae",
+      rawStatus: "ACTIVE",
+      orgName: "Gulf Petrochem",
+      country: "UAE",
+      businessSector: "PETROCHEMICALS_REFINING",
+      companyType: "LIMITED_LIABILITY_COMPANY",
+      reference: "KIP-EOI-2026-0001",
+      appStatus: "LAC_REVIEW",
+      payments: [{ status: "CONFIRMED" }],
+      createdAt: new Date("2026-02-01T00:00:00Z"),
+    });
+    expect(row.company).toBe("Gulf Petrochem");
+    expect(row.accountStatus).toBe("Active");
+    expect(row.paymentStatus).toBe("Confirmed");
+    expect(row.eoiStage).toBe("LAC review");
+    expect(row.reference).toBe("KIP-EOI-2026-0001");
+  });
+});

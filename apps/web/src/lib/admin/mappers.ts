@@ -463,6 +463,127 @@ export function toNotifySignupRow(s: {
   };
 }
 
+// ─── Investor onboarding report ──────────────────────────────────────────────
+
+/**
+ * Human-readable stage label for an investor's EOI, granular enough to track
+ * where each investor sits in the onboarding pipeline. `null` = the investor
+ * has registered but not started an application yet.
+ */
+export function applicationStageLabel(status: string | null | undefined): string {
+  if (!status) return "Not started";
+  switch (status) {
+    case ApplicationStatus.DRAFT_PAYMENT_PENDING:     return "Payment pending";
+    case ApplicationStatus.DRAFT:                     return "Draft";
+    case ApplicationStatus.SUBMITTED:                 return "Submitted";
+    case ApplicationStatus.UNDER_TC_REVIEW:           return "Under TC review";
+    case ApplicationStatus.TC_CLARIFICATION_REQUESTED:return "TC clarification";
+    case ApplicationStatus.SHORTLISTED:               return "Shortlisted";
+    case ApplicationStatus.NOT_SHORTLISTED:           return "Not shortlisted";
+    case ApplicationStatus.LAC_REVIEW:                return "LAC review";
+    case ApplicationStatus.LAC_APPROVED:              return "LAC approved";
+    case ApplicationStatus.LAC_REJECTED:              return "LAC rejected";
+    case ApplicationStatus.EXCO_REVIEW:               return "ExCo review";
+    case ApplicationStatus.ALLOCATED:                 return "Allocated";
+    case ApplicationStatus.WITHDRAWN:                 return "Withdrawn";
+    default:                                          return status;
+  }
+}
+
+/** Statuses at or beyond SHORTLISTED — i.e. the investor cleared TC screening. */
+const SHORTLISTED_PLUS = new Set<string>([
+  ApplicationStatus.SHORTLISTED,
+  ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_APPROVED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.EXCO_REVIEW,
+  ApplicationStatus.ALLOCATED,
+]);
+
+export function isShortlistedOrBeyond(status: string | null | undefined): boolean {
+  return status != null && SHORTLISTED_PLUS.has(status);
+}
+
+/** One row in the detailed investor-onboarding table + CSV export. */
+export type InvestorReportRow = {
+  id: string;
+  company: string;
+  rep: string;
+  email: string;
+  country: string;
+  sector: string;
+  companyType: string;
+  accountStatus: string; // Active / Pending / Rejected
+  paymentStatus: string; // Confirmed / Pending / Not Paid
+  eoiStage: string;      // applicationStageLabel(...)
+  reference: string;     // KIP-EOI-… or —
+  registeredAt: string;
+};
+
+export function toInvestorReportRow(u: {
+  id: string;
+  name: string | null;
+  email: string;
+  rawStatus: string;
+  orgName: string | null;
+  country: string | null;
+  businessSector: string | null;
+  companyType: string | null;
+  reference: string | null;
+  appStatus: string | null;
+  payments: { status: string }[];
+  createdAt: Date | string;
+}): InvestorReportRow {
+  return {
+    id: u.id,
+    company: u.orgName ?? u.name ?? u.email,
+    rep: u.name ?? DASH,
+    email: u.email,
+    country: u.country ?? DASH,
+    sector: businessSectorLabel(u.businessSector),
+    companyType: companyTypeLabel(u.companyType),
+    accountStatus: userStatusLabel(u.rawStatus),
+    paymentStatus: paymentLabel(u.payments),
+    eoiStage: applicationStageLabel(u.appStatus),
+    reference: u.reference ?? DASH,
+    registeredAt: formatShortDate(u.createdAt),
+  };
+}
+
+/** A labelled count — used for the country / sector / company-type breakdowns. */
+export type BreakdownRow = { label: string; count: number };
+
+/** A funnel step — count plus its share of the top-of-funnel total. */
+export type FunnelRow = { label: string; count: number; pct: number };
+
+export type ReportStats = {
+  totalRegistered: number;
+  activeAccounts: number;
+  pendingAccounts: number;
+  newLast7Days: number;
+  newLast30Days: number;
+  paymentsConfirmed: number;
+  eoisSubmitted: number;
+  shortlisted: number;
+  allocated: number;
+  siteVisitsRequested: number;
+  feesCollected: string;
+  feesCollectedRaw: number;
+  daysToClose: number | null;
+};
+
+/** Full payload for the investor-onboarding report page + its exports. */
+export type ReportData = {
+  generatedAt: string;
+  windowName: string;
+  stats: ReportStats;
+  byCountry: BreakdownRow[];
+  bySector: BreakdownRow[];
+  byCompanyType: BreakdownRow[];
+  conversionFunnel: FunnelRow[];
+  investors: InvestorReportRow[];
+};
+
 export function toWindowRow(w: {
   id: string;
   name: string;

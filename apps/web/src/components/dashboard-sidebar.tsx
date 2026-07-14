@@ -219,7 +219,7 @@ export function DashboardSidebar({ role }: { role: string }) {
       {/* ── Desktop sidebar ─────────────────────────── */}
       <aside
         className={cn(
-          "fixed left-0 top-0 z-40 hidden h-full flex-col bg-black transition-[width] duration-200 md:flex",
+          "fixed left-0 top-0 z-40 hidden h-full flex-col bg-black transition-[width] duration-200 md:flex print:!hidden",
           isCollapsed ? "w-16" : "w-56",
         )}
       >
@@ -256,7 +256,7 @@ export function DashboardSidebar({ role }: { role: string }) {
       <Sheet>
         <SheetTrigger asChild>
           <button
-            className="fixed left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-md bg-black text-white shadow-md md:hidden"
+            className="fixed left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-md bg-black text-white shadow-md md:hidden print:hidden"
             aria-label="Open navigation"
           >
             <Menu size={18} />

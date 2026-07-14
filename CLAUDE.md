@@ -422,6 +422,10 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/portal/src/app/(investor)/dashboard/site-visit/` | Investor booking form (zone → land use → description → acres slider) + booking status view. The booking summary + status block is the shared `components/site-visit-summary.tsx`, also rendered on the dashboard overview so a scheduled visit shows on sign-in |
 | `apps/portal/src/app/(investor)/dashboard/settings/` | Investor account settings — profile + company-contact edit (`PATCH /users/me`) and change password (`POST /users/me/password`); read-only legal identity + account meta. `settings-ui.tsx` = shared card/field primitives. Sidebar "Settings" nav + a dashboard nudge appear while `passwordChangedAt` is NULL |
 | `apps/web/src/app/(admin)/console/site-visits/` | Admin site-visit tracker — schedule / complete / cancel via `POST /site-visits/:id/status` |
+| `apps/web/src/app/(admin)/console/report/page.tsx` | Investor Onboarding Report (ADMIN) — headline KPIs, onboarding funnel, country/sector/company-type breakdowns, searchable per-investor detail table. Data from `getReportData()`. Print-optimised (`print:` variants hide sidebar/topbar/table-toolbar; adds a print-only heading) |
+| `apps/web/src/app/(admin)/console/report/report-export-actions.tsx` | Client export/share dropdown — CSV download (Blob + UTF-8 BOM), Print / Save-as-PDF (`window.print()`), Copy summary (clipboard). All client-side so it works on the read-only demo |
+| `apps/web/src/app/(admin)/console/report/investor-report-table.tsx` | Searchable investor-onboarding detail table (company/country/sector/account/payment/EOI-stage) built on `DataTable` |
+| `apps/web/src/lib/report-export.ts` | Pure CSV + text-summary builders for the report exports — no `@kip/db`/`server-only`, unit-tested (`report-export.test.ts`) |
 | `apps/web/src/lib/auth.ts` | NextAuth config — Email + Credentials, custom SequelizeAdapter |
 | `apps/web/src/lib/rbac.ts` | RBAC policy — single source for both middleware + server guards |
 | `apps/web/src/lib/format.ts` | Pure formatters (date/money) — deterministic, unit-tested |

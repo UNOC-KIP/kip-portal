@@ -39,9 +39,12 @@ import {
   businessSectorLabel,
   companyTypeLabel,
   hectaresFromSqm,
+  isShortlistedOrBeyond,
+  isSubmitted,
   roleLabel,
   toApplicationRow,
   toInquiryRow,
+  toInvestorReportRow,
   toNotifySignupRow,
   toSiteVisitRow,
   toStaffRow,
@@ -51,8 +54,12 @@ import {
   toWindowRow,
   userStatusLabel,
   type ApplicationRow,
+  type BreakdownRow,
+  type FunnelRow,
   type InquiryRow,
+  type InvestorReportRow,
   type NotifySignupRow,
+  type ReportData,
   type SiteVisitRow,
   type StaffRow,
   type TcAppRow,
@@ -733,90 +740,164 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
   };
 }
 
-// ─── Pipeline report data ─────────────────────────────────────────────────────
+// ─── Investor onboarding report ──────────────────────────────────────────────
 
-export type ReportData = {
-  stats: {
-    totalRegistered: number;
-    eoisSubmitted: number;
-    feesCollected: string;
-    daysToClose: number | null;
-  };
-  byCountry: { country: string; count: number }[];
-  conversionFunnel: { label: string; count: number; pct: number }[];
-  applications: ApplicationRow[];
-};
-
+/**
+ * Everything the /console/report page and its CSV / PDF / summary exports need
+ * to convey how investors are moving through onboarding. All INVESTOR users are
+ * fetched once (with their org + applications + payments) and the aggregates,
+ * breakdowns, funnel and per-investor rows are derived in JS — cheaper than a
+ * fan-out of `count({ group })` queries at this data scale and keeps the "reads
+ * → direct DB" rule with all shaping delegated to the pure `./mappers` helpers.
+ */
 export async function getReportData(now: Date = new Date()): Promise<ReportData> {
-  const [
-    totalRegistered,
-    eoisSubmitted,
-    paymentsConfirmed,
-    confirmedAmountSum,
-    dominantCurrencyRow,
-    activeWindow,
-    applications,
-    investorsWithOrgs,
-  ] = await Promise.all([
-    User.count({ where: { role: UserRole.INVESTOR } }),
-    Application.count({ where: { status: [...SUBMITTED_STATUSES] } }),
-    Payment.count({ where: { status: PaymentStatus.CONFIRMED } }),
-    Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
-    Payment.findOne({
-      where: { status: PaymentStatus.CONFIRMED },
-      attributes: ["currency"],
-      order: [["createdAt", "ASC"]],
-    }),
-    ApplicationWindow.findOne({
-      where: { status: ApplicationWindowStatus.OPEN },
-      order: [["openAt", "DESC"]],
-    }),
-    listApplications(),
-    User.findAll({
-      where: { role: UserRole.INVESTOR },
-      attributes: ["id"],
-      include: [
-        { model: InvestorOrg, as: "investorOrg", attributes: ["countryOfIncorporation"] },
-      ],
-    }),
-  ]);
+  const [investorUsers, confirmedAmountSum, dominantCurrencyRow, activeWindow, siteVisitsRequested] =
+    await Promise.all([
+      User.findAll({
+        where: { role: UserRole.INVESTOR },
+        attributes: ["id", "name", "email", "status", "createdAt"],
+        include: [
+          {
+            model: InvestorOrg,
+            as: "investorOrg",
+            attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType"],
+          },
+          {
+            model: Application,
+            as: "applications",
+            attributes: ["reference", "status", "createdAt"],
+            required: false,
+            include: [{ model: Payment, as: "payments", attributes: ["status"], required: false }],
+          },
+        ],
+        order: [["createdAt", "DESC"]],
+      }),
+      Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
+      Payment.findOne({
+        where: { status: PaymentStatus.CONFIRMED },
+        attributes: ["currency"],
+        order: [["createdAt", "ASC"]],
+      }),
+      ApplicationWindow.findOne({
+        where: { status: ApplicationWindowStatus.OPEN },
+        order: [["openAt", "DESC"]],
+      }),
+      SiteVisitBooking.count(),
+    ]);
 
-  const daysToClose = activeWindow
-    ? Math.max(0, Math.floor((new Date(activeWindow.closeAt).getTime() - now.getTime()) / 86_400_000))
-    : null;
+  const DAY = 86_400_000;
+  const last7 = now.getTime() - 7 * DAY;
+  const last30 = now.getTime() - 30 * DAY;
 
   const countryCounts = new Map<string, number>();
-  for (const u of investorsWithOrgs) {
-    const usr = u as User & { investorOrg?: InvestorOrg };
-    const country = usr.investorOrg?.countryOfIncorporation ?? "Unknown";
+  const sectorCounts = new Map<string, number>();
+  const typeCounts = new Map<string, number>();
+
+  let activeAccounts = 0;
+  let pendingAccounts = 0;
+  let newLast7Days = 0;
+  let newLast30Days = 0;
+  let paymentsConfirmed = 0;
+  let eoisSubmitted = 0;
+  let shortlisted = 0;
+  let allocated = 0;
+
+  const investors: InvestorReportRow[] = [];
+
+  for (const row of investorUsers) {
+    const u = row as User & {
+      investorOrg?: InvestorOrg;
+      applications?: (Application & { payments?: Payment[] })[];
+    };
+    const org = u.investorOrg;
+    const apps = u.applications ?? [];
+    // Primary application: the one that reached a reference, else the newest.
+    const primary = apps.find((a) => a.reference) ?? apps[0] ?? null;
+    const primaryPayments = (primary?.payments ?? []).map((p) => ({ status: p.status }));
+
+    if (u.status === UserStatus.ACTIVE) activeAccounts++;
+    else if (u.status === UserStatus.PENDING_REVIEW) pendingAccounts++;
+
+    const created = new Date(u.createdAt).getTime();
+    if (created >= last7) newLast7Days++;
+    if (created >= last30) newLast30Days++;
+
+    // Funnel: an investor "reaches" a stage if any of their applications did.
+    if (apps.some((a) => (a.payments ?? []).some((p) => p.status === PaymentStatus.CONFIRMED))) paymentsConfirmed++;
+    if (apps.some((a) => isSubmitted(a.status))) eoisSubmitted++;
+    if (apps.some((a) => isShortlistedOrBeyond(a.status))) shortlisted++;
+    if (apps.some((a) => a.status === ApplicationStatus.ALLOCATED)) allocated++;
+
+    const country = org?.countryOfIncorporation ?? "Unknown";
     countryCounts.set(country, (countryCounts.get(country) ?? 0) + 1);
+    const sectorKey = org?.businessSector ? businessSectorLabel(org.businessSector) : "Unspecified";
+    sectorCounts.set(sectorKey, (sectorCounts.get(sectorKey) ?? 0) + 1);
+    const typeKey = org?.companyType ? companyTypeLabel(org.companyType) : "Unspecified";
+    typeCounts.set(typeKey, (typeCounts.get(typeKey) ?? 0) + 1);
+
+    investors.push(
+      toInvestorReportRow({
+        id: u.id,
+        name: u.name ?? null,
+        email: u.email,
+        rawStatus: u.status as string,
+        orgName: org?.legalName ?? null,
+        country: org?.countryOfIncorporation ?? null,
+        businessSector: org?.businessSector ?? null,
+        companyType: org?.companyType ?? null,
+        reference: primary?.reference ?? null,
+        appStatus: primary?.status ?? null,
+        payments: primaryPayments,
+        createdAt: u.createdAt,
+      }),
+    );
   }
-  const byCountry = Array.from(countryCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([country, count]) => ({ country, count }));
+
+  const totalRegistered = investorUsers.length;
+
+  const toSortedBreakdown = (m: Map<string, number>, limit = 8): BreakdownRow[] =>
+    Array.from(m.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([label, count]) => ({ label, count }));
 
   const currency = dominantCurrencyRow?.currency ?? "USD";
   const total = confirmedAmountSum ?? 0;
 
-  const conversionFunnel = [
-    { label: "Registered",       count: totalRegistered  },
-    { label: "Payment Confirmed", count: paymentsConfirmed },
-    { label: "EOI Submitted",     count: eoisSubmitted    },
-  ].map((row) => ({
-    ...row,
-    pct: totalRegistered > 0 ? Math.round((row.count / totalRegistered) * 100) : 0,
-  }));
+  const daysToClose = activeWindow
+    ? Math.max(0, Math.floor((new Date(activeWindow.closeAt).getTime() - now.getTime()) / DAY))
+    : null;
+
+  const conversionFunnel: FunnelRow[] = [
+    { label: "Registered", count: totalRegistered },
+    { label: "Payment confirmed", count: paymentsConfirmed },
+    { label: "EOI submitted", count: eoisSubmitted },
+    { label: "Shortlisted", count: shortlisted },
+    { label: "Allocated", count: allocated },
+  ].map((r) => ({ ...r, pct: totalRegistered > 0 ? Math.round((r.count / totalRegistered) * 100) : 0 }));
 
   return {
+    generatedAt: formatDateTime(now),
+    windowName: activeWindow?.name ?? "",
     stats: {
       totalRegistered,
+      activeAccounts,
+      pendingAccounts,
+      newLast7Days,
+      newLast30Days,
+      paymentsConfirmed,
       eoisSubmitted,
+      shortlisted,
+      allocated,
+      siteVisitsRequested,
       feesCollected: formatMoney(total, currency),
+      feesCollectedRaw: total,
       daysToClose,
     },
-    byCountry,
+    byCountry: toSortedBreakdown(countryCounts),
+    bySector: toSortedBreakdown(sectorCounts),
+    byCompanyType: toSortedBreakdown(typeCounts),
     conversionFunnel,
-    applications,
+    investors,
   };
 }

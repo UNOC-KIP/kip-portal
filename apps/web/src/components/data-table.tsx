@@ -84,7 +84,7 @@ export function DataTable<T extends Record<string, unknown>>({
   return (
     <div className={cn("rounded-xl border border-ink-200 bg-white", className)}>
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-ink-200 px-4 py-3 print:hidden">
         <div className="relative w-full max-w-xs">
           <Search
             size={14}

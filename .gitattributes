@@ -1,0 +1,10 @@
+# Normalize all text files to LF in the repo; checkout uses platform default.
+# Kills the whole-file CRLF diffs Cursor/Windows editors introduce.
+* text=auto
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.pdf binary
+*.mp4 binary
