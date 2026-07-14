@@ -255,3 +255,41 @@ export function buildOverviewSummary(data: {
   for (const f of data.funnel) lines.push(`  - ${f.label}: ${f.count} (${f.pct}%)`);
   return lines.join("\n");
 }
+
+/** Column spec for the site-visits CSV — used by the tracker page and the engagement report. */
+export const SITE_VISIT_EXPORT_COLUMNS: { header: string; key: string }[] = [
+  { header: "Company", key: "companyName" },
+  { header: "Contact", key: "contactName" },
+  { header: "Email", key: "contactEmail" },
+  { header: "Zone", key: "zone" },
+  { header: "Land Use", key: "landUse" },
+  { header: "Acres", key: "acresLabel" },
+  { header: "Status", key: "status" },
+  { header: "Requested", key: "requestedAt" },
+  { header: "Scheduled", key: "scheduledAt" },
+  { header: "Handled By", key: "handledBy" },
+];
+
+/** Text digest for the site-visits tracker — pure, so the client page can build it. */
+export function buildSiteVisitsSummary(
+  bookings: { rawStatus: string; zone: string }[],
+  generatedAt: string,
+): string {
+  const by = (pred: (b: { rawStatus: string }) => boolean) => bookings.filter(pred).length;
+  const zones = new Map<string, number>();
+  for (const b of bookings) zones.set(b.zone, (zones.get(b.zone) ?? 0) + 1);
+  const zoneRows = Array.from(zones.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([label, count]) => ({ label, count }));
+  return [
+    "KIP SITE-VISIT REQUESTS",
+    kv("Generated", generatedAt),
+    "",
+    kv("Total requests", bookings.length),
+    kv("New", by((b) => b.rawStatus === "NEW")),
+    kv("Scheduled", by((b) => b.rawStatus === "SCHEDULED")),
+    kv("Completed", by((b) => b.rawStatus === "COMPLETED")),
+    kv("Cancelled", by((b) => b.rawStatus === "CANCELLED")),
+    ...section("By zone", zoneRows),
+  ].join("\n");
+}

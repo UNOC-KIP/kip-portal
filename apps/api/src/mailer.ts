@@ -442,3 +442,62 @@ export function rejectionEmail(opts: {
 </body>
 </html>`;
 }
+
+/** Admin-initiated password reset — delivers the new temporary password. */
+export function passwordResetEmail(opts: {
+  recipientName: string;
+  email: string;
+  tempPassword: string;
+  signInUrl: string;
+}): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
+        <tr>
+          <td style="background:#000;padding:28px 36px">
+            <p style="margin:0;color:#fff;font-size:18px;font-weight:700;letter-spacing:-0.3px">
+              UNOC / KIP Investor Portal
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px">
+            <p style="margin:0 0 16px;color:#09090b;font-size:16px;font-weight:600">
+              Your password has been reset
+            </p>
+            <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6">
+              Dear <strong>${escapeHtml(opts.recipientName)}</strong>, a KIP administrator has reset
+              the password on your account. Use the temporary password below to sign in,
+              then change it from your account settings.
+            </p>
+            <table width="100%" cellpadding="0" cellspacing="0"
+                   style="background:#f9fafb;border:1px solid #e4e4e7;border-radius:8px;margin-bottom:28px">
+              <tr>
+                <td style="padding:20px 24px">
+                  <p style="margin:0 0 6px;color:#71717a;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Email</p>
+                  <p style="margin:0 0 16px;color:#09090b;font-size:14px;font-weight:600">${escapeHtml(opts.email)}</p>
+                  <p style="margin:0 0 6px;color:#71717a;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">Temporary password</p>
+                  <p style="margin:0;color:#09090b;font-size:16px;font-weight:700;font-family:Consolas,Menlo,monospace">${escapeHtml(opts.tempPassword)}</p>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0 0 28px">
+              <a href="${opts.signInUrl}" style="display:inline-block;background:#000;color:#fff;font-size:14px;font-weight:600;padding:12px 28px;border-radius:8px;text-decoration:none">
+                Sign in
+              </a>
+            </p>
+            <p style="margin:0;color:#a1a1aa;font-size:12px;line-height:1.6">
+              If you did not request this reset, contact Support.Kip@unoc.com immediately.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}

@@ -3,6 +3,7 @@ import { UserRole } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import {
   handleApprove,
+  handleResetPassword,
   handleReject,
   handleCreateStaff,
   handleUpdate,
@@ -25,4 +26,5 @@ usersRouter.post("/staff", requireRole(UserRole.ADMIN), handleCreateStaff);
 usersRouter.patch("/:id", requireRole(UserRole.ADMIN), handleUpdate);
 usersRouter.delete("/:id", requireRole(UserRole.ADMIN), handleDelete);
 usersRouter.post("/:id/approve", requireRole(UserRole.ADMIN), handleApprove);
+usersRouter.post("/:id/reset-password", requireRole(UserRole.ADMIN), handleResetPassword);
 usersRouter.post("/:id/reject", requireRole(UserRole.ADMIN), handleReject);

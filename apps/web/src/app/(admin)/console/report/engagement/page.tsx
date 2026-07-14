@@ -4,21 +4,10 @@ import { Panel, BarList, MiniStat, PrintHeading } from "@/components/report/repo
 import { ReportExportActions } from "@/components/report/export-actions";
 import { ReportTable, type ReportColumn } from "@/components/report/report-table";
 import { getEngagementReportData } from "@/lib/admin/queries";
-import { buildEngagementSummary } from "@/lib/report-export";
+import { buildEngagementSummary, SITE_VISIT_EXPORT_COLUMNS } from "@/lib/report-export";
 import { requireRole } from "@/lib/rbac-server";
 import { ADMIN_ONLY } from "@/lib/rbac";
 
-const VISIT_EXPORT_COLUMNS = [
-  { header: "Company", key: "companyName" },
-  { header: "Contact", key: "contactName" },
-  { header: "Email", key: "contactEmail" },
-  { header: "Zone", key: "zone" },
-  { header: "Land Use", key: "landUse" },
-  { header: "Acres", key: "acresLabel" },
-  { header: "Status", key: "status" },
-  { header: "Requested", key: "requestedAt" },
-  { header: "Scheduled", key: "scheduledAt" },
-];
 
 const VISIT_COLUMNS: ReportColumn[] = [
   { key: "companyName", header: "Company", kind: "bold" },
@@ -65,7 +54,7 @@ export default async function EngagementReportPage() {
           <ReportExportActions
             filenamePrefix="kip-engagement-report"
             summary={buildEngagementSummary(report)}
-            csv={{ columns: VISIT_EXPORT_COLUMNS, rows: visits as unknown as Record<string, unknown>[] }}
+            csv={{ columns: SITE_VISIT_EXPORT_COLUMNS, rows: visits as unknown as Record<string, unknown>[] }}
           />
         }
       />

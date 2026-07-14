@@ -18,6 +18,8 @@ import {
 import type { SiteVisitsView } from "@/lib/admin/queries";
 import type { SiteVisitRow } from "@/lib/admin/mappers";
 import { SiteVisitDetailModal } from "./site-visit-detail-modal";
+import { ReportExportActions } from "@/components/report/export-actions";
+import { buildSiteVisitsSummary, SITE_VISIT_EXPORT_COLUMNS } from "@/lib/report-export";
 
 const STATUS_VARIANT: Record<string, StatusVariant> = {
   NEW:       "status-pending",
@@ -61,6 +63,16 @@ export function SiteVisitsClient({ view }: { view: SiteVisitsView }) {
       <main className="flex-1 p-6">
         <PageHeader
           crumbs={[{ label: "Dashboard", href: "/console" }, { label: "Site Visits" }]}
+          action={
+            <ReportExportActions
+              filenamePrefix="kip-site-visits"
+              summary={buildSiteVisitsSummary(view.bookings, new Date().toLocaleString())}
+              csv={{
+                columns: SITE_VISIT_EXPORT_COLUMNS,
+                rows: view.bookings as unknown as Record<string, unknown>[],
+              }}
+            />
+          }
         />
 
         <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">

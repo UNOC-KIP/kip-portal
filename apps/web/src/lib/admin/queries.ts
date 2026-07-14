@@ -247,6 +247,10 @@ export type UserDetail = {
   status: string;
   rawStatus: string;
   registeredAt: string;
+  /** Formatted date of the last self-service password change; null = still on the emailed password. */
+  passwordChangedAt: string | null;
+  isInvestor: boolean;
+  appStage: string;
   company: string;
   tradingName: string;
   registrationNumber: string;
@@ -289,7 +293,9 @@ export type UserDetail = {
 
 export async function getUserDetail(id: string): Promise<UserDetail | null> {
   const user = await User.findByPk(id, {
-    attributes: ["id", "email", "name", "designation", "phone", "role", "status", "createdAt"],
+    attributes: [
+      "id", "email", "name", "designation", "phone", "role", "status", "createdAt", "passwordChangedAt",
+    ],
     include: [
       { model: InvestorOrg, as: "investorOrg" },
       {
@@ -316,6 +322,9 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
     status: userStatusLabel(rawStatus),
     rawStatus,
     registeredAt: formatDateTime(u.createdAt),
+    passwordChangedAt: u.passwordChangedAt ? formatDateTime(u.passwordChangedAt) : null,
+    isInvestor: u.role === UserRole.INVESTOR,
+    appStage: applicationStageLabel(latestApp?.status ?? null),
     company: u.investorOrg?.legalName ?? "—",
     tradingName: u.investorOrg?.tradingName ?? "—",
     registrationNumber: u.investorOrg?.registrationNumber ?? "—",

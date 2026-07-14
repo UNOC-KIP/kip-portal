@@ -15,12 +15,23 @@ import {
   deleteUser,
   updateOwnProfile,
   changeOwnPassword,
+  resetUserPassword,
 } from "./users.service.js";
 
 export const handleApprove: RequestHandler = async (req, res, next) => {
   try {
     const { id } = userIdParamSchema.parse(req.params);
     await approveUser(id);
+    res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+};
+
+export const handleResetPassword: RequestHandler = async (req, res, next) => {
+  try {
+    const { id } = userIdParamSchema.parse(req.params);
+    await resetUserPassword(id);
     res.json({ ok: true });
   } catch (e) {
     next(e);
