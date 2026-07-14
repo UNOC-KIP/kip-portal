@@ -491,9 +491,22 @@ export type SiteVisitsView = {
 export async function getSiteVisitsView(): Promise<SiteVisitsView> {
   const rows = await SiteVisitBooking.findAll({
     include: [
-      { model: User, as: "user", attributes: ["name", "email"], required: false },
+      {
+        model: User,
+        as: "user",
+        attributes: ["id", "name", "email", "designation", "phone", "status", "createdAt"],
+        required: false,
+        include: [
+          { model: Application, as: "applications", attributes: ["reference", "status"], required: false },
+        ],
+      },
       { model: User, as: "handledBy", attributes: ["name", "email"], required: false },
-      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"], required: false },
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType", "registrationNumber"],
+        required: false,
+      },
     ],
     order: [["createdAt", "DESC"]],
     limit: 500,
@@ -501,11 +514,32 @@ export async function getSiteVisitsView(): Promise<SiteVisitsView> {
 
   const bookings = rows.map((row) => {
     const b = row as SiteVisitBooking & {
-      user?: User;
+      user?: User & { applications?: Application[] };
       handledBy?: User;
       investorOrg?: InvestorOrg;
     };
+    const investor = b.user
+      ? toSiteVisitInvestor({
+          userId: b.user.id,
+          name: b.user.name ?? null,
+          designation: b.user.designation ?? null,
+          email: b.user.email,
+          phone: b.user.phone ?? null,
+          rawStatus: b.user.status,
+          createdAt: b.user.createdAt,
+          orgName: b.investorOrg?.legalName ?? null,
+          country: b.investorOrg?.countryOfIncorporation ?? null,
+          businessSector: b.investorOrg?.businessSector ?? null,
+          companyType: b.investorOrg?.companyType ?? null,
+          registrationNumber: b.investorOrg?.registrationNumber ?? null,
+          applications: (b.user.applications ?? []).map((a) => ({
+            reference: a.reference,
+            status: a.status,
+          })),
+        })
+      : undefined;
     return toSiteVisitRow({
+      investor,
       id: b.id,
       companyName: b.investorOrg?.legalName ?? null,
       contactName: b.user?.name ?? null,
@@ -912,6 +946,7 @@ import {
   countRowsBy,
   toAppsReportRow,
   toPaymentReportRow,
+  toSiteVisitInvestor,
   type AppsReportRow,
   type PaymentReportRow,
   type StageDuration,

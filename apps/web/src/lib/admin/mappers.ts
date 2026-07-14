@@ -398,6 +398,8 @@ export function toInquiryRow(i: {
 
 export type SiteVisitRow = {
   id: string;
+  /** Present on the admin tracker (modal detail); absent in report contexts. */
+  investor?: SiteVisitInvestor;
   companyName: string;
   contactName: string;
   contactEmail: string;
@@ -415,6 +417,7 @@ export type SiteVisitRow = {
 
 export function toSiteVisitRow(b: {
   id: string;
+  investor?: SiteVisitInvestor;
   companyName: string | null;
   contactName: string | null;
   contactEmail: string;
@@ -430,6 +433,7 @@ export function toSiteVisitRow(b: {
   const zoneMeta = KIP_ZONES.find((z) => z.key === b.zone);
   return {
     id: b.id,
+    investor: b.investor,
     companyName: b.companyName ?? DASH,
     contactName: b.contactName ?? DASH,
     contactEmail: b.contactEmail,
@@ -839,5 +843,62 @@ export function toPaymentReportRow(p: {
     initiated: formatShortDate(p.createdAt),
     confirmed: p.confirmedAt ? formatShortDate(p.confirmedAt) : DASH,
     lagDays,
+  };
+}
+
+// ─── Site-visit investor detail (admin tracker modal) ────────────────────────
+
+/** Investor profile block shown in the site-visit detail modal. */
+export type SiteVisitInvestor = {
+  userId: string;
+  repName: string;
+  designation: string;
+  email: string;
+  phone: string;
+  accountStatus: string;
+  rawAccountStatus: string;
+  memberSince: string;
+  orgName: string;
+  country: string;
+  sector: string;
+  companyType: string;
+  registrationNumber: string;
+  applicationRef: string;
+  applicationStage: string;
+};
+
+export function toSiteVisitInvestor(u: {
+  userId: string;
+  name: string | null;
+  designation: string | null;
+  email: string;
+  phone: string | null;
+  rawStatus: string;
+  createdAt: Date | string;
+  orgName: string | null;
+  country: string | null;
+  businessSector: string | null;
+  companyType: string | null;
+  registrationNumber: string | null;
+  /** The org's applications; the referenced one (else newest) is surfaced. */
+  applications: { reference: string | null; status: string }[];
+}): SiteVisitInvestor {
+  const primary = u.applications.find((a) => a.reference) ?? u.applications[0] ?? null;
+  return {
+    userId: u.userId,
+    repName: u.name ?? DASH,
+    designation: u.designation ?? DASH,
+    email: u.email,
+    phone: u.phone ?? DASH,
+    accountStatus: userStatusLabel(u.rawStatus),
+    rawAccountStatus: u.rawStatus,
+    memberSince: formatShortDate(u.createdAt),
+    orgName: u.orgName ?? DASH,
+    country: u.country ?? DASH,
+    sector: businessSectorLabel(u.businessSector),
+    companyType: companyTypeLabel(u.companyType),
+    registrationNumber: u.registrationNumber ?? DASH,
+    applicationRef: primary?.reference ?? DASH,
+    applicationStage: applicationStageLabel(primary?.status ?? null),
   };
 }

@@ -567,3 +567,56 @@ describe("payments report mappers", () => {
     expect(pending.company).toBe("—");
   });
 });
+
+// ─── Site-visit investor detail ──────────────────────────────────────────────
+
+import { toSiteVisitInvestor } from "./mappers";
+
+describe("toSiteVisitInvestor", () => {
+  it("surfaces the referenced application and labels enums", () => {
+    const inv = toSiteVisitInvestor({
+      userId: "u1",
+      name: "Jane Rep",
+      designation: "Director",
+      email: "jane@gulf.ae",
+      phone: "+9715000000",
+      rawStatus: "ACTIVE",
+      createdAt: new Date("2026-02-01T00:00:00Z"),
+      orgName: "Gulf Petrochem",
+      country: "UAE",
+      businessSector: "PETROCHEMICALS_REFINING",
+      companyType: "LIMITED_LIABILITY_COMPANY",
+      registrationNumber: "FZE-1234",
+      applications: [
+        { reference: null, status: "DRAFT" },
+        { reference: "KIP-EOI-2026-0001", status: "LAC_REVIEW" },
+      ],
+    });
+    expect(inv.applicationRef).toBe("KIP-EOI-2026-0001");
+    expect(inv.applicationStage).toBe("LAC review");
+    expect(inv.accountStatus).toBe("Active");
+    expect(inv.sector).not.toBe("PETROCHEMICALS_REFINING"); // labelled
+  });
+
+  it("dashes missing fields and handles no applications", () => {
+    const inv = toSiteVisitInvestor({
+      userId: "u2",
+      name: null,
+      designation: null,
+      email: "x@y.com",
+      phone: null,
+      rawStatus: "PENDING_REVIEW",
+      createdAt: new Date("2026-07-01T00:00:00Z"),
+      orgName: null,
+      country: null,
+      businessSector: null,
+      companyType: null,
+      registrationNumber: null,
+      applications: [],
+    });
+    expect(inv.repName).toBe("—");
+    expect(inv.phone).toBe("—");
+    expect(inv.applicationRef).toBe("—");
+    expect(inv.applicationStage).toBe("Not started");
+  });
+});
