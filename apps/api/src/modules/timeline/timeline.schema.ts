@@ -1,9 +1,10 @@
 import { z } from "zod";
-import { TimelineMilestoneKind } from "@kip/shared";
+import { TimelineMilestoneKind, TimelineMilestoneStatus } from "@kip/shared";
 
 const base = z.object({
   position: z.coerce.number().int().min(1).max(99),
   kind: z.nativeEnum(TimelineMilestoneKind).default(TimelineMilestoneKind.GENERIC),
+  status: z.nativeEnum(TimelineMilestoneStatus).default(TimelineMilestoneStatus.AUTO),
   title: z.string().trim().min(3).max(300),
   dateLabel: z.string().trim().min(3).max(120),
   startsAt: z.coerce.date(),

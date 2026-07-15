@@ -11,7 +11,8 @@ import {
  * One stage of the public application timeline, managed by ADMIN under
  * /console/settings. `position` orders the list; `kind` marks the rows that
  * also gate behaviour (SITE_VISIT → booking cut-off, EOI_CALL → countdown +
- * call window labels). Pure helpers live in @kip/shared (timeline.ts).
+ * call window labels); `status` is AUTO (derived from dates) or a manual
+ * UPCOMING/CURRENT/COMPLETED override. Pure helpers live in @kip/shared.
  */
 export class TimelineMilestone extends Model<
   InferAttributes<TimelineMilestone>,
@@ -24,6 +25,7 @@ export class TimelineMilestone extends Model<
   declare dateLabel: string
   declare startsAt: Date
   declare endsAt: CreationOptional<Date | null>
+  declare status: CreationOptional<string>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
 
@@ -37,6 +39,7 @@ export class TimelineMilestone extends Model<
         dateLabel: { type: DataTypes.TEXT, allowNull: false },
         startsAt: { type: DataTypes.DATE, allowNull: false },
         endsAt: { type: DataTypes.DATE, allowNull: true },
+        status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'AUTO' },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,
       },
