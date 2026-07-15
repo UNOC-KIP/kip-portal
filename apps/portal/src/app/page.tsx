@@ -23,7 +23,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { HeroCarousel } from "@/components/hero-carousel";
 import { getActiveApplicationWindow } from "@/lib/public-data";
-import { EOI_CALL, getPhase2Timeline } from "@/lib/timeline";
+import { getTimelineData } from "@/lib/timeline-data";
 
 // Renders live window data from the DB — must not be statically generated at
 // build time (Docker/CI builds have no database).
@@ -133,6 +133,7 @@ export default async function HomePage({
   searchParams: { notified?: string };
 }) {
   const activeWindow = await getActiveApplicationWindow();
+  const { timeline, eoiCall } = await getTimelineData();
   const notified = searchParams.notified === "1";
 
   return (
@@ -206,14 +207,16 @@ export default async function HomePage({
                   <div>
                     <p className="text-[16px] font-bold text-black">Call for Expressions of Interest</p>
                     <p className="text-[14px] text-black/60">
-                      Opens {EOI_CALL.opensLabel} · Closes {EOI_CALL.closesLabel} EAT ·{" "}
+                      Opens {eoiCall?.opensLabel} · Closes {eoiCall?.closesLabel} EAT ·{" "}
                       <Link href="#notify" className="font-semibold text-kip-red underline underline-offset-2 hover:brightness-90">
                         Get notified
                       </Link>
                     </p>
                   </div>
                 </div>
-                <CountdownTimer closeAt={EOI_CALL.opensAt} variant="hero" expiredText="EOI window opening soon" />
+                {eoiCall && (
+                  <CountdownTimer closeAt={eoiCall.opensAt} variant="hero" expiredText="EOI window opening soon" />
+                )}
               </>
             )}
           </div>
@@ -390,7 +393,7 @@ export default async function HomePage({
               </div>
               <p className="mb-8 text-[13px] text-black/55">Phase 2 — Investor Onboarding</p>
               <ol className="relative border-l-2 border-black/10 pl-6">
-                {getPhase2Timeline(new Date()).map((item, i, arr) => (
+                {timeline.map((item, i, arr) => (
                   <li key={i} className={i < arr.length - 1 ? "mb-7" : ""}>
                     <span className={`absolute -left-[9px] mt-0.5 h-4 w-4 rounded-full border-2 ${
                       item.active ? "border-kip-gold bg-kip-gold" : "border-black/20 bg-white"

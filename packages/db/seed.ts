@@ -400,6 +400,28 @@ async function main() {
     'STB-TXN-20260410-00789', null, new Date('2026-04-10T15:30:00Z'), new Date('2026-04-11T09:00:00Z'))
   console.log('  ✓ app4: [no reference] [DRAFT] — Nile Energy (2/6 sections)')
 
+  // ── Application timeline (Phase 2 Investor Onboarding schedule) ──────────
+  // ON CONFLICT (position) DO NOTHING — admin edits are never overwritten.
+  const milestones: [number, string, string, string, string, string | null][] = [
+    [1, 'GENERIC',    'Investor registration opens — create your account and prepare your documents', '23 Jun 2026',          '2026-06-23T00:00:00+03:00', null],
+    [2, 'GENERIC',    'KIP National Launch — virtual live broadcast',                                  '7 Jul 2026',           '2026-07-07T00:00:00+03:00', null],
+    [3, 'SITE_VISIT', 'Investor site visits',                                                          '29 Jul – 12 Aug 2026', '2026-07-29T00:00:00+03:00', '2026-08-12T23:59:59+03:00'],
+    [4, 'EOI_CALL',   'Call for Expressions of Interest — submission window open',                     '19 Aug – 2 Sep 2026',  '2026-08-19T00:00:00+03:00', '2026-09-02T23:59:59+03:00'],
+    [5, 'GENERIC',    'Evaluation of Expressions of Interest',                                         '16 – 30 Sep 2026',     '2026-09-16T00:00:00+03:00', null],
+    [6, 'GENERIC',    'Call for Request for Proposals',                                                '15 Oct – 12 Nov 2026', '2026-10-15T00:00:00+03:00', null],
+    [7, 'GENERIC',    'RFP evaluation, due diligence, approvals & lease signing',                      'Nov 2026 – Feb 2027',  '2026-11-19T00:00:00+03:00', null],
+    [8, 'GENERIC',    'Award of land & site handover',                                                 '5 Mar 2027',           '2027-03-05T00:00:00+03:00', null],
+  ]
+  for (const [position, kind, title, dateLabel, startsAt, endsAt] of milestones) {
+    await pool.query(
+      `INSERT INTO "TimelineMilestone" ("id", "position", "kind", "title", "dateLabel", "startsAt", "endsAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT ("position") DO NOTHING`,
+      [randomUUID(), position, kind, title, dateLabel, startsAt, endsAt],
+    )
+  }
+  console.log('  ✓ timeline: 8 Phase 2 milestones (admin-editable in /console/settings)')
+
   console.log('\n✅  Seed complete\n')
   console.log('  Seed accounts (password: KipPortal2025!):')
   console.log('  ┌──────────────────────────────────────────────┬───────────────┐')

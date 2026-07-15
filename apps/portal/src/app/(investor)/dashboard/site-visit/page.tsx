@@ -6,7 +6,7 @@ import { authOptions } from "@/lib/auth";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { Button } from "@/components/ui/button";
 import { getSiteVisitBooking } from "@/lib/investor-data";
-import { SITE_VISIT } from "@/lib/timeline";
+import { getTimelineData } from "@/lib/timeline-data";
 import { SiteVisitSummary } from "@/components/site-visit-summary";
 import { SiteVisitForm } from "./site-visit-form";
 
@@ -17,9 +17,10 @@ export default async function SiteVisitPage() {
   const userId = (session.user as { id: string }).id;
   const booking = await getSiteVisitBooking(userId);
 
-  // Bookings stay open until the visits begin (29 Jul); after that the form is
-  // replaced by a closed notice.
-  const bookingOpen = Date.now() < new Date(SITE_VISIT.bookingClosesAt).getTime();
+  // Bookings stay open until the visit programme begins (admin-managed via the
+  // SITE_VISIT timeline milestone); after that the form becomes a closed notice.
+  const { siteVisit } = await getTimelineData();
+  const bookingOpen = !siteVisit || Date.now() < new Date(siteVisit.bookingClosesAt).getTime();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -61,10 +62,10 @@ export default async function SiteVisitPage() {
               <CalendarDays size={18} className="mt-0.5 shrink-0 text-brand-600" />
               <div>
                 <p className="text-sm font-semibold text-ink-900">
-                  Bookings are open until {SITE_VISIT.bookingClosesLabel}
+                  Bookings are open{siteVisit ? ` until ${siteVisit.bookingClosesLabel}` : ""}
                 </p>
                 <p className="mt-0.5 text-xs text-ink-600">
-                  Investor site visits take place {SITE_VISIT.windowLabel}. Request
+                  Investor site visits take place {siteVisit?.windowLabel}. Request
                   yours below and we&apos;ll confirm a date within that window.
                 </p>
               </div>
@@ -79,8 +80,8 @@ export default async function SiteVisitPage() {
               Site visit bookings have closed
             </p>
             <p className="mx-auto mt-1 max-w-md text-xs text-ink-600">
-              Bookings closed on {SITE_VISIT.bookingClosesLabel}, and visits are
-              taking place {SITE_VISIT.windowLabel}. If you still wish to arrange a
+              Bookings closed on {siteVisit?.bookingClosesLabel}, and visits are
+              taking place {siteVisit?.windowLabel}. If you still wish to arrange a
               visit, contact us at{" "}
               <a
                 href="mailto:kipinvestorrelations@unoc.com"

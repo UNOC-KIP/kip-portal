@@ -3,7 +3,7 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
-import { EOI_CALL, getPhase2Timeline } from "@/lib/timeline";
+import { getTimelineData } from "@/lib/timeline-data";
 import {
   Fuel,
   Factory,
@@ -23,9 +23,10 @@ import {
   TreePine,
 } from "lucide-react";
 
-// Re-render hourly so the timeline's active milestone (computed from the
-// current date) advances without a rebuild.
-export const revalidate = 3600;
+// The timeline (milestones + active stage + EOI call dates) is admin-managed
+// in the console and read from the DB on every request. force-dynamic also
+// keeps CI Docker builds (no DB) from baking the fallback in at build time.
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "About KIP — Kabalega Petro-Based Industrial Park",
@@ -179,7 +180,8 @@ const WHY_INVEST = [
 ];
 
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const { timeline, eoiCall } = await getTimelineData();
   return (
     <div className="min-h-screen font-sans">
       {/* Hero */}
@@ -473,7 +475,7 @@ export default function AboutPage() {
               <p className="mt-3 text-[15px] leading-relaxed text-black/65">
                 Land is allocated through open application windows. Phase 2 investor onboarding
                 is underway — registration is open now, and the Call for Expressions of Interest
-                runs {EOI_CALL.opensLabel} to {EOI_CALL.closesLabel}, with committee reviews
+                runs {eoiCall?.opensLabel} to {eoiCall?.closesLabel}, with committee reviews
                 following once the window closes.
               </p>
               <div className="mt-6">
@@ -489,7 +491,7 @@ export default function AboutPage() {
               </div>
               <p className="mb-8 text-[13px] text-black/55">Phase 2 — Investor Onboarding</p>
               <ol className="relative border-l-2 border-black/10 pl-6">
-                {getPhase2Timeline(new Date()).map((item, i, arr) => (
+                {timeline.map((item, i, arr) => (
                   <li key={i} className={i < arr.length - 1 ? "mb-7" : ""}>
                     <span className={`absolute -left-[9px] mt-0.5 h-4 w-4 rounded-full border-2 ${
                       item.active ? "border-kip-gold bg-kip-gold" : "border-black/20 bg-white"

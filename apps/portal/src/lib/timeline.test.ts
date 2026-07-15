@@ -1,34 +1,76 @@
-import { describe, expect, it } from "vitest";
-import { getPhase2Timeline } from "./timeline";
+import { describe, it, expect } from "vitest";
+import {
+  FALLBACK_MILESTONES,
+  TimelineMilestoneKind,
+  computeTimeline,
+  findMilestoneOfKind,
+  longDate,
+} from "@kip/shared";
 
-function activeLabels(now: Date) {
-  return getPhase2Timeline(now).filter((i) => i.active).map((i) => i.date);
-}
-
-describe("getPhase2Timeline", () => {
-  it("marks no milestone active before the schedule starts", () => {
-    expect(activeLabels(new Date("2026-06-01T00:00:00+03:00"))).toEqual([]);
-  });
-
-  it("marks registration active once it opens", () => {
-    expect(activeLabels(new Date("2026-06-23T08:00:00+03:00"))).toEqual(["23 Jun 2026"]);
-  });
-
-  it("marks the National Launch active on launch day", () => {
-    expect(activeLabels(new Date("2026-07-07T12:00:00+03:00"))).toEqual(["7 Jul 2026"]);
-  });
-
-  it("marks the EOI call active during the submission window", () => {
-    expect(activeLabels(new Date("2026-08-25T00:00:00+03:00"))).toEqual(["19 Aug – 2 Sep 2026"]);
-  });
-
-  it("marks the final milestone active after handover", () => {
-    expect(activeLabels(new Date("2027-06-01T00:00:00+03:00"))).toEqual(["5 Mar 2027"]);
-  });
-
-  it("always marks exactly one milestone active once the schedule has started", () => {
-    const items = getPhase2Timeline(new Date("2026-10-20T00:00:00+03:00"));
+describe("computeTimeline", () => {
+  it("marks the last started milestone active", () => {
+    const items = computeTimeline(FALLBACK_MILESTONES, new Date("2026-08-01T00:00:00+03:00"));
+    // 1 Aug 2026: site visits (position 3) have started; EOI call (19 Aug) has not.
     expect(items.filter((i) => i.active)).toHaveLength(1);
-    expect(items).toHaveLength(8);
+    expect(items[2]?.active).toBe(true);
+    expect(items[2]?.label).toBe("Investor site visits");
+  });
+
+  it("marks nothing active before the first milestone", () => {
+    const items = computeTimeline(FALLBACK_MILESTONES, new Date("2026-01-01T00:00:00Z"));
+    expect(items.every((i) => !i.active)).toBe(true);
+  });
+
+  it("sorts by position regardless of input order", () => {
+    const reversed = [...FALLBACK_MILESTONES].reverse();
+    const items = computeTimeline(reversed, new Date("2027-06-01T00:00:00Z"));
+    expect(items[0]?.date).toBe("23 Jun 2026");
+    expect(items[items.length - 1]?.active).toBe(true); // all passed → last is active
+  });
+});
+
+describe("findMilestoneOfKind", () => {
+  it("finds the EOI call and site-visit rows in the fallback schedule", () => {
+    const eoi = findMilestoneOfKind(FALLBACK_MILESTONES, TimelineMilestoneKind.EOI_CALL);
+    expect(eoi?.dateLabel).toBe("19 Aug – 2 Sep 2026");
+    const sv = findMilestoneOfKind(FALLBACK_MILESTONES, TimelineMilestoneKind.SITE_VISIT);
+    expect(sv?.startsAt).toBe("2026-07-29T00:00:00+03:00");
+    expect(findMilestoneOfKind([], TimelineMilestoneKind.EOI_CALL)).toBeNull();
+  });
+});
+
+describe("longDate", () => {
+  it("formats in the Kampala timezone", () => {
+    expect(longDate("2026-08-19T00:00:00+03:00")).toBe("19 August 2026");
+    // Midnight EAT is 21:00 UTC the previous day — must not shift the date.
+    expect(longDate("2026-08-18T21:00:00Z")).toBe("19 August 2026");
+  });
+});
+
+describe("manual status overrides", () => {
+  const base = FALLBACK_MILESTONES;
+  const withStatus = (position: number, status: string) =>
+    base.map((m) => (m.position === position ? { ...m, status } : m));
+
+  it("a manual CURRENT wins over the date computation", () => {
+    // 1 Aug 2026: auto-current is position 3 (site visits) — override 5 as CURRENT.
+    const items = computeTimeline(withStatus(5, "CURRENT"), new Date("2026-08-01T00:00:00+03:00"));
+    expect(items[4]?.active).toBe(true);
+    expect(items[2]?.active).toBe(false);
+    expect(items[2]?.status).toBe("CURRENT"); // still current by dates, just not the active marker
+  });
+
+  it("a manual COMPLETED / UPCOMING replaces the derived status", () => {
+    const items = computeTimeline(withStatus(3, "COMPLETED"), new Date("2026-08-01T00:00:00+03:00"));
+    expect(items[2]?.status).toBe("COMPLETED");
+    expect(items[2]?.active).toBe(false);
+    expect(items.some((i) => i.active)).toBe(false); // nothing current until admin marks one
+  });
+
+  it("AUTO (or absent) keeps the date-derived statuses", () => {
+    const items = computeTimeline(base, new Date("2026-08-01T00:00:00+03:00"));
+    expect(items[0]?.status).toBe("COMPLETED");
+    expect(items[2]?.status).toBe("CURRENT");
+    expect(items[3]?.status).toBe("UPCOMING");
   });
 });
