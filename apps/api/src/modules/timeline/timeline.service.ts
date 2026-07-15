@@ -1,3 +1,4 @@
+import type { Transaction } from "sequelize";
 import { sequelize, TimelineMilestone } from "@kip/db";
 import { Conflict, NotFound } from "../../errors.js";
 import type { CreateMilestoneInput, UpdateMilestoneInput } from "./timeline.schema.js";
@@ -13,7 +14,7 @@ import type { CreateMilestoneInput, UpdateMilestoneInput } from "./timeline.sche
 async function assertPositionFree(
   position: number,
   excludeId: string | null,
-  t: Parameters<Parameters<typeof sequelize.transaction>[0]>[0],
+  t: Transaction,
 ): Promise<void> {
   const existing = await TimelineMilestone.findOne({ where: { position }, transaction: t });
   if (existing && existing.id !== excludeId) {
