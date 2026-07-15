@@ -35,10 +35,10 @@ kip-portal/
 │           ├── env.ts, errors.ts, server.ts, webhooks.ts
 ├── packages/
 │   ├── db/           @kip/db — Sequelize 6, compiled to dist/ (run pnpm db:build after changes)
-│   │   ├── src/models/        14 model files
+│   │   ├── src/models/        15 model files
 │   │   ├── migrations/        umzug TypeScript migrations
 │   │   └── seed.ts            Raw pg seed, idempotent
-│   └── shared/       @kip/shared — enums.ts + zones.ts (source of truth) + Zod schemas
+│   └── shared/       @kip/shared — enums.ts + zones.ts + timeline.ts (source of truth) + Zod schemas
 ├── docker-compose.yml
 └── .env
 ```
@@ -211,6 +211,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Notification` | in-app + email records |
 | `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
 | `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
+| `TimelineMilestone` | admin-managed application timeline — `position` (unique, orders the list), `kind` (`GENERIC \| SITE_VISIT \| EOI_CALL`), `title`, `dateLabel` (display text), `startsAt` (drives the active stage), `endsAt`; pure logic + fallback in `@kip/shared` timeline.ts |
 | `SiteVisitBooking` | investor site-visit request — `zone (KipZone, TEXT)`, `landUse`, `description TEXT`, `acres INTEGER` (CHECK 1–100), `status (SiteVisitStatus)`, `scheduledAt`, `handledById` → User; tracked in `/console/site-visits` |
 
 **Enums** (`packages/shared/src/enums.ts` — source of truth):
@@ -268,6 +269,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
 | `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
+| `timeline/` | `POST /` create, `PATCH /:id` update, `DELETE /:id` delete timeline milestones (ADMIN only). Position uniqueness + end-after-start guarded in the service; both portals read the table directly with `FALLBACK_MILESTONES` when empty |
 | `health/` | complete |
 
 ---
@@ -400,9 +402,10 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 |---|---|
 | `packages/db/src/index.ts` | Sequelize singleton + 14 model inits + associations |
 | `packages/db/src/models/` | 14 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at) |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
+| `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `computeTimeline()` (active = last started), `findMilestoneOfKind()`, `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
 | `apps/api/src/errors.ts` | `AppError` + factory functions |
@@ -420,6 +423,8 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/portal/src/lib/smtp.ts` | `smtpTransportOptions()` — single source for the portal's SMTP options (mailer, NextAuth EmailProvider, notify-me action) |
 | `apps/web/src/lib/smtp.ts` | `smtpTransportOptions()` — same, for the admin app's NextAuth EmailProvider |
 | `apps/portal/src/app/(investor)/dashboard/site-visit/` | Investor booking form (zone → land use → description → acres slider) + booking status view. The booking summary + status block is the shared `components/site-visit-summary.tsx`, also rendered on the dashboard overview so a scheduled visit shows on sign-in |
+| `apps/portal/src/lib/timeline-data.ts` | `server-only` — `getTimelineData()` reads `TimelineMilestone` (fallback when empty/no DB) → `{ timeline, eoiCall, siteVisit }`. Consumed by portal home, About, investor dashboard stage tracker, and the site-visit booking gate |
+| `apps/web/src/app/(admin)/console/settings/timeline-editor.tsx` | Admin CRUD for the application timeline (add/edit/delete milestones, kind picker, current-stage marker) — calls the `timeline/` API module; changes are live on the portals immediately |
 | `apps/portal/src/app/(investor)/dashboard/settings/` | Investor account settings — profile + company-contact edit (`PATCH /users/me`) and change password (`POST /users/me/password`); read-only legal identity + account meta. `settings-ui.tsx` = shared card/field primitives. Sidebar "Settings" nav + a dashboard nudge appear while `passwordChangedAt` is NULL |
 | `apps/web/src/app/(admin)/console/site-visits/` | Admin site-visit tracker — searchable/filterable table; row opens `site-visit-detail-modal.tsx` (full request + investor profile: rep, company, account status, EOI progress via `SiteVisitRow.investor`) with schedule / complete / cancel actions (`POST /site-visits/:id/status`); CSV/print/copy export via the shared report export dropdown |
 | `apps/web/src/app/(admin)/console/report/` | **Reports hub** (ADMIN) — tabbed reports, one route per report: `page.tsx` Overview (cross-domain KPIs, 12-week trends, funnel), `investors/` Investor Onboarding (KPIs, funnel, country/sector/type breakdowns, detail table), `applications/` review pipeline (stage breakdown, committee decisions, avg days per stage mined from `ReviewAction`), `payments/` fees (confirmation lag, aging, weekly trend, method split), `engagement/` site visits + inquiries + notify signups. Shared chrome in `layout.tsx`. All print-optimised |
@@ -485,7 +490,7 @@ Full runbook: **`DEPLOYMENT.md`**. Single EC2 (ap-south-1) runs the whole stack 
 - CI/CD: `.github/workflows/ci.yml` (branch/PR checks: db:build, typecheck, test) + `deploy.yml` (push to `main` → build 3 images → GHCR `ghcr.io/unoc-kip/kip-{api,web,portal-app}` → SSH to EC2 → pull, migrate, up). GHCR owner hardcoded lowercase — Docker rejects the uppercase org name.
 - GitHub secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`. Variables: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_URL`. App secrets live only in `/opt/kip/.env.production` on the server (template: `deploy/.env.production.example`; values are read literally — no `${VAR}` interpolation).
 - `DATABASE_URL` on the server must keep `?sslmode=disable` — `packages/db/src/ssl.ts` treats the compose hostname `postgres` as hosted Postgres and enables TLS, which the plain container doesn't support.
-- `apps/portal/src/app/page.tsx` must keep `export const dynamic = "force-dynamic"` — CI Docker builds have no DB; static generation would bake "no open window" into the home page.
+- `apps/portal/src/app/page.tsx` AND `apps/portal/src/app/about/page.tsx` must keep `export const dynamic = "force-dynamic"` — CI Docker builds have no DB; static generation would bake "no open window" into the home page.
 
 ---
 

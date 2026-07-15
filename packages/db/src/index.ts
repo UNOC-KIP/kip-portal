@@ -19,6 +19,7 @@ import { Notification } from './models/notification'
 import { Inquiry } from './models/inquiry'
 import { NotifySignup } from './models/notify-signup'
 import { SiteVisitBooking } from './models/site-visit-booking'
+import { TimelineMilestone } from './models/timeline-milestone'
 
 const globalForDb = globalThis as unknown as { sequelize: Sequelize | undefined }
 
@@ -64,6 +65,7 @@ Notification.initModel(sequelize)
 Inquiry.initModel(sequelize)
 NotifySignup.initModel(sequelize)
 SiteVisitBooking.initModel(sequelize)
+TimelineMilestone.initModel(sequelize)
 
 // ─── Associations ────────────────────────────────────────────────────────────
 
@@ -139,4 +141,5 @@ export {
   Inquiry,
   NotifySignup,
   SiteVisitBooking,
+  TimelineMilestone,
 }

@@ -17,6 +17,8 @@ import {
   INQUIRY_CHANNEL_LABELS,
   InquiryStatus,
   ReviewActionType,
+  TIMELINE_KIND_LABELS,
+  TimelineMilestoneKind,
   KIP_ZONES,
   SITE_VISIT_STATUS_LABELS,
   type CompanyType,
@@ -900,5 +902,48 @@ export function toSiteVisitInvestor(u: {
     registrationNumber: u.registrationNumber ?? DASH,
     applicationRef: primary?.reference ?? DASH,
     applicationStage: applicationStageLabel(primary?.status ?? null),
+  };
+}
+
+// ─── Application timeline (admin settings) ───────────────────────────────────
+
+/** One editable timeline milestone row for the settings page. */
+export type TimelineMilestoneRow = {
+  id: string;
+  position: number;
+  kind: string;
+  kindLabel: string;
+  title: string;
+  dateLabel: string;
+  /** ISO strings for the edit form (datetime-local friendly). */
+  startsAtIso: string;
+  endsAtIso: string | null;
+  startsAtLabel: string;
+  isActive: boolean;
+};
+
+export function toTimelineMilestoneRow(
+  m: {
+    id: string;
+    position: number;
+    kind: string;
+    title: string;
+    dateLabel: string;
+    startsAt: Date | string;
+    endsAt: Date | string | null;
+  },
+  activeId: string | null,
+): TimelineMilestoneRow {
+  return {
+    id: m.id,
+    position: m.position,
+    kind: m.kind,
+    kindLabel: TIMELINE_KIND_LABELS[m.kind as TimelineMilestoneKind] ?? m.kind,
+    title: m.title,
+    dateLabel: m.dateLabel,
+    startsAtIso: new Date(m.startsAt).toISOString(),
+    endsAtIso: m.endsAt ? new Date(m.endsAt).toISOString() : null,
+    startsAtLabel: formatShortDate(m.startsAt),
+    isActive: m.id === activeId,
   };
 }

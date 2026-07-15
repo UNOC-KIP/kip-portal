@@ -21,6 +21,7 @@ import {
   Payment,
   ReviewAction,
   SiteVisitBooking,
+  TimelineMilestone,
   User,
 } from "@kip/db";
 import {
@@ -947,7 +948,7 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
 
 // ─── Reports hub — applications / payments / engagement / overview ───────────
 
-import { InquiryStatus } from "@kip/shared";
+import { computeTimeline, InquiryStatus } from "@kip/shared";
 import {
   applicationStageLabel,
   bucketWeekly,
@@ -956,9 +957,11 @@ import {
   toAppsReportRow,
   toPaymentReportRow,
   toSiteVisitInvestor,
+  toTimelineMilestoneRow,
   type AppsReportRow,
   type PaymentReportRow,
   type StageDuration,
+  type TimelineMilestoneRow,
 } from "./mappers";
 
 /** Statuses at or beyond SHORTLISTED — for aggregate counts (mirror of mappers). */
@@ -1281,4 +1284,23 @@ export async function getOverviewReportData(now: Date = new Date()): Promise<Ove
     },
     funnel,
   };
+}
+
+// ─── Application timeline (admin settings) ───────────────────────────────────
+
+export async function listTimelineMilestones(
+  now: Date = new Date(),
+): Promise<TimelineMilestoneRow[]> {
+  const rows = await TimelineMilestone.findAll({ order: [["position", "ASC"]] });
+  const data = rows.map((m) => ({
+    id: m.id,
+    position: m.position,
+    kind: m.kind,
+    title: m.title,
+    dateLabel: m.dateLabel,
+    startsAt: m.startsAt,
+    endsAt: m.endsAt,
+  }));
+  const activeId = computeTimeline(data, now).find((i) => i.active)?.id ?? null;
+  return data.map((m) => toTimelineMilestoneRow(m, activeId));
 }

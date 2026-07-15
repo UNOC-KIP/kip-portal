@@ -30,7 +30,7 @@ import {
   statusBadgeProps,
   type ActivityItem,
 } from "@/lib/investor-data";
-import { getPhase2Timeline } from "@/lib/timeline";
+import { getTimelineData } from "@/lib/timeline-data";
 import Link from "next/link";
 
 // ─── Local formatters ─────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ export default async function InvestorDashboardPage() {
     : [];
   const stagesDone = pipelineSteps.filter((s) => s.done).length;
 
-  const timeline = getPhase2Timeline(new Date());
+  const { timeline } = await getTimelineData();
   const activeTimelineIdx = timeline.findIndex((t) => t.active);
 
   const firstName = (orgName ?? session.user?.name ?? "there").split(" ")[0];

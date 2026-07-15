@@ -7,9 +7,16 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { StaffTable } from "./staff-table";
 import { InviteStaffDialog } from "../users/invite-staff-dialog";
-import type { StaffRow } from "@/lib/admin/mappers";
+import type { StaffRow, TimelineMilestoneRow } from "@/lib/admin/mappers";
+import { TimelineEditor } from "./timeline-editor";
 
-export function SettingsClient({ staff }: { staff: StaffRow[] }) {
+export function SettingsClient({
+  staff,
+  milestones,
+}: {
+  staff: StaffRow[];
+  milestones: TimelineMilestoneRow[];
+}) {
   const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
@@ -55,6 +62,9 @@ export function SettingsClient({ staff }: { staff: StaffRow[] }) {
               )}
             </div>
           </section>
+
+          {/* ── Application Timeline ── */}
+          <TimelineEditor milestones={milestones} />
         </main>
       </div>
 
