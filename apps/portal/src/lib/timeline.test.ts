@@ -46,3 +46,31 @@ describe("longDate", () => {
     expect(longDate("2026-08-18T21:00:00Z")).toBe("19 August 2026");
   });
 });
+
+describe("manual status overrides", () => {
+  const base = FALLBACK_MILESTONES;
+  const withStatus = (position: number, status: string) =>
+    base.map((m) => (m.position === position ? { ...m, status } : m));
+
+  it("a manual CURRENT wins over the date computation", () => {
+    // 1 Aug 2026: auto-current is position 3 (site visits) — override 5 as CURRENT.
+    const items = computeTimeline(withStatus(5, "CURRENT"), new Date("2026-08-01T00:00:00+03:00"));
+    expect(items[4]?.active).toBe(true);
+    expect(items[2]?.active).toBe(false);
+    expect(items[2]?.status).toBe("CURRENT"); // still current by dates, just not the active marker
+  });
+
+  it("a manual COMPLETED / UPCOMING replaces the derived status", () => {
+    const items = computeTimeline(withStatus(3, "COMPLETED"), new Date("2026-08-01T00:00:00+03:00"));
+    expect(items[2]?.status).toBe("COMPLETED");
+    expect(items[2]?.active).toBe(false);
+    expect(items.some((i) => i.active)).toBe(false); // nothing current until admin marks one
+  });
+
+  it("AUTO (or absent) keeps the date-derived statuses", () => {
+    const items = computeTimeline(base, new Date("2026-08-01T00:00:00+03:00"));
+    expect(items[0]?.status).toBe("COMPLETED");
+    expect(items[2]?.status).toBe("CURRENT");
+    expect(items[3]?.status).toBe("UPCOMING");
+  });
+});

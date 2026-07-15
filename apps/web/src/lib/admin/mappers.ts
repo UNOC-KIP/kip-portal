@@ -18,7 +18,9 @@ import {
   InquiryStatus,
   ReviewActionType,
   TIMELINE_KIND_LABELS,
+  TIMELINE_STATUS_LABELS,
   TimelineMilestoneKind,
+  TimelineMilestoneStatus,
   KIP_ZONES,
   SITE_VISIT_STATUS_LABELS,
   type CompanyType,
@@ -920,6 +922,11 @@ export type TimelineMilestoneRow = {
   endsAtIso: string | null;
   startsAtLabel: string;
   isActive: boolean;
+  /** Stored status: AUTO or a manual override. */
+  status: string;
+  statusLabel: string;
+  /** What the public timeline actually shows for this row. */
+  effectiveStatus: string;
 };
 
 export function toTimelineMilestoneRow(
@@ -931,8 +938,10 @@ export function toTimelineMilestoneRow(
     dateLabel: string;
     startsAt: Date | string;
     endsAt: Date | string | null;
+    status: string;
   },
   activeId: string | null,
+  effectiveStatus: string,
 ): TimelineMilestoneRow {
   return {
     id: m.id,
@@ -945,5 +954,8 @@ export function toTimelineMilestoneRow(
     endsAtIso: m.endsAt ? new Date(m.endsAt).toISOString() : null,
     startsAtLabel: formatShortDate(m.startsAt),
     isActive: m.id === activeId,
+    status: m.status,
+    statusLabel: TIMELINE_STATUS_LABELS[m.status as TimelineMilestoneStatus] ?? m.status,
+    effectiveStatus,
   };
 }

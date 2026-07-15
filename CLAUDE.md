@@ -211,7 +211,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Notification` | in-app + email records |
 | `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
 | `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
-| `TimelineMilestone` | admin-managed application timeline — `position` (unique, orders the list), `kind` (`GENERIC \| SITE_VISIT \| EOI_CALL`), `title`, `dateLabel` (display text), `startsAt` (drives the active stage), `endsAt`; pure logic + fallback in `@kip/shared` timeline.ts |
+| `TimelineMilestone` | admin-managed application timeline — `position` (unique, orders the list), `kind` (`GENERIC \| SITE_VISIT \| EOI_CALL`), `title`, `dateLabel` (display text), `startsAt` (drives the active stage), `endsAt`, `status` (`AUTO \| UPCOMING \| CURRENT \| COMPLETED` — AUTO derives from dates, others are manual overrides); pure logic + fallback in `@kip/shared` timeline.ts |
 | `SiteVisitBooking` | investor site-visit request — `zone (KipZone, TEXT)`, `landUse`, `description TEXT`, `acres INTEGER` (CHECK 1–100), `status (SiteVisitStatus)`, `scheduledAt`, `handledById` → User; tracked in `/console/site-visits` |
 
 **Enums** (`packages/shared/src/enums.ts` — source of truth):
@@ -405,7 +405,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
-| `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `computeTimeline()` (active = last started), `findMilestoneOfKind()`, `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
+| `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `TimelineMilestoneStatus`, `computeTimeline()` (active = last started, manual status overrides win), `findMilestoneOfKind()`, `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
 | `apps/api/src/errors.ts` | `AppError` + factory functions |

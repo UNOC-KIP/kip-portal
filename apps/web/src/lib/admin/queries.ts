@@ -1300,7 +1300,10 @@ export async function listTimelineMilestones(
     dateLabel: m.dateLabel,
     startsAt: m.startsAt,
     endsAt: m.endsAt,
+    status: m.status,
   }));
-  const activeId = computeTimeline(data, now).find((i) => i.active)?.id ?? null;
-  return data.map((m) => toTimelineMilestoneRow(m, activeId));
+  const items = computeTimeline(data, now);
+  const activeId = items.find((i) => i.active)?.id ?? null;
+  const effectiveById = new Map<string, string>(items.map((i) => [i.id, i.status as string]));
+  return data.map((m) => toTimelineMilestoneRow(m, activeId, effectiveById.get(m.id) ?? "UPCOMING"));
 }

@@ -10,6 +10,19 @@ import type { TimelineMilestoneRow } from "@/lib/admin/mappers";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
+const STATUS_OPTIONS = [
+  { value: "AUTO", label: "Auto (by dates)" },
+  { value: "UPCOMING", label: "Upcoming" },
+  { value: "CURRENT", label: "Current" },
+  { value: "COMPLETED", label: "Completed" },
+];
+
+const EFFECTIVE_BADGE: Record<string, "status-active" | "eoi-submitted" | "eoi-draft"> = {
+  CURRENT: "status-active",
+  COMPLETED: "eoi-submitted",
+  UPCOMING: "eoi-draft",
+};
+
 const KIND_OPTIONS = [
   { value: "GENERIC", label: "Milestone" },
   { value: "SITE_VISIT", label: "Site-visit programme (gates bookings)" },
@@ -19,6 +32,7 @@ const KIND_OPTIONS = [
 type FormState = {
   position: string;
   kind: string;
+  status: string;
   title: string;
   dateLabel: string;
   startsAt: string; // datetime-local value
@@ -28,6 +42,7 @@ type FormState = {
 const emptyForm = (nextPosition: number): FormState => ({
   position: String(nextPosition),
   kind: "GENERIC",
+  status: "AUTO",
   title: "",
   dateLabel: "",
   startsAt: "",
@@ -65,6 +80,7 @@ export function TimelineEditor({ milestones }: { milestones: TimelineMilestoneRo
     setForm({
       position: String(m.position),
       kind: m.kind,
+      status: m.status,
       title: m.title,
       dateLabel: m.dateLabel,
       startsAt: toLocalInput(m.startsAtIso),
@@ -81,6 +97,7 @@ export function TimelineEditor({ milestones }: { milestones: TimelineMilestoneRo
       const payload = {
         position: Number(form.position),
         kind: form.kind,
+        status: form.status,
         title: form.title.trim(),
         dateLabel: form.dateLabel.trim(),
         startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : undefined,
@@ -106,6 +123,25 @@ export function TimelineEditor({ milestones }: { milestones: TimelineMilestoneRo
       setError(err instanceof Error ? err.message : "An unexpected error occurred");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function setStatus(m: TimelineMilestoneRow, status: string) {
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/timeline/${m.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        throw new Error(body?.error?.message ?? "Failed to update status");
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An unexpected error occurred");
     }
   }
 
@@ -158,7 +194,8 @@ export function TimelineEditor({ milestones }: { milestones: TimelineMilestoneRo
           Shown on the portal home and About pages and the investor dashboard. The{" "}
           <span className="font-semibold">Call for EOI</span> milestone drives the home-page
           countdown; the <span className="font-semibold">Site-visit programme</span> milestone
-          closes bookings when it starts. Changes go live immediately.
+          closes bookings when it starts. Status is derived from the dates automatically — use
+          the per-row dropdown to override it manually. Changes go live immediately.
         </p>
         {error && <p className="pb-2 text-sm text-red-600">{error}</p>}
         {milestones.length === 0 ? (
@@ -184,7 +221,19 @@ export function TimelineEditor({ milestones }: { milestones: TimelineMilestoneRo
                     {m.kind !== "GENERIC" && <> · {m.kindLabel}</>}
                   </p>
                 </div>
-                {m.isActive && <StatusBadge variant="status-active">Current stage</StatusBadge>}
+                <StatusBadge variant={EFFECTIVE_BADGE[m.effectiveStatus] ?? "eoi-draft"}>
+                  {m.isActive ? "Current stage" : m.effectiveStatus === "COMPLETED" ? "Completed" : "Upcoming"}
+                </StatusBadge>
+                <select
+                  value={m.status}
+                  onChange={(e) => setStatus(m, e.target.value)}
+                  title="Override this milestone's status (Auto follows the dates)"
+                  className="h-7 shrink-0 rounded-md border border-ink-200 bg-white px-1.5 text-[11px] text-ink-600 outline-none focus:border-brand-500"
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
                 <div className="flex shrink-0 gap-1">
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(m)} aria-label={`Edit ${m.title}`}>
                     <Pencil size={13} />
@@ -244,6 +293,19 @@ export function TimelineEditor({ milestones }: { milestones: TimelineMilestoneRo
                   </select>,
                 )}
               </div>
+              {field(
+                "Status",
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                  className="h-9 w-full rounded-md border border-ink-300 bg-white px-2 text-sm outline-none focus:border-brand-500"
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>,
+                "Auto follows the dates; set Current / Completed / Upcoming to override manually",
+              )}
               {field(
                 "Title",
                 <Input

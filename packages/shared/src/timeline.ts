@@ -23,6 +23,28 @@ export const TIMELINE_KIND_LABELS: Record<TimelineMilestoneKind, string> = {
   [TimelineMilestoneKind.EOI_CALL]: "Call for EOI",
 };
 
+/**
+ * Per-milestone status. AUTO derives from the dates (before the active stage =
+ * completed, last started = current, rest = upcoming); any other value is an
+ * admin override that wins over the computation.
+ */
+export enum TimelineMilestoneStatus {
+  AUTO = "AUTO",
+  UPCOMING = "UPCOMING",
+  CURRENT = "CURRENT",
+  COMPLETED = "COMPLETED",
+}
+
+export const TIMELINE_STATUS_LABELS: Record<TimelineMilestoneStatus, string> = {
+  [TimelineMilestoneStatus.AUTO]: "Automatic (by dates)",
+  [TimelineMilestoneStatus.UPCOMING]: "Upcoming",
+  [TimelineMilestoneStatus.CURRENT]: "Current",
+  [TimelineMilestoneStatus.COMPLETED]: "Completed",
+};
+
+/** A milestone's effective (displayed) state after overrides are applied. */
+export type EffectiveTimelineStatus = "UPCOMING" | "CURRENT" | "COMPLETED";
+
 /** Plain milestone shape exchanged between the DB layer and pure logic. */
 export type TimelineMilestoneData = {
   id: string;
@@ -34,6 +56,8 @@ export type TimelineMilestoneData = {
   /** When this milestone becomes the current stage (EAT). */
   startsAt: Date | string;
   endsAt: Date | string | null;
+  /** AUTO (or absent) = derive from dates; anything else is a manual override. */
+  status?: TimelineMilestoneStatus | string;
 };
 
 export type TimelineItem = {
@@ -41,24 +65,42 @@ export type TimelineItem = {
   date: string;
   label: string;
   active: boolean;
+  status: EffectiveTimelineStatus;
 };
 
 /**
- * Sort by position and mark the current stage active — the last milestone
- * whose start date has passed. Pure: takes `now` as a parameter.
+ * Sort by position and resolve each milestone's effective status. The date
+ * rule (before the last-started milestone = completed, last started = current,
+ * rest = upcoming) fills every row set to AUTO; a manual UPCOMING / CURRENT /
+ * COMPLETED override replaces the derived value for that row. `active` marks
+ * the last row whose effective status is CURRENT. Pure: takes `now`.
  */
 export function computeTimeline(milestones: TimelineMilestoneData[], now: Date): TimelineItem[] {
   const sorted = [...milestones].sort((a, b) => a.position - b.position);
   const nowMs = now.getTime();
-  let activeIndex = -1;
+  let autoIndex = -1;
   sorted.forEach((m, i) => {
-    if (new Date(m.startsAt).getTime() <= nowMs) activeIndex = i;
+    if (new Date(m.startsAt).getTime() <= nowMs) autoIndex = i;
   });
+
+  const effective: EffectiveTimelineStatus[] = sorted.map((m, i) => {
+    const manual = m.status && m.status !== TimelineMilestoneStatus.AUTO ? m.status : null;
+    if (manual) return manual as EffectiveTimelineStatus;
+    if (i < autoIndex) return "COMPLETED";
+    if (i === autoIndex) return "CURRENT";
+    return "UPCOMING";
+  });
+  let activeIndex = -1;
+  effective.forEach((s, i) => {
+    if (s === "CURRENT") activeIndex = i;
+  });
+
   return sorted.map((m, i) => ({
     id: m.id,
     date: m.dateLabel,
     label: m.title,
     active: i === activeIndex,
+    status: effective[i] ?? "UPCOMING",
   }));
 }
 

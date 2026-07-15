@@ -50,6 +50,7 @@ export async function getTimelineData(now: Date = new Date()): Promise<TimelineD
             dateLabel: m.dateLabel,
             startsAt: m.startsAt,
             endsAt: m.endsAt,
+            status: m.status,
           }))
         : FALLBACK_MILESTONES;
   } catch {

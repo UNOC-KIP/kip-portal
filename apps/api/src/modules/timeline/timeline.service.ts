@@ -28,6 +28,7 @@ export async function createMilestone(input: CreateMilestoneInput): Promise<{ id
       {
         position: input.position,
         kind: input.kind,
+        status: input.status,
         title: input.title,
         dateLabel: input.dateLabel,
         startsAt: input.startsAt,
@@ -55,6 +56,7 @@ export async function updateMilestone(id: string, input: UpdateMilestoneInput): 
       {
         ...(input.position !== undefined && { position: input.position }),
         ...(input.kind !== undefined && { kind: input.kind }),
+        ...(input.status !== undefined && { status: input.status }),
         ...(input.title !== undefined && { title: input.title }),
         ...(input.dateLabel !== undefined && { dateLabel: input.dateLabel }),
         ...(input.startsAt !== undefined && { startsAt: input.startsAt }),
