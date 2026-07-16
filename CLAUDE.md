@@ -211,7 +211,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Notification` | in-app + email records |
 | `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
 | `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
-| `TimelineMilestone` | admin-managed application timeline — `position` (unique, orders the list), `kind` (`GENERIC \| SITE_VISIT \| EOI_CALL`), `title`, `dateLabel` (display text), `startsAt` (drives the active stage), `endsAt`, `status` (`AUTO \| UPCOMING \| CURRENT \| COMPLETED` — AUTO derives from dates, others are manual overrides); pure logic + fallback in `@kip/shared` timeline.ts |
+| `TimelineMilestone` | admin-managed application timeline — `position` (unique, orders the list), `kind` (`GENERIC \| SITE_VISIT_BOOKING \| SITE_VISIT \| EOI_CALL`), `title`, `dateLabel` (display text), `startsAt` (drives the active stage), `endsAt`, `status` (`AUTO \| UPCOMING \| CURRENT \| COMPLETED` — AUTO derives from dates, others are manual overrides); pure logic + fallback in `@kip/shared` timeline.ts. `SITE_VISIT_BOOKING` = the booking window (bookings open until its `endsAt`); `SITE_VISIT` = the visits themselves (display; also gates bookings as a legacy fallback when no booking milestone exists) |
 | `SiteVisitBooking` | investor site-visit request — `zone (KipZone, TEXT)`, `landUse`, `description TEXT`, `acres INTEGER` (CHECK 1–100), `status (SiteVisitStatus)`, `scheduledAt`, `handledById` → User; tracked in `/console/site-visits` |
 
 **Enums** (`packages/shared/src/enums.ts` — source of truth):
