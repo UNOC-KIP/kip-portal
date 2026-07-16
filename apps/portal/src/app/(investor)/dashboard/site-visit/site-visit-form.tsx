@@ -14,12 +14,34 @@ import { Button } from "@/components/ui/button";
 
 const MIN_DESCRIPTION = 20;
 
-export function SiteVisitForm() {
+export type SiteVisitFormInitial = {
+  zone: KipZone;
+  landUse: string;
+  description: string;
+  acres: number;
+};
+
+export function SiteVisitForm({
+  mode = "create",
+  bookingId,
+  initial,
+  onDone,
+  onCancel,
+}: {
+  mode?: "create" | "edit";
+  bookingId?: string;
+  initial?: SiteVisitFormInitial;
+  /** Called after a successful edit save, so the parent can leave edit mode. */
+  onDone?: () => void;
+  /** Called when the user abandons an in-progress edit. */
+  onCancel?: () => void;
+} = {}) {
   const router = useRouter();
-  const [zone, setZone] = useState<KipZone | "">("");
-  const [landUse, setLandUse] = useState("");
-  const [description, setDescription] = useState("");
-  const [acres, setAcres] = useState(10);
+  const isEdit = mode === "edit";
+  const [zone, setZone] = useState<KipZone | "">(initial?.zone ?? "");
+  const [landUse, setLandUse] = useState(initial?.landUse ?? "");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [acres, setAcres] = useState(initial?.acres ?? 10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -48,26 +70,35 @@ export function SiteVisitForm() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/site-visits`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          zone,
-          landUse,
-          description: description.trim(),
-          acres,
-        }),
-      });
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/site-visits${isEdit ? `/${bookingId}` : ""}`,
+        {
+          method: isEdit ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            zone,
+            landUse,
+            description: description.trim(),
+            acres,
+          }),
+        },
+      );
 
-      if (res.status === 201) {
-        setDone(true);
+      if (res.ok) {
         router.refresh();
+        // On edit, hand control back to the parent so it swaps back to the
+        // summary; on create, show the success panel.
+        if (isEdit) onDone?.();
+        else setDone(true);
         return;
       }
 
       const data = await res.json().catch(() => ({}));
-      setError(data?.error?.message ?? "We couldn't submit your request. Please try again.");
+      setError(
+        data?.error?.message ??
+          `We couldn't ${isEdit ? "save your changes" : "submit your request"}. Please try again.`,
+      );
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -221,9 +252,28 @@ export function SiteVisitForm() {
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
-      <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto">
-        {loading ? "Submitting…" : "Request Site Visit"}
-      </Button>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto">
+          {isEdit
+            ? loading
+              ? "Saving…"
+              : "Save changes"
+            : loading
+              ? "Submitting…"
+              : "Request Site Visit"}
+        </Button>
+        {isEdit && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={loading}
+            onClick={() => onCancel?.()}
+            className="w-full sm:w-auto"
+          >
+            Cancel
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

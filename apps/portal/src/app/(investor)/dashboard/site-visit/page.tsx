@@ -7,8 +7,8 @@ import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { Button } from "@/components/ui/button";
 import { getSiteVisitBooking } from "@/lib/investor-data";
 import { getTimelineData } from "@/lib/timeline-data";
-import { SiteVisitSummary } from "@/components/site-visit-summary";
 import { SiteVisitForm } from "./site-visit-form";
+import { SiteVisitManage } from "./site-visit-manage";
 
 export default async function SiteVisitPage() {
   const session = await getServerSession(authOptions);
@@ -48,15 +48,7 @@ export default async function SiteVisitPage() {
         </div>
 
         {booking ? (
-          <div className="space-y-4">
-            <SiteVisitSummary booking={booking} />
-            <p className="text-center text-xs text-ink-500">
-              Need to change your request? Contact us at{" "}
-              <a href="mailto:kipinvestorrelations@unoc.com" className="font-medium underline">
-                kipinvestorrelations@unoc.com
-              </a>
-            </p>
-          </div>
+          <SiteVisitManage booking={booking} />
         ) : bookingOpen ? (
           <div className="space-y-4">
             <div className="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">

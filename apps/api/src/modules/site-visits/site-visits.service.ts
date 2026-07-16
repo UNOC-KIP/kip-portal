@@ -1,6 +1,6 @@
 import { SiteVisitBooking, User, InvestorOrg } from "@kip/db";
-import { KIP_ZONE_LABELS, SiteVisitStatus, type KipZone } from "@kip/shared";
-import { Conflict, NotFound } from "../../errors.js";
+import { KIP_ZONE_LABELS, SiteVisitStatus, UserRole, type KipZone } from "@kip/shared";
+import { Conflict, Forbidden, NotFound } from "../../errors.js";
 import { fireWebhook } from "../../webhooks.js";
 import {
   sendMail,
@@ -147,6 +147,58 @@ export async function listBookings(): Promise<BookingListRow[]> {
       createdAt: r.createdAt,
     };
   });
+}
+
+/**
+ * Edit an existing booking. Only the owner (or an admin) may edit, and only
+ * while the request is still NEW — once the secretariat has scheduled it, the
+ * details are locked and changes go through them out of band.
+ */
+export async function updateBooking(
+  actor: { id: string; role: UserRole },
+  bookingId: string,
+  input: CreateBookingInput,
+): Promise<void> {
+  const booking = await SiteVisitBooking.findByPk(bookingId);
+  if (!booking) throw NotFound("Site visit booking");
+
+  const isAdmin = actor.role === UserRole.ADMIN;
+  if (!isAdmin && booking.userId !== actor.id) {
+    throw Forbidden("You can only edit your own site visit request.");
+  }
+  if (booking.status !== SiteVisitStatus.NEW) {
+    throw Conflict("This request can no longer be edited — it has already been scheduled.");
+  }
+
+  await booking.update({
+    zone: input.zone,
+    landUse: input.landUse,
+    description: input.description,
+    acres: input.acres,
+  });
+}
+
+/**
+ * Delete a booking. Same guard as edit — owner (or admin), NEW only. A hard
+ * delete (the table is not paranoid) so the investor can immediately submit a
+ * fresh request without tripping the one-active-request rule.
+ */
+export async function deleteBooking(
+  actor: { id: string; role: UserRole },
+  bookingId: string,
+): Promise<void> {
+  const booking = await SiteVisitBooking.findByPk(bookingId);
+  if (!booking) throw NotFound("Site visit booking");
+
+  const isAdmin = actor.role === UserRole.ADMIN;
+  if (!isAdmin && booking.userId !== actor.id) {
+    throw Forbidden("You can only delete your own site visit request.");
+  }
+  if (booking.status !== SiteVisitStatus.NEW) {
+    throw Conflict("This request can no longer be deleted — it has already been scheduled.");
+  }
+
+  await booking.destroy();
 }
 
 /**
