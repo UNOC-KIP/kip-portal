@@ -178,13 +178,30 @@ docker compose -f docker-compose.prod.yml run --rm migrate pnpm db:seed # UAT se
 
 ## Phase 6 — Backups & aftercare
 
-**Nightly Postgres backup to S3** — `crontab -e` on the EC2:
+**Nightly Postgres backup to S3** — use the hardened `deploy/backup.sh` (dumps to a
+temp file and verifies the gzip before upload; sets `PATH` explicitly). Copy it to
+`/opt/kip/` and drive it from cron — do **not** paste the raw `pg_dump | aws` one-liner:
 
-```cron
-15 2 * * * docker compose -f /opt/kip/docker-compose.prod.yml exec -T postgres pg_dump -U kip kip_portal | gzip | aws s3 cp - s3://<backup-bucket>/pg/kip_portal_$(date +\%F).sql.gz
+```bash
+# install (from the repo)
+scp -i ~/.ssh/kip-ec2.pem deploy/backup.sh ubuntu@<host>:/tmp/backup.sh
+ssh -i ~/.ssh/kip-ec2.pem ubuntu@<host> '
+  sudo mv /tmp/backup.sh /opt/kip/backup.sh && sudo chmod +x /opt/kip/backup.sh &&
+  sudo touch /var/log/kip-backup.log && sudo chown ubuntu:ubuntu /var/log/kip-backup.log &&
+  /opt/kip/backup.sh &&
+  (crontab -l 2>/dev/null | grep -v backup.sh; echo "30 2 * * * /opt/kip/backup.sh >> /var/log/kip-backup.log 2>&1") | crontab -'
 ```
 
-(Requires `aws` CLI on the host; auth via the instance role. Add an S3 lifecycle rule for retention.)
+**Gotchas that cause an empty backup folder (both hit this deployment):**
+- **cron's `PATH` is `/usr/bin:/bin`** — it does not include `/usr/local/bin/aws`, so a bare
+  `aws` in cron fails with `command not found` and nothing uploads. `backup.sh` exports the
+  full `PATH`; run the script from cron rather than inlining the pipeline.
+- The IAM instance role (`kip-ec2-role`) needs **`s3:PutObject` on `arn:.../kip-backups-unoc/*`**
+  for the upload, **plus `s3:ListBucket` + `s3:GetObject`** for verification and restores.
+  Write-only is enough to back up but you can't `aws s3 ls`/restore without the other two.
+- Add an **S3 lifecycle rule** on the backup bucket for retention:
+  `aws s3api put-bucket-lifecycle-configuration --bucket kip-backups-unoc --lifecycle-configuration file://lifecycle.json`
+  (rule: `Filter.Prefix = pg/`, `Expiration.Days = 30`).
 
 **If the hostnames ever change again** (done once already: sslip.io → kip.unoc.com, July 2026): create/update the A records (cPanel Zone Editor); swap the hosts in `deploy/Caddyfile`, the two `NEXTAUTH_URL`s in `deploy/docker-compose.prod.yml`, the four URLs in `.env.production` (server) and `.env.production.example`, and the two GitHub Actions variables; then push to `main` — the client bundles must be **rebuilt** because `NEXT_PUBLIC_`* is baked in at image build time. Copy the updated Caddyfile + compose to `/opt/kip/`, `docker compose up -d` and `docker compose restart caddy` (the bind-mounted Caddyfile is not reloaded automatically). Also update the CORS origins on the S3 documents bucket.
 

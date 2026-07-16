@@ -38,7 +38,7 @@ export const metadata: Metadata = {
 // files to the repo. If set to "", the page falls back to the poster with a
 // "coming soon" badge instead of a broken player.
 const PROMO_VIDEO_URL =
-  "https://kip-documents-unoc.s3.af-south-1.amazonaws.com/kip-promo-1080p.mp4";
+  "https://kip-documents-unoc.s3.af-south-1.amazonaws.com/public/kip-promo-1080p.mp4";
 const PROMO_VIDEO_POSTER = "/kip-promo-poster.jpg";
 
 const STATS = [
