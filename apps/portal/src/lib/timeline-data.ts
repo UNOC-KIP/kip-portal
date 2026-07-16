@@ -58,7 +58,18 @@ export async function getTimelineData(now: Date = new Date()): Promise<TimelineD
   }
 
   const eoi = findMilestoneOfKind(milestones, TimelineMilestoneKind.EOI_CALL);
-  const sv = findMilestoneOfKind(milestones, TimelineMilestoneKind.SITE_VISIT);
+  // A dedicated SITE_VISIT_BOOKING milestone gates the booking form: bookings
+  // are open while it is running and close at its `endsAt` (or `startsAt`).
+  // Legacy timelines have only a combined SITE_VISIT milestone — there,
+  // bookings close when the visits themselves begin (`startsAt`).
+  const booking = findMilestoneOfKind(milestones, TimelineMilestoneKind.SITE_VISIT_BOOKING);
+  const visits = findMilestoneOfKind(milestones, TimelineMilestoneKind.SITE_VISIT);
+  const closesAtSource = booking
+    ? booking.endsAt ?? booking.startsAt
+    : visits?.startsAt ?? null;
+  // Copy that describes when the visits take place — prefer the visits
+  // milestone, falling back to the booking window if that's all there is.
+  const windowLabel = (visits ?? booking)?.dateLabel ?? "";
 
   return {
     timeline: computeTimeline(milestones, now),
@@ -69,11 +80,11 @@ export async function getTimelineData(now: Date = new Date()): Promise<TimelineD
           closesLabel: eoi.endsAt ? longDate(eoi.endsAt) : "",
         }
       : null,
-    siteVisit: sv
+    siteVisit: closesAtSource
       ? {
-          bookingClosesAt: new Date(sv.startsAt).toISOString(),
-          bookingClosesLabel: longDate(sv.startsAt),
-          windowLabel: sv.dateLabel,
+          bookingClosesAt: new Date(closesAtSource).toISOString(),
+          bookingClosesLabel: longDate(closesAtSource),
+          windowLabel,
         }
       : null,
   };

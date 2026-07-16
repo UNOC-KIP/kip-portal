@@ -17,8 +17,9 @@ export default async function SiteVisitPage() {
   const userId = (session.user as { id: string }).id;
   const booking = await getSiteVisitBooking(userId);
 
-  // Bookings stay open until the visit programme begins (admin-managed via the
-  // SITE_VISIT timeline milestone); after that the form becomes a closed notice.
+  // Bookings stay open through the booking window (admin-managed via the
+  // SITE_VISIT_BOOKING timeline milestone — or the legacy SITE_VISIT milestone);
+  // once it closes the form becomes a closed notice.
   const { siteVisit } = await getTimelineData();
   const bookingOpen = !siteVisit || Date.now() < new Date(siteVisit.bookingClosesAt).getTime();
 

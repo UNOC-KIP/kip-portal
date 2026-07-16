@@ -142,4 +142,71 @@ docker build -f apps/portal/Dockerfile -t kip-portal-app \
 | Variable | `NEXT_PUBLIC_PORTAL_URL` | `https://kip.unoc.com`                   |
 
 
-✅ **Checkpoint**: push a branch → CI green. Merge to `main` → three images appear under the org's Packages → deploy job gr
+✅ **Checkpoint**: push a branch → CI green. Merge to `main` → three images appear under the org's Packages → deploy job green.
+
+---
+
+
+
+## Phase 5 — First deploy & seed
+
+The pipeline does pull → migrate → up automatically. For the very first run (or manually):
+
+```bash
+cd /opt/kip
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml run --rm migrate              # applies migrations
+docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml run --rm migrate pnpm db:seed # UAT seed data (idempotent)
+```
+
+
+
+### Verification checklist
+
+- [ ] `docker compose -f docker-compose.prod.yml ps` — all services `Up`, postgres `healthy`
+- [ ] `curl https://api.kip.unoc.com/health` returns OK over valid TLS
+- [ ] `https://kip.unoc.com` shows landing pages **and the seeded OPEN window** ("Phase 1 — Round 1") — proves live DB reads
+- [ ] Admin sign-in at `https://portal.kip.unoc.com` with `admin@kip.unoc.co.ug` / seed password
+- [ ] Investor sign-in at `https://kip.unoc.com` with `investor@gulfpetrochem.ae`
+- [ ] A **mutation** works end-to-end (e.g. approve a pending investor, or window open/close) — this is what the Vercel demo could never do
+- [ ] INVESTOR logging into the admin portal is blocked; staff logging into the investor portal is blocked
+
+---
+
+
+
+## Phase 6 — Backups & aftercare
+
+**Nightly Postgres backup to S3** — `crontab -e` on the EC2:
+
+```cron
+15 2 * * * docker compose -f /opt/kip/docker-compose.prod.yml exec -T postgres pg_dump -U kip kip_portal | gzip | aws s3 cp - s3://<backup-bucket>/pg/kip_portal_$(date +\%F).sql.gz
+```
+
+(Requires `aws` CLI on the host; auth via the instance role. Add an S3 lifecycle rule for retention.)
+
+**If the hostnames ever change again** (done once already: sslip.io → kip.unoc.com, July 2026): create/update the A records (cPanel Zone Editor); swap the hosts in `deploy/Caddyfile`, the two `NEXTAUTH_URL`s in `deploy/docker-compose.prod.yml`, the four URLs in `.env.production` (server) and `.env.production.example`, and the two GitHub Actions variables; then push to `main` — the client bundles must be **rebuilt** because `NEXT_PUBLIC_`* is baked in at image build time. Copy the updated Caddyfile + compose to `/opt/kip/`, `docker compose up -d` and `docker compose restart caddy` (the bind-mounted Caddyfile is not reloaded automatically). Also update the CORS origins on the S3 documents bucket.
+
+**Later upgrades**, in rough priority order:
+
+1. **SES SMTP** creds into `.env.production` → magic links + contact form go live.
+2. **RDS**: create instance, `pg_dump | pg_restore`, point `DATABASE_URL` at it, remove the `postgres` service.
+3. **n8n workflows**: import from `n8n/workflows/`, then uncomment `N8N_BASE_URL` + `N8N_WEBHOOK_SECRET` (≥ 8 chars) in `.env.production` — an empty secret crashes API startup.
+4. n8n UI access for configuration: SSH tunnel only (`ssh -L 5678:localhost:5678 ...`) — don't expose it publicly.
+
+---
+
+
+
+## Rollback
+
+Images are also tagged by commit SHA. To roll back:
+
+```bash
+cd /opt/kip
+# edit docker-compose.prod.yml image tags from :latest to :<good-sha>, then
+docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d
+```
+
+Database migrations are forward-only — for data disasters, restore the nightly dump rather than running `migrate:down`.

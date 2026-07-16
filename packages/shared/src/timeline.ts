@@ -11,7 +11,17 @@
 /** Special roles a milestone can play beyond appearing in the list. */
 export enum TimelineMilestoneKind {
   GENERIC = "GENERIC",
-  /** Investor site-visit programme — bookings close when `startsAt` arrives. */
+  /**
+   * Site-visit BOOKING window — the period investors may request a visit.
+   * Bookings stay open while this milestone is running and close at its
+   * `endsAt` (or `startsAt` if no end). Gates the booking form.
+   */
+  SITE_VISIT_BOOKING = "SITE_VISIT_BOOKING",
+  /**
+   * The site-visit programme itself (when the visits actually take place).
+   * Display-only. When no SITE_VISIT_BOOKING milestone exists, this milestone
+   * falls back to gating bookings — they close when the visits begin.
+   */
   SITE_VISIT = "SITE_VISIT",
   /** Call for Expressions of Interest — `startsAt`/`endsAt` = the call window. */
   EOI_CALL = "EOI_CALL",
@@ -19,6 +29,7 @@ export enum TimelineMilestoneKind {
 
 export const TIMELINE_KIND_LABELS: Record<TimelineMilestoneKind, string> = {
   [TimelineMilestoneKind.GENERIC]: "Milestone",
+  [TimelineMilestoneKind.SITE_VISIT_BOOKING]: "Site-visit booking window",
   [TimelineMilestoneKind.SITE_VISIT]: "Site-visit programme",
   [TimelineMilestoneKind.EOI_CALL]: "Call for EOI",
 };
@@ -131,10 +142,11 @@ export function longDate(value: Date | string): string {
 export const FALLBACK_MILESTONES: TimelineMilestoneData[] = [
   { id: "fb-1", position: 1, kind: TimelineMilestoneKind.GENERIC, title: "Investor registration opens — create your account and prepare your documents", dateLabel: "23 Jun 2026", startsAt: "2026-06-23T00:00:00+03:00", endsAt: null },
   { id: "fb-2", position: 2, kind: TimelineMilestoneKind.GENERIC, title: "KIP National Launch — virtual live broadcast", dateLabel: "7 Jul 2026", startsAt: "2026-07-07T00:00:00+03:00", endsAt: null },
-  { id: "fb-3", position: 3, kind: TimelineMilestoneKind.SITE_VISIT, title: "Investor site visits", dateLabel: "29 Jul – 12 Aug 2026", startsAt: "2026-07-29T00:00:00+03:00", endsAt: "2026-08-12T23:59:59+03:00" },
-  { id: "fb-4", position: 4, kind: TimelineMilestoneKind.EOI_CALL, title: "Call for Expressions of Interest — submission window open", dateLabel: "19 Aug – 2 Sep 2026", startsAt: "2026-08-19T00:00:00+03:00", endsAt: "2026-09-02T23:59:59+03:00" },
-  { id: "fb-5", position: 5, kind: TimelineMilestoneKind.GENERIC, title: "Evaluation of Expressions of Interest", dateLabel: "16 – 30 Sep 2026", startsAt: "2026-09-16T00:00:00+03:00", endsAt: null },
-  { id: "fb-6", position: 6, kind: TimelineMilestoneKind.GENERIC, title: "Call for Request for Proposals", dateLabel: "15 Oct – 12 Nov 2026", startsAt: "2026-10-15T00:00:00+03:00", endsAt: null },
-  { id: "fb-7", position: 7, kind: TimelineMilestoneKind.GENERIC, title: "RFP evaluation, due diligence, approvals & lease signing", dateLabel: "Nov 2026 – Feb 2027", startsAt: "2026-11-19T00:00:00+03:00", endsAt: null },
-  { id: "fb-8", position: 8, kind: TimelineMilestoneKind.GENERIC, title: "Award of land & site handover", dateLabel: "5 Mar 2027", startsAt: "2027-03-05T00:00:00+03:00", endsAt: null },
+  { id: "fb-3", position: 3, kind: TimelineMilestoneKind.SITE_VISIT_BOOKING, title: "Site visits booking", dateLabel: "8 Jul – 28 Jul 2026", startsAt: "2026-07-08T00:00:00+03:00", endsAt: "2026-07-28T23:59:59+03:00" },
+  { id: "fb-4", position: 4, kind: TimelineMilestoneKind.SITE_VISIT, title: "Investor site visits", dateLabel: "11 Aug – 25 Aug 2026", startsAt: "2026-08-11T00:00:00+03:00", endsAt: "2026-08-25T23:59:59+03:00" },
+  { id: "fb-5", position: 5, kind: TimelineMilestoneKind.EOI_CALL, title: "Call for Expressions of Interest — submission window open", dateLabel: "1 Sep – 15 Sep 2026", startsAt: "2026-09-01T00:00:00+03:00", endsAt: "2026-09-15T23:59:59+03:00" },
+  { id: "fb-6", position: 6, kind: TimelineMilestoneKind.GENERIC, title: "Evaluation of Expressions of Interest", dateLabel: "16 – 30 Sep 2026", startsAt: "2026-09-16T00:00:00+03:00", endsAt: null },
+  { id: "fb-7", position: 7, kind: TimelineMilestoneKind.GENERIC, title: "Call for Request for Proposals", dateLabel: "15 Oct – 12 Nov 2026", startsAt: "2026-10-15T00:00:00+03:00", endsAt: null },
+  { id: "fb-8", position: 8, kind: TimelineMilestoneKind.GENERIC, title: "RFP evaluation, due diligence, approvals & lease signing", dateLabel: "Nov 2026 – Feb 2027", startsAt: "2026-11-19T00:00:00+03:00", endsAt: null },
+  { id: "fb-9", position: 9, kind: TimelineMilestoneKind.GENERIC, title: "Award of land & site handover", dateLabel: "5 Mar 2027", startsAt: "2027-03-05T00:00:00+03:00", endsAt: null },
 ];

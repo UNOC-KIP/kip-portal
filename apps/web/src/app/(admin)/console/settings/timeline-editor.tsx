@@ -25,7 +25,8 @@ const EFFECTIVE_BADGE: Record<string, "status-active" | "eoi-submitted" | "eoi-d
 
 const KIND_OPTIONS = [
   { value: "GENERIC", label: "Milestone" },
-  { value: "SITE_VISIT", label: "Site-visit programme (gates bookings)" },
+  { value: "SITE_VISIT_BOOKING", label: "Site-visit booking window (opens bookings)" },
+  { value: "SITE_VISIT", label: "Site-visit programme (the visits themselves)" },
   { value: "EOI_CALL", label: "Call for EOI (drives countdown)" },
 ];
 
@@ -193,8 +194,10 @@ export function TimelineEditor({ milestones }: { milestones: TimelineMilestoneRo
         <p className="py-2 text-xs text-ink-400">
           Shown on the portal home and About pages and the investor dashboard. The{" "}
           <span className="font-semibold">Call for EOI</span> milestone drives the home-page
-          countdown; the <span className="font-semibold">Site-visit programme</span> milestone
-          closes bookings when it starts. Status is derived from the dates automatically — use
+          countdown; the <span className="font-semibold">Site-visit booking window</span> milestone
+          keeps bookings open until it ends (a legacy <span className="font-semibold">Site-visit
+          programme</span> milestone closes bookings when it starts). Status is derived from the
+          dates automatically — use
           the per-row dropdown to override it manually. Changes go live immediately.
         </p>
         {error && <p className="pb-2 text-sm text-red-600">{error}</p>}

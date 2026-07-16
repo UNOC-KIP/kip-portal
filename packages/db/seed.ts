@@ -405,12 +405,13 @@ async function main() {
   const milestones: [number, string, string, string, string, string | null][] = [
     [1, 'GENERIC',    'Investor registration opens — create your account and prepare your documents', '23 Jun 2026',          '2026-06-23T00:00:00+03:00', null],
     [2, 'GENERIC',    'KIP National Launch — virtual live broadcast',                                  '7 Jul 2026',           '2026-07-07T00:00:00+03:00', null],
-    [3, 'SITE_VISIT', 'Investor site visits',                                                          '29 Jul – 12 Aug 2026', '2026-07-29T00:00:00+03:00', '2026-08-12T23:59:59+03:00'],
-    [4, 'EOI_CALL',   'Call for Expressions of Interest — submission window open',                     '19 Aug – 2 Sep 2026',  '2026-08-19T00:00:00+03:00', '2026-09-02T23:59:59+03:00'],
-    [5, 'GENERIC',    'Evaluation of Expressions of Interest',                                         '16 – 30 Sep 2026',     '2026-09-16T00:00:00+03:00', null],
-    [6, 'GENERIC',    'Call for Request for Proposals',                                                '15 Oct – 12 Nov 2026', '2026-10-15T00:00:00+03:00', null],
-    [7, 'GENERIC',    'RFP evaluation, due diligence, approvals & lease signing',                      'Nov 2026 – Feb 2027',  '2026-11-19T00:00:00+03:00', null],
-    [8, 'GENERIC',    'Award of land & site handover',                                                 '5 Mar 2027',           '2027-03-05T00:00:00+03:00', null],
+    [3, 'SITE_VISIT_BOOKING', 'Site visits booking',                                                   '8 Jul – 28 Jul 2026', '2026-07-08T00:00:00+03:00', '2026-07-28T23:59:59+03:00'],
+    [4, 'SITE_VISIT', 'Investor site visits',                                                          '11 Aug – 25 Aug 2026', '2026-08-11T00:00:00+03:00', '2026-08-25T23:59:59+03:00'],
+    [5, 'EOI_CALL',   'Call for Expressions of Interest — submission window open',                     '1 Sep – 15 Sep 2026',  '2026-09-01T00:00:00+03:00', '2026-09-15T23:59:59+03:00'],
+    [6, 'GENERIC',    'Evaluation of Expressions of Interest',                                         '16 – 30 Sep 2026',     '2026-09-16T00:00:00+03:00', null],
+    [7, 'GENERIC',    'Call for Request for Proposals',                                                '15 Oct – 12 Nov 2026', '2026-10-15T00:00:00+03:00', null],
+    [8, 'GENERIC',    'RFP evaluation, due diligence, approvals & lease signing',                      'Nov 2026 – Feb 2027',  '2026-11-19T00:00:00+03:00', null],
+    [9, 'GENERIC',    'Award of land & site handover',                                                 '5 Mar 2027',           '2027-03-05T00:00:00+03:00', null],
   ]
   for (const [position, kind, title, dateLabel, startsAt, endsAt] of milestones) {
     await pool.query(
@@ -420,7 +421,7 @@ async function main() {
       [randomUUID(), position, kind, title, dateLabel, startsAt, endsAt],
     )
   }
-  console.log('  ✓ timeline: 8 Phase 2 milestones (admin-editable in /console/settings)')
+  console.log('  ✓ timeline: 9 Phase 2 milestones (admin-editable in /console/settings)')
 
   console.log('\n✅  Seed complete\n')
   console.log('  Seed accounts (password: KipPortal2025!):')
