@@ -15,6 +15,7 @@ import {
   Store,
   Home as HomeIcon,
   Cpu,
+  Play,
 } from "lucide-react";
 import { NotifySignup } from "@kip/db";
 import { SECRETARIAT_EMAIL, escapeHtml, sendMail } from "@/lib/mailer";
@@ -54,6 +55,13 @@ async function subscribeNotifications(formData: FormData) {
   }
   redirect("/?notified=1");
 }
+
+// Investor onboarding explainer — hosted on S3 (public/ prefix of the documents
+// bucket), never committed to the repo. If set to "", the section falls back to
+// the poster with a "coming soon" badge instead of a broken player.
+const HOME_VIDEO_URL =
+  "https://kip-documents-unoc.s3.af-south-1.amazonaws.com/public/kip-explainer-1080p.mp4";
+const HOME_VIDEO_POSTER = "/kip-promo-poster.jpg";
 
 const PARTNERS = [
   {
@@ -223,6 +231,94 @@ export default async function HomePage({
         </div>
         </div>
       </div>
+
+      {/* Explainer video — how to register & book a site visit */}
+      <section className="relative overflow-hidden bg-ink-100 py-20">
+        {/* Decorative brand glows + grid texture */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -left-32 -top-32 h-80 w-80 rounded-full bg-kip-gold/20 blur-[100px]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-32 -right-24 h-80 w-80 rounded-full bg-kip-red/10 blur-[110px]"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, #000000 1px, transparent 1px), linear-gradient(to bottom, #000000 1px, transparent 1px)",
+            backgroundSize: "44px 44px",
+          }}
+        />
+
+        <div className="relative mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
+          <div className="mb-9 text-center">
+            <span className="mb-4 inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-black/70">
+              <Play size={11} className="text-kip-red" fill="currentColor" />
+              New here? Start with this
+            </span>
+            <h2 className="text-[26px] sm:text-[34px] font-extrabold leading-tight tracking-tight text-black">
+              How to apply in <span className="text-kip-red">a few minutes.</span>
+            </h2>
+            <p className="mx-auto mt-3 max-w-xl text-[14px] leading-relaxed text-black/60">
+              A short walkthrough of how to create your account, submit your Expression of
+              Interest and book a site visit at Kabalega Industrial Park.
+            </p>
+          </div>
+
+          {/* Gradient-ring player frame */}
+          <div className="mx-auto max-w-4xl rounded-[14px] bg-gradient-to-br from-kip-gold/60 via-black/10 to-kip-red/50 p-[1.5px] shadow-xl shadow-black/10">
+            <div className="overflow-hidden rounded-[12px] bg-black">
+              {HOME_VIDEO_URL ? (
+                <video
+                  controls
+                  preload="none"
+                  playsInline
+                  poster={HOME_VIDEO_POSTER}
+                  className="aspect-video w-full bg-black object-cover"
+                >
+                  <source src={HOME_VIDEO_URL} type="video/mp4" />
+                  Your browser does not support the video tag.
+                </video>
+              ) : (
+                <div className="relative aspect-video w-full">
+                  <Image
+                    src={HOME_VIDEO_POSTER}
+                    alt="How to apply at Kabalega Industrial Park"
+                    fill
+                    className="object-cover"
+                  />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50">
+                    <span className="flex h-16 w-16 items-center justify-center rounded-full bg-kip-gold shadow-lg shadow-kip-gold/30">
+                      <Play size={26} className="ml-1 text-black" fill="currentColor" />
+                    </span>
+                    <span className="rounded-full bg-black/60 px-4 py-1.5 text-[12px] font-semibold uppercase tracking-widest text-white/85">
+                      Explainer video coming soon
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-9 flex flex-wrap justify-center gap-4">
+            <Link
+              href="/sign-up"
+              className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110"
+            >
+              Create Account
+            </Link>
+            <Link
+              href="/dashboard/site-visit"
+              className="rounded-[4px] border-2 border-black/70 px-7 py-3 text-[14px] font-bold text-black transition hover:bg-black hover:text-white"
+            >
+              Book Site Visit
+            </Link>
+          </div>
+        </div>
+      </section>
 
       {/* Feature cards */}
       <section className="bg-white pb-16 pt-8">
