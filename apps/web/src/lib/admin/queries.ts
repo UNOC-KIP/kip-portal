@@ -813,8 +813,19 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
             required: false,
             include: [{ model: Payment, as: "payments", attributes: ["status"], required: false }],
           },
+          // Zone of interest: an investor only declares a zone by booking a
+          // site visit, so this is the join that makes the report zone-aware.
+          {
+            model: SiteVisitBooking,
+            as: "siteVisitBookings",
+            attributes: ["zone", "landUse", "acres", "createdAt"],
+            required: false,
+          },
         ],
-        order: [["createdAt", "DESC"]],
+        order: [
+          ["createdAt", "DESC"],
+          [{ model: SiteVisitBooking, as: "siteVisitBookings" }, "createdAt", "DESC"],
+        ],
       }),
       Payment.sum("amount", { where: { status: PaymentStatus.CONFIRMED } }),
       Payment.findOne({
@@ -836,6 +847,7 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
   const countryCounts = new Map<string, number>();
   const sectorCounts = new Map<string, number>();
   const typeCounts = new Map<string, number>();
+  const zoneCounts = new Map<string, number>();
 
   let activeAccounts = 0;
   let pendingAccounts = 0;
@@ -852,9 +864,15 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
     const u = row as User & {
       investorOrg?: InvestorOrg;
       applications?: (Application & { payments?: Payment[] })[];
+      siteVisitBookings?: SiteVisitBooking[];
     };
     const org = u.investorOrg;
     const apps = u.applications ?? [];
+    const bookings = (u.siteVisitBookings ?? []).map((b) => ({
+      zone: b.zone,
+      landUse: b.landUse,
+      acres: b.acres,
+    }));
     // Primary application: the one that reached a reference, else the newest.
     const primary = apps.find((a) => a.reference) ?? apps[0] ?? null;
     const primaryPayments = (primary?.payments ?? []).map((p) => ({ status: p.status }));
@@ -879,22 +897,23 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
     const typeKey = org?.companyType ? companyTypeLabel(org.companyType) : "Unspecified";
     typeCounts.set(typeKey, (typeCounts.get(typeKey) ?? 0) + 1);
 
-    investors.push(
-      toInvestorReportRow({
-        id: u.id,
-        name: u.name ?? null,
-        email: u.email,
-        rawStatus: u.status as string,
-        orgName: org?.legalName ?? null,
-        country: org?.countryOfIncorporation ?? null,
-        businessSector: org?.businessSector ?? null,
-        companyType: org?.companyType ?? null,
-        reference: primary?.reference ?? null,
-        appStatus: primary?.status ?? null,
-        payments: primaryPayments,
-        createdAt: u.createdAt,
-      }),
-    );
+    const investorRow = toInvestorReportRow({
+      id: u.id,
+      name: u.name ?? null,
+      email: u.email,
+      rawStatus: u.status as string,
+      orgName: org?.legalName ?? null,
+      country: org?.countryOfIncorporation ?? null,
+      businessSector: org?.businessSector ?? null,
+      companyType: org?.companyType ?? null,
+      reference: primary?.reference ?? null,
+      appStatus: primary?.status ?? null,
+      payments: primaryPayments,
+      bookings,
+      createdAt: u.createdAt,
+    });
+    zoneCounts.set(investorRow.zone, (zoneCounts.get(investorRow.zone) ?? 0) + 1);
+    investors.push(investorRow);
   }
 
   const totalRegistered = investorUsers.length;
@@ -941,6 +960,8 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
     byCountry: toSortedBreakdown(countryCounts),
     bySector: toSortedBreakdown(sectorCounts),
     byCompanyType: toSortedBreakdown(typeCounts),
+    // No limit: there are only six zones and the "Not specified" bucket.
+    byZone: toSortedBreakdown(zoneCounts, Number.MAX_SAFE_INTEGER),
     conversionFunnel,
     investors,
   };
@@ -1157,49 +1178,57 @@ export async function getPaymentsReportData(now: Date = new Date()): Promise<Pay
   };
 }
 
+/**
+ * Site-visit bookings for the Site Visits report tab. Deliberately raw — the
+ * client shell owns every breakdown so the figures track the active filters,
+ * so there is nothing to pre-aggregate here.
+ */
+export type SiteVisitsReport = {
+  generatedAt: string;
+  visits: SiteVisitRow[];
+};
+
+export async function getSiteVisitsReportData(now: Date = new Date()): Promise<SiteVisitsReport> {
+  const sv = await getSiteVisitsView();
+  return { generatedAt: formatDateTime(now), visits: sv.bookings };
+}
+
+/**
+ * Engagement report — inquiries and notify-me signups. Site visits moved to
+ * their own tab (`getSiteVisitsReportData`) once they grew a zone drill-down.
+ */
 export type EngagementReport = {
   generatedAt: string;
   stats: {
-    totalVisits: number;
-    newVisits: number;
-    scheduledVisits: number;
-    completedVisits: number;
     totalInquiries: number;
     openInquiries: number;
     respondedInquiries: number;
+    closedInquiries: number;
     signups: number;
   };
-  visitsByZone: BreakdownRow[];
-  visitsByLandUse: BreakdownRow[];
-  visitsByStatus: BreakdownRow[];
   inquiriesByChannel: BreakdownRow[];
-  visits: SiteVisitRow[];
+  inquiriesByStatus: BreakdownRow[];
   inquiries: InquiryRow[];
+  signups: NotifySignupRow[];
 };
 
 export async function getEngagementReportData(now: Date = new Date()): Promise<EngagementReport> {
-  const [sv, iq] = await Promise.all([getSiteVisitsView(), getInquiriesView()]);
-  const visits = sv.bookings;
+  const iq = await getInquiriesView();
   const inquiries = iq.inquiries;
 
   return {
     generatedAt: formatDateTime(now),
     stats: {
-      totalVisits: visits.length,
-      newVisits: sv.newCount,
-      scheduledVisits: sv.scheduledCount,
-      completedVisits: visits.filter((b) => b.rawStatus === "COMPLETED").length,
       totalInquiries: inquiries.length,
       openInquiries: iq.newCount,
       respondedInquiries: inquiries.filter((i) => i.rawStatus === InquiryStatus.RESPONDED).length,
+      closedInquiries: inquiries.filter((i) => i.rawStatus === InquiryStatus.CLOSED).length,
       signups: iq.signups.length,
     },
-    visitsByZone: countRowsBy(visits as unknown as Record<string, unknown>[], "zone", 6),
-    visitsByLandUse: countRowsBy(visits as unknown as Record<string, unknown>[], "landUse", 8),
-    visitsByStatus: countRowsBy(visits as unknown as Record<string, unknown>[], "status", 4),
     inquiriesByChannel: countRowsBy(inquiries as unknown as Record<string, unknown>[], "channel", 2),
-    visits,
+    inquiriesByStatus: countRowsBy(inquiries as unknown as Record<string, unknown>[], "status", 3),
     inquiries,
+    signups: iq.signups,
   };
 }
 

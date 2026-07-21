@@ -50,6 +50,19 @@ export function formatMoney(
   return `${currency} ${Math.round(n).toLocaleString("en-US")}`;
 }
 
+/**
+ * "2026-07-21" (UTC) — a sortable, locale-free date key. Used by the report
+ * filters for date-range comparison and day/week/month bucketing, so the client
+ * never has to re-parse a display string. Empty string for null/invalid input.
+ */
+export function isoDate(value: Date | string | number | null | undefined): string {
+  const d = toDate(value);
+  if (!d) return "";
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${m}-${day}`;
+}
+
 /** Whole days between two instants (floored, never negative). */
 export function daysBetween(from: Date | string | number, to: Date | string | number): number {
   const a = toDate(from);
