@@ -28,7 +28,7 @@ import {
   type InquiryChannel,
   type SiteVisitStatus,
 } from "@kip/shared";
-import { formatDateTime, formatMoney, formatShortDate } from "../format";
+import { daysBetween, formatDateTime, formatMoney, formatShortDate, isoDate } from "../format";
 
 // ─── Status helpers ──────────────────────────────────────────────────────────
 
@@ -408,15 +408,27 @@ export type SiteVisitRow = {
   contactName: string;
   contactEmail: string;
   zone: string;
+  /** Raw `KipZone` key — what the site-visit report's zone filter matches on. */
+  zoneKey: string;
   zoneColor: string;
   landUse: string;
   description: string;
   acresLabel: string;
+  /** Raw acreage, for summing and for the acreage-band filter. */
+  acresRaw: number;
   status: string;
   rawStatus: string;
   handledBy: string;
   scheduledAt: string;
   requestedAt: string;
+  /** `YYYY-MM-DD` (UTC) keys — date-range filters + trend buckets. */
+  requestedOn: string;
+  scheduledOn: string;
+  /** Days from request to scheduled date; null while unscheduled. */
+  daysToSchedule: number | null;
+  /** Flattened from `investor` so the table, filters and CSV stay flat. */
+  country: string;
+  sector: string;
 };
 
 export function toSiteVisitRow(b: {
@@ -442,15 +454,22 @@ export function toSiteVisitRow(b: {
     contactName: b.contactName ?? DASH,
     contactEmail: b.contactEmail,
     zone: zoneMeta?.label ?? b.zone,
+    zoneKey: b.zone,
     zoneColor: zoneMeta?.color ?? "bg-ink-300",
     landUse: b.landUse,
     description: b.description,
     acresLabel: `${b.acres} acre${b.acres === 1 ? "" : "s"}`,
+    acresRaw: b.acres,
     status: SITE_VISIT_STATUS_LABELS[b.rawStatus as SiteVisitStatus] ?? b.rawStatus,
     rawStatus: b.rawStatus,
     handledBy: b.handledByName ?? DASH,
     scheduledAt: b.scheduledAt ? formatShortDate(b.scheduledAt) : DASH,
     requestedAt: formatDateTime(b.createdAt),
+    requestedOn: isoDate(b.createdAt),
+    scheduledOn: isoDate(b.scheduledAt),
+    daysToSchedule: b.scheduledAt ? daysBetween(b.createdAt, b.scheduledAt) : null,
+    country: b.investor?.country ?? DASH,
+    sector: b.investor?.sector ?? DASH,
   };
 }
 
@@ -513,6 +532,9 @@ export function isShortlistedOrBeyond(status: string | null | undefined): boolea
   return status != null && SHORTLISTED_PLUS.has(status);
 }
 
+/** Label used wherever an investor has expressed no zone interest yet. */
+export const NO_ZONE_LABEL = "Not specified";
+
 /** One row in the detailed investor-onboarding table + CSV export. */
 export type InvestorReportRow = {
   id: string;
@@ -527,6 +549,25 @@ export type InvestorReportRow = {
   eoiStage: string;      // applicationStageLabel(...)
   reference: string;     // KIP-EOI-… or —
   registeredAt: string;
+  /**
+   * Zone of interest, derived from the investor's site-visit bookings — the
+   * only place an investor declares which part of the master plan they want.
+   * `zoneKey` is the raw `KipZone` (or "" when none) and is what the report
+   * filter matches on; `zone` is the display label.
+   */
+  zoneKey: string;
+  zone: string;
+  /** Tailwind swatch class for the zone dot — matches the land-map legend. */
+  zoneColor: string;
+  landUse: string;
+  /** Total acreage requested across all of this investor's bookings. */
+  acres: string;
+  acresRaw: number;
+  siteVisits: number;
+  /** Raw application status ("" = no application) — drives the client funnel. */
+  rawAppStatus: string;
+  /** `YYYY-MM-DD` (UTC) — sortable key for date-range filters + trend buckets. */
+  registeredOn: string;
 };
 
 export function toInvestorReportRow(u: {
@@ -541,8 +582,16 @@ export function toInvestorReportRow(u: {
   reference: string | null;
   appStatus: string | null;
   payments: { status: string }[];
+  bookings?: { zone: string; landUse: string; acres: number }[];
   createdAt: Date | string;
 }): InvestorReportRow {
+  const bookings = u.bookings ?? [];
+  // Primary zone of interest = the first booking (bookings arrive newest-first,
+  // so this is the investor's most recent stated interest).
+  const primary = bookings[0] ?? null;
+  const zoneMeta = primary ? KIP_ZONES.find((z) => z.key === primary.zone) : undefined;
+  const acresRaw = bookings.reduce((sum, b) => sum + b.acres, 0);
+
   return {
     id: u.id,
     company: u.orgName ?? u.name ?? u.email,
@@ -556,6 +605,15 @@ export function toInvestorReportRow(u: {
     eoiStage: applicationStageLabel(u.appStatus),
     reference: u.reference ?? DASH,
     registeredAt: formatShortDate(u.createdAt),
+    zoneKey: primary?.zone ?? "",
+    zone: primary ? zoneMeta?.label ?? primary.zone : NO_ZONE_LABEL,
+    zoneColor: zoneMeta?.color ?? "bg-ink-300",
+    landUse: primary?.landUse ?? DASH,
+    acres: acresRaw > 0 ? `${acresRaw} acre${acresRaw === 1 ? "" : "s"}` : DASH,
+    acresRaw,
+    siteVisits: bookings.length,
+    rawAppStatus: u.appStatus ?? "",
+    registeredOn: isoDate(u.createdAt),
   };
 }
 
@@ -589,6 +647,8 @@ export type ReportData = {
   byCountry: BreakdownRow[];
   bySector: BreakdownRow[];
   byCompanyType: BreakdownRow[];
+  /** Investors per zone of interest — every investable zone, plus "Not specified". */
+  byZone: BreakdownRow[];
   conversionFunnel: FunnelRow[];
   investors: InvestorReportRow[];
 };

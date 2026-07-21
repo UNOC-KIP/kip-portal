@@ -1,27 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   csvCell,
-  buildInvestorCsv,
-  buildOnboardingSummary,
-  reportFilename,
+  buildCsv,
+  buildInvestorReportSummary,
+  buildSiteVisitReportSummary,
+  datestampedFilename,
+  INVESTOR_EXPORT_COLUMNS,
 } from "./report-export";
-import type { InvestorReportRow, ReportData } from "./admin/mappers";
-
-const row = (over: Partial<InvestorReportRow> = {}): InvestorReportRow => ({
-  id: "u1",
-  company: "Gulf Petrochem",
-  rep: "Ada Rep",
-  email: "a@gulf.ae",
-  country: "UAE",
-  sector: "Petrochemicals & Refining",
-  companyType: "Limited Liability Company",
-  accountStatus: "Active",
-  paymentStatus: "Confirmed",
-  eoiStage: "Shortlisted",
-  reference: "KIP-EOI-2026-0001",
-  registeredAt: "1 Jan 2026",
-  ...over,
-});
+import { investorRow, siteVisitRow } from "./test-fixtures";
+import { computeInvestorStats, computeSiteVisitStats } from "./report-filters";
 
 describe("csvCell", () => {
   it("leaves plain values untouched", () => {
@@ -37,82 +24,149 @@ describe("csvCell", () => {
   });
 });
 
-describe("buildInvestorCsv", () => {
+describe("buildCsv", () => {
+  const rows = () =>
+    [investorRow(), investorRow({ id: "u2", company: "Nile Energy" })] as unknown as Record<
+      string,
+      unknown
+    >[];
+
   it("emits a header row plus one line per investor", () => {
-    const csv = buildInvestorCsv([row(), row({ id: "u2", company: "Nile Energy" })]);
-    const lines = csv.split("\r\n");
+    const lines = buildCsv(INVESTOR_EXPORT_COLUMNS, rows()).split("\r\n");
     expect(lines).toHaveLength(3);
-    expect(lines[0]).toBe(
-      "Company,Representative,Email,Country,Sector,Company Type,Account,Payment,EOI Stage,Reference,Registered",
-    );
     expect(lines[1]).toContain("Gulf Petrochem");
     expect(lines[2]).toContain("Nile Energy");
   });
 
+  it("carries the zone drill-down columns", () => {
+    const header = buildCsv(INVESTOR_EXPORT_COLUMNS, rows()).split("\r\n")[0];
+    expect(header).toContain("Zone of Interest");
+    expect(header).toContain("Land Use");
+    expect(header).toContain("Acres Requested");
+    expect(header).toContain("Registered (ISO)");
+  });
+
   it("escapes a company name containing a comma so columns stay aligned", () => {
-    const csv = buildInvestorCsv([row({ company: "Sabastar General Trading, Co." })]);
+    const csv = buildCsv(INVESTOR_EXPORT_COLUMNS, [
+      investorRow({ company: "Sabastar General Trading, Co." }),
+    ] as unknown as Record<string, unknown>[]);
     expect(csv.split("\r\n")[1]).toContain('"Sabastar General Trading, Co."');
   });
 
-  it("header only for an empty investor list", () => {
-    expect(buildInvestorCsv([]).split("\r\n")).toHaveLength(1);
+  it("header only for an empty list", () => {
+    expect(buildCsv(INVESTOR_EXPORT_COLUMNS, []).split("\r\n")).toHaveLength(1);
   });
 });
 
-const report = (): ReportData => ({
-  generatedAt: "14 Jul 2026 · 09:00 UTC",
-  windowName: "Phase 1 — Round 1",
-  stats: {
-    totalRegistered: 4,
-    activeAccounts: 3,
-    pendingAccounts: 1,
-    newLast7Days: 2,
-    newLast30Days: 4,
-    paymentsConfirmed: 3,
-    eoisSubmitted: 3,
-    shortlisted: 1,
-    allocated: 1,
-    siteVisitsRequested: 2,
-    feesCollected: "USD 3,000",
-    feesCollectedRaw: 3000,
-    daysToClose: 12,
-  },
-  byCountry: [{ label: "Uganda", count: 3 }, { label: "UAE", count: 1 }],
-  bySector: [{ label: "Agro-processing", count: 2 }],
-  byCompanyType: [{ label: "Limited Liability Company", count: 4 }],
-  conversionFunnel: [
-    { label: "Registered", count: 4, pct: 100 },
-    { label: "Allocated", count: 1, pct: 25 },
-  ],
-  investors: [row()],
-});
+describe("buildInvestorReportSummary", () => {
+  const summary = (over: Partial<Parameters<typeof buildInvestorReportSummary>[0]> = {}) =>
+    buildInvestorReportSummary({
+      generatedAt: "14 Jul 2026 · 09:00 UTC",
+      windowName: "Phase 1 — Round 1",
+      filterDescription: "Zone: Heavy Industrial Zone",
+      totalUnfiltered: 12,
+      stats: computeInvestorStats([investorRow(), investorRow({ id: "u2" })]),
+      granularityLabel: "Weekly",
+      trend: [
+        { label: "Week of 5 Jan 2026", count: 2 },
+        { label: "Week of 12 Jan 2026", count: 0 },
+      ],
+      trendStats: { total: 2, peak: { label: "Week of 5 Jan 2026", count: 2 }, avgPerBucket: 2 },
+      zones: [{ label: "Heavy Industrial Zone", count: 2, acres: 100, pct: 100 }],
+      byCountry: [{ label: "UAE", count: 2 }],
+      bySector: [{ label: "Petrochemicals & Refining", count: 2 }],
+      ...over,
+    });
 
-describe("buildOnboardingSummary", () => {
-  it("includes headline metrics, funnel and breakdowns", () => {
-    const text = buildOnboardingSummary(report());
+  it("states the active filters and the scope of the extract", () => {
+    const text = summary();
     expect(text).toContain("KIP INVESTOR ONBOARDING REPORT");
-    expect(text).toContain("Generated: 14 Jul 2026 · 09:00 UTC");
+    expect(text).toContain("Filters: Zone: Heavy Industrial Zone");
+    expect(text).toContain("Scope: 2 of 12 registered investors");
     expect(text).toContain("Window: Phase 1 — Round 1");
-    expect(text).toContain("Registered investors: 4 (active 3, pending 1)");
-    expect(text).toContain("Fees collected: USD 3,000");
-    expect(text).toContain("- Registered: 4 (100%)");
-    expect(text).toContain("- Allocated: 1 (25%)");
-    expect(text).toContain("- Uganda: 3");
   });
 
-  it("omits window + days-to-close lines when absent", () => {
-    const r = report();
-    r.windowName = "";
-    r.stats.daysToClose = null;
-    const text = buildOnboardingSummary(r);
-    expect(text).not.toContain("Window:");
-    expect(text).not.toContain("Days to window close");
+  it("lists the sign-up trend with its peak, skipping empty periods", () => {
+    const text = summary();
+    expect(text).toContain("Sign-ups (weekly):");
+    expect(text).toContain("- Week of 5 Jan 2026: 2");
+    expect(text).not.toContain("- Week of 12 Jan 2026: 0");
+    expect(text).toContain("Peak: Week of 5 Jan 2026 (2)");
+  });
+
+  it("reports zone counts with share and acreage", () => {
+    expect(summary()).toContain("- Heavy Industrial Zone: 2 investors (100%) · 100 acres");
+  });
+
+  it("omits the window line when there is no open window", () => {
+    expect(summary({ windowName: "" })).not.toContain("Window:");
+  });
+
+  it("says so when nothing matched the range", () => {
+    expect(
+      summary({ trend: [], trendStats: { total: 0, peak: null, avgPerBucket: 0 } }),
+    ).toContain("no sign-ups in this range");
   });
 });
 
-describe("reportFilename", () => {
+describe("buildSiteVisitReportSummary", () => {
+  const summary = (over: Partial<Parameters<typeof buildSiteVisitReportSummary>[0]> = {}) =>
+    buildSiteVisitReportSummary({
+      generatedAt: "14 Jul 2026 · 09:00 UTC",
+      filterDescription: "Zone: Heavy Industrial Zone",
+      totalUnfiltered: 9,
+      stats: computeSiteVisitStats([
+        siteVisitRow(),
+        siteVisitRow({ id: "v2", rawStatus: "SCHEDULED", status: "Scheduled", daysToSchedule: 10 }),
+      ]),
+      granularityLabel: "Weekly",
+      trend: [
+        { label: "Week of 5 Jan 2026", count: 2 },
+        { label: "Week of 12 Jan 2026", count: 0 },
+      ],
+      trendStats: { total: 2, peak: { label: "Week of 5 Jan 2026", count: 2 }, avgPerBucket: 2 },
+      zones: [{ label: "Heavy Industrial Zone", count: 2, acres: 100, pct: 100 }],
+      byLandUse: [{ label: "Petrochemicals & Refining", count: 2 }],
+      byCountry: [{ label: "UAE", count: 2 }],
+      ...over,
+    });
+
+  it("states the filters and the scope of the extract", () => {
+    const text = summary();
+    expect(text).toContain("KIP SITE-VISIT REQUESTS REPORT");
+    expect(text).toContain("Filters: Zone: Heavy Industrial Zone");
+    expect(text).toContain("Scope: 2 of 9 site-visit requests");
+  });
+
+  it("summarises the pipeline and land demand", () => {
+    const text = summary();
+    expect(text).toContain("1 new · 1 scheduled · 0 completed · 0 cancelled");
+    expect(text).toContain("100 acres across 1 zone(s)");
+    expect(text).toContain("Avg days to schedule: 10");
+  });
+
+  it("lists zone demand and skips empty periods", () => {
+    const text = summary();
+    expect(text).toContain("- Heavy Industrial Zone: 2 requests (100%) · 100 acres");
+    expect(text).not.toContain("- Week of 12 Jan 2026: 0");
+  });
+
+  it("says so when nothing has been scheduled", () => {
+    expect(
+      summary({ stats: computeSiteVisitStats([siteVisitRow()]) }),
+    ).toContain("Avg days to schedule: no scheduled visits yet");
+  });
+
+  it("says so when nothing matched the range", () => {
+    expect(
+      summary({ trend: [], trendStats: { total: 0, peak: null, avgPerBucket: 0 } }),
+    ).toContain("no requests in this range");
+  });
+});
+
+describe("datestampedFilename", () => {
   it("stamps the UTC date", () => {
-    expect(reportFilename(new Date("2026-07-14T22:00:00Z"))).toBe(
+    expect(datestampedFilename("kip-investor-onboarding", new Date("2026-07-14T22:00:00Z"))).toBe(
       "kip-investor-onboarding-2026-07-14.csv",
     );
   });

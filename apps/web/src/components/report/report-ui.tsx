@@ -147,6 +147,60 @@ export function TrendBars({
   );
 }
 
+/**
+ * Column chart over labelled buckets (day / week / month sign-ups). Unlike
+ * `TrendBars` the buckets carry their own labels, so the x-axis is annotated:
+ * with many columns only every nth tick is drawn to keep it legible, and each
+ * column keeps its full label in a tooltip.
+ */
+export function SeriesBars({
+  buckets,
+  accent,
+  empty,
+}: {
+  buckets: { key: string; label: string; count: number }[];
+  accent: string;
+  empty: string;
+}) {
+  if (buckets.length === 0) return <p className="text-sm text-ink-400">{empty}</p>;
+  const max = Math.max(1, ...buckets.map((b) => b.count));
+  // Aim for ~8 ticks regardless of series length.
+  const tickEvery = Math.max(1, Math.ceil(buckets.length / 8));
+
+  return (
+    <div>
+      <div className="flex h-32 items-end gap-[3px]">
+        {buckets.map((b) => (
+          <div
+            key={b.key}
+            className="group flex h-full flex-1 flex-col justify-end"
+            title={`${b.label}: ${b.count} sign-up${b.count === 1 ? "" : "s"}`}
+          >
+            <span className="mb-1 text-center text-[9px] font-bold text-ink-500 opacity-0 transition group-hover:opacity-100">
+              {b.count}
+            </span>
+            <div
+              className={`w-full rounded-t ${b.count === 0 ? "bg-ink-100" : accent} transition-all`}
+              style={{ height: `${b.count === 0 ? 2 : Math.max(6, (b.count / max) * 100)}%` }}
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-[3px] border-t border-ink-100 pt-1.5">
+        {buckets.map((b, i) => (
+          <div key={b.key} className="min-w-0 flex-1 text-center">
+            {i % tickEvery === 0 ? (
+              <span className="block truncate text-[9px] text-ink-400">
+                {b.label.replace("Week of ", "")}
+              </span>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** Print-only report heading (screens show the tab bar + page header instead). */
 export function PrintHeading({ title, meta }: { title: string; meta: string }) {
   return (

@@ -1,5 +1,5 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 13 July 2026. Update this file in the same commit as any architectural change.
+> Last updated: 21 July 2026. Update this file in the same commit as any architectural change.
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
 ---
@@ -212,7 +212,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
 | `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
 | `TimelineMilestone` | admin-managed application timeline — `position` (unique, orders the list), `kind` (`GENERIC \| SITE_VISIT_BOOKING \| SITE_VISIT \| EOI_CALL`), `title`, `dateLabel` (display text), `startsAt` (drives the active stage), `endsAt`, `status` (`AUTO \| UPCOMING \| CURRENT \| COMPLETED` — AUTO derives from dates, others are manual overrides); pure logic + fallback in `@kip/shared` timeline.ts. `SITE_VISIT_BOOKING` = the booking window (bookings open until its `endsAt`); `SITE_VISIT` = the visits themselves (display; also gates bookings as a legacy fallback when no booking milestone exists) |
-| `SiteVisitBooking` | investor site-visit request — `zone (KipZone, TEXT)`, `landUse`, `description TEXT`, `acres INTEGER` (CHECK 1–100), `status (SiteVisitStatus)`, `scheduledAt`, `handledById` → User; tracked in `/console/site-visits` |
+| `SiteVisitBooking` | investor site-visit request — `zone (KipZone, TEXT)`, `landUse`, `description TEXT`, `acres INTEGER` (CHECK 1–100), `status (SiteVisitStatus)`, `scheduledAt`, `handledById` → User; tracked in `/console/site-visits`. **The only place an investor declares a zone** — the investors report derives its "zone of interest" drill-down from these rows (newest booking wins; acreage is summed across bookings), so an investor with no booking lands in the "Not specified" bucket |
 
 **Enums** (`packages/shared/src/enums.ts` — source of truth):
 - `UserRole`: `INVESTOR | TC_MEMBER | TC_CHAIR | LAC_MEMBER | EXCO_MEMBER | ADMIN`
@@ -345,6 +345,7 @@ EMAIL_FROM="Support KIP <Support.Kip@unoc.com>"
 NEXTAUTH_URL=http://localhost:4002
 NEXTAUTH_SECRET=          # min 32 chars, must match API + admin portal
 NEXT_PUBLIC_API_URL=http://localhost:4001
+NEXT_PUBLIC_GTM_ID=       # Google Tag Manager container; leave empty in dev (GTM won't load)
 EMAIL_SERVER_HOST=smtp.office365.com
 EMAIL_SERVER_PORT=587
 EMAIL_SERVER_USER=Support.Kip@unoc.com
@@ -372,6 +373,17 @@ Rules and gotchas:
 - Auth can take several seconds on first connect; that is Exchange throttling, not a hang.
 
 ---
+
+## Analytics — Google Tag Manager
+
+Container **`GTM-T23BP8QS`**. **`apps/portal` only, and only on the public marketing pages** — `apps/web` (admin) has no GTM at all, and neither does the investor dashboard, the auth pages or `/launch`.
+
+- Mounted in `apps/portal/src/app/(public)/layout.tsx`, not the root layout: `<GoogleTagManagerNoScript />` (the `<noscript>` iframe) then `<GoogleTagManager />` (loader, `next/script` `strategy="afterInteractive"`). Component: `apps/portal/src/components/google-tag-manager.tsx`.
+- The **`(public)` route group** holds home + about, contact, faq, for-investors, help, how-it-works, land-map, privacy, resources, terms. Route groups don't change URLs. **A new public page must go inside `(public)` or it gets no analytics**; a new signed-in page must stay outside it.
+- Gated on **`NEXT_PUBLIC_GTM_ID`**; both components return `null` when unset, so local dev, CI and preview builds send nothing.
+- `NEXT_PUBLIC_*` is baked in at **build time**. In Docker the id comes from the `NEXT_PUBLIC_GTM_ID` build arg (`apps/portal/Dockerfile` defaults to the real container, matching the `NEXT_PUBLIC_API_URL` pattern) and is passed by `deploy.yml` from `vars.NEXT_PUBLIC_GTM_ID`. Setting it only in `/opt/kip/.env.production` changes nothing — GTM is client-side.
+- `not-found.tsx` must stay at the app root, so 404s are untracked.
+- Never hand-write the GTM snippet into a page or a `dangerouslySetInnerHTML` block — render the component so the env gate can't be bypassed.
 
 ## Seed accounts (`pnpm db:seed`)
 
@@ -427,9 +439,12 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/(admin)/console/settings/timeline-editor.tsx` | Admin CRUD for the application timeline (add/edit/delete milestones, kind picker, current-stage marker) — calls the `timeline/` API module; changes are live on the portals immediately |
 | `apps/portal/src/app/(investor)/dashboard/settings/` | Investor account settings — profile + company-contact edit (`PATCH /users/me`) and change password (`POST /users/me/password`); read-only legal identity + account meta. `settings-ui.tsx` = shared card/field primitives. Sidebar "Settings" nav + a dashboard nudge appear while `passwordChangedAt` is NULL |
 | `apps/web/src/app/(admin)/console/site-visits/` | Admin site-visit tracker — searchable/filterable table; row opens `site-visit-detail-modal.tsx` (full request + investor profile: rep, company, account status, EOI progress via `SiteVisitRow.investor`) with schedule / complete / cancel actions (`POST /site-visits/:id/status`); CSV/print/copy export via the shared report export dropdown |
-| `apps/web/src/app/(admin)/console/report/` | **Reports hub** (ADMIN) — tabbed reports, one route per report: `page.tsx` Overview (cross-domain KPIs, 12-week trends, funnel), `investors/` Investor Onboarding (KPIs, funnel, country/sector/type breakdowns, detail table), `applications/` review pipeline (stage breakdown, committee decisions, avg days per stage mined from `ReviewAction`), `payments/` fees (confirmation lag, aging, weekly trend, method split), `engagement/` site visits + inquiries + notify signups. Shared chrome in `layout.tsx`. All print-optimised |
-| `apps/web/src/components/report/` | Reports-hub building blocks: `report-ui.tsx` server-safe primitives (`Panel`, `BarList`, `MiniStat`, `FunnelBars`, `TrendBars`, `PrintHeading`), `report-tabs.tsx` tab bar, `report-table.tsx` generic searchable detail table (declarative column spec, badge maps), `export-actions.tsx` generic export dropdown — CSV via `buildCsv()` (Blob + UTF-8 BOM), Print/Save-as-PDF (`window.print()`), Copy summary. All client-side so exports work on the read-only demo |
-| `apps/web/src/lib/report-export.ts` | Pure CSV + text-summary builders for all report exports (`buildCsv`, per-report `build*Summary`, filename stampers) — no `@kip/db`/`server-only`, unit-tested (`report-export.test.ts`) |
+| `apps/web/src/app/(admin)/console/report/` | **Reports hub** (ADMIN) — tabbed reports, one route per report: `page.tsx` Overview (cross-domain KPIs, 12-week trends, funnel), `investors/` Investor Onboarding (see below), `applications/` review pipeline (stage breakdown, committee decisions, avg days per stage mined from `ReviewAction`), `payments/` fees (confirmation lag, aging, weekly trend, method split), `site-visits/` site-visit demand (see below), `engagement/` inquiries + notify signups. Tab order lives in `components/report/report-tabs.tsx`; shared chrome in `layout.tsx`. All print-optimised |
+| `apps/web/src/app/(admin)/console/report/investors/` | Investor Onboarding report. `page.tsx` is a thin server shell — one `getReportData()` read, then `investors-report-client.tsx` owns **all** filtering in the browser: zone drill-down cards, registration date range (presets + custom `from`/`to`), account/payment/stage/country/sector selects, and a day/week/month sign-up trend. Every KPI, funnel, breakdown, chart and CSV re-derives from the *filtered* subset, so the numbers and the export always describe the same slice. Zone cards deliberately ignore the zone filter (denominator = `zoneScopeStats`, not `stats`) so you can still see what you drilled away from |
+| `apps/web/src/app/(admin)/console/report/site-visits/` | Site Visits report — same server-shell + client-drill-down shape as `investors/`, over `getSiteVisitsReportData()`. Zone demand cards (requests + acreage), request date range, status / land-use / plot-size / country filters, day/week/month request trend, request→scheduled→completed funnel (a completed visit still counts as scheduled), avg days to schedule. **Distinct from `/console/site-visits`**, which is the operational tracker where admins schedule/complete/cancel; this tab is read-only analysis |
+| `apps/web/src/components/report/` | Reports-hub building blocks: `report-ui.tsx` server-safe primitives (`Panel`, `BarList`, `MiniStat`, `FunnelBars`, `TrendBars`, `SeriesBars` labelled trend chart, `PrintHeading`), `report-tabs.tsx` tab bar, `report-table.tsx` generic searchable detail table (declarative column spec, badge maps), `export-actions.tsx` generic export dropdown — CSV via `buildCsv()` (Blob + UTF-8 BOM), Print/Save-as-PDF (`window.print()`), Copy summary; `extraCsvs` adds sibling downloads. All client-side so exports work on the read-only demo |
+| `apps/web/src/lib/report-filters.ts` | Pure filter + aggregation logic behind the drill-down report tabs. Shared core: `zoneBreakdown()` (any `{zoneKey, acresRaw}` row), `countBy()`, `bucketByPeriod()` (day/week/month, gap-filled, capped at 200 buckets then falls back to occupied ones), `trendStats()`, `presetRange()`/`matchPreset()`, `activeFilterCount()`. Then one section per report: `filterInvestors`/`computeInvestorStats`/`computeFunnel`/`describeInvestorFilters` and `filterSiteVisits`/`computeSiteVisitStats`/`computeSiteVisitFunnel`/`describeSiteVisitFilters` + `ACRE_BANDS`. Filter shapes are written out per report rather than driven by a generic predicate engine — keep it that way. No `@kip/db`/`server-only`/React; unit-tested (`report-filters.test.ts`) |
+| `apps/web/src/lib/report-export.ts` | Pure CSV + text-summary builders for all report exports (`buildCsv`, column specs incl. `INVESTOR_EXPORT_COLUMNS` / `SITE_VISIT_EXPORT_COLUMNS` / `PERIOD_TREND_COLUMNS` / `ZONE_BREAKDOWN_COLUMNS` / `INQUIRY_EXPORT_COLUMNS`, per-report `build*Summary`, filename stampers) — no `@kip/db`/`server-only`, unit-tested (`report-export.test.ts`). Shared row fixtures live in `lib/test-fixtures.ts` |
 | `apps/web/src/lib/auth.ts` | NextAuth config — Email + Credentials, custom SequelizeAdapter |
 | `apps/web/src/lib/rbac.ts` | RBAC policy — single source for both middleware + server guards |
 | `apps/web/src/lib/format.ts` | Pure formatters (date/money) — deterministic, unit-tested |
@@ -450,18 +465,20 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/(admin)/console/windows/create-window-dialog.tsx` | Create/edit window dialog |
 | `apps/web/src/app/(admin)/console/windows/window-actions.tsx` | Per-window open/close/archive action buttons |
 | `apps/portal/src/app/api/register/route.ts` | `POST /api/register` — one-step registration (company name/country/type/sector + authorized rep), creates InvestorOrg + User (**ACTIVE**), emails generated credentials, fires webhook. The web app's `/sign-up` redirects to the portal form |
-| `apps/portal/src/app/contact/page.tsx` | Public contact form — server action persists an `Inquiry` row, then best-effort email to kipinvestorrelations@unoc.com |
+| `apps/portal/src/app/(public)/layout.tsx` | Public marketing route group — the only place GTM is mounted (see Analytics). No chrome of its own; pages render their own nav/footer |
+| `apps/portal/src/components/google-tag-manager.tsx` | GTM loader + `<noscript>` fallback, gated on `NEXT_PUBLIC_GTM_ID` |
+| `apps/portal/src/app/(public)/contact/page.tsx` | Public contact form — server action persists an `Inquiry` row, then best-effort email to kipinvestorrelations@unoc.com |
 | `apps/portal/src/app/api/inquiry/route.ts` | Live-chat widget endpoint — persists an `Inquiry` row (channel LIVE_CHAT), then best-effort email |
 | `apps/web/src/app/(admin)/console/inquiries/page.tsx` | Admin inquiries tracker — contact/chat inquiries + notify-me signup list, status actions via `POST /inquiries/:id/status` |
-| `apps/web/src/app/how-it-works/page.tsx` | 6-step EOI process walkthrough — public static page |
-| `apps/web/src/app/for-investors/page.tsx` | Investor benefits, incentives, land categories, eligibility — public static page |
-| `apps/web/src/app/faq/page.tsx` | FAQ accordion (5 categories, `<details>/<summary>`) — public static page |
-| `apps/web/src/app/help/page.tsx` | Help centre with 6 category cards linking to FAQ — public static page |
-| `apps/web/src/app/privacy/page.tsx` | Privacy Policy document (Uganda DPPA 2019) — public static page |
-| `apps/web/src/app/terms/page.tsx` | Terms of Service document — public static page |
-| `apps/web/src/app/land-map/page.tsx` | Land map page — embeds `/kip-plot-map.pdf` + zone legend + infrastructure specs |
-| `apps/portal/src/app/about/page.tsx` | Dedicated About page — promo video, story/mandate, stats, zones, connectivity, gallery, partners, timeline. Video is hosted on S3/CloudFront (`PROMO_VIDEO_URL` const, `preload="none"`) — **never commit video files to the repo** |
-| `apps/web/src/app/resources/page.tsx` | Downloads page — KIP plot map PDF + coming-soon placeholders |
+| `apps/portal/src/app/(public)/how-it-works/page.tsx` | 6-step EOI process walkthrough — public static page |
+| `apps/portal/src/app/(public)/for-investors/page.tsx` | Investor benefits, incentives, land categories, eligibility — public static page |
+| `apps/portal/src/app/(public)/faq/page.tsx` | FAQ accordion (5 categories, `<details>/<summary>`) — public static page |
+| `apps/portal/src/app/(public)/help/page.tsx` | Help centre with 6 category cards linking to FAQ — public static page |
+| `apps/portal/src/app/(public)/privacy/page.tsx` | Privacy Policy document (Uganda DPPA 2019) — public static page |
+| `apps/portal/src/app/(public)/terms/page.tsx` | Terms of Service document — public static page |
+| `apps/portal/src/app/(public)/land-map/page.tsx` | Land map page — embeds `/kip-plot-map.pdf` + zone legend + infrastructure specs |
+| `apps/portal/src/app/(public)/about/page.tsx` | Dedicated About page — promo video, story/mandate, stats, zones, connectivity, gallery, partners, timeline. Video is hosted on S3/CloudFront (`PROMO_VIDEO_URL` const, `preload="none"`) — **never commit video files to the repo** |
+| `apps/portal/src/app/(public)/resources/page.tsx` | Downloads page — KIP plot map PDF + coming-soon placeholders |
 | `apps/web/src/app/not-found.tsx` | Custom 404 page matching site design |
 | `apps/web/src/lib/public-data.ts` | `server-only` — `getActiveApplicationWindow()` queries DB for OPEN window (used on home page) |
 | `apps/web/public/kip-plot-map.pdf` | Official KIP Phase 2 plot allocation map |
@@ -488,9 +505,9 @@ Full runbook: **`DEPLOYMENT.md`**. Single EC2 (ap-south-1) runs the whole stack 
 
 - Production Dockerfiles: `apps/{api,web,portal}/Dockerfile`. The API image doubles as the migrate/seed job image and runs under **tsx, not node** (`@kip/shared`'s entry is raw TS). Next.js images ship the full workspace — **never switch them to `output: "standalone"`** (breaks the `serverExternalPackages` webpack workaround) — and set a dummy `DATABASE_URL` during `next build` (Sequelize instantiates at import time; no connection is made). `NEXT_PUBLIC_*` values are Docker build args (baked into client bundles at build time).
 - CI/CD: `.github/workflows/ci.yml` (branch/PR checks: db:build, typecheck, test) + `deploy.yml` (push to `main` → build 3 images → GHCR `ghcr.io/unoc-kip/kip-{api,web,portal-app}` → SSH to EC2 → pull, migrate, up). GHCR owner hardcoded lowercase — Docker rejects the uppercase org name.
-- GitHub secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`. Variables: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_URL`. App secrets live only in `/opt/kip/.env.production` on the server (template: `deploy/.env.production.example`; values are read literally — no `${VAR}` interpolation).
+- GitHub secrets: `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`. Variables: `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_PORTAL_URL`, `NEXT_PUBLIC_GTM_ID` (optional — the portal Dockerfile already defaults to the live container). App secrets live only in `/opt/kip/.env.production` on the server (template: `deploy/.env.production.example`; values are read literally — no `${VAR}` interpolation).
 - `DATABASE_URL` on the server must keep `?sslmode=disable` — `packages/db/src/ssl.ts` treats the compose hostname `postgres` as hosted Postgres and enables TLS, which the plain container doesn't support.
-- `apps/portal/src/app/page.tsx` AND `apps/portal/src/app/about/page.tsx` must keep `export const dynamic = "force-dynamic"` — CI Docker builds have no DB; static generation would bake "no open window" into the home page.
+- `apps/portal/src/app/(public)/page.tsx` AND `apps/portal/src/app/(public)/about/page.tsx` must keep `export const dynamic = "force-dynamic"` — CI Docker builds have no DB; static generation would bake "no open window" into the home page.
 
 ---
 

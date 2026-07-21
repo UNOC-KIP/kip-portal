@@ -10,7 +10,10 @@ RUN corepack enable && corepack prepare pnpm@9.0.0 --activate
 # the real prod origin instead of silently falling back to localhost. A build-arg
 # with a non-empty value still overrides it.
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_GTM_ID
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://api.kip.unoc.com}
+# Google Tag Manager container (public id, not a secret). Empty = GTM disabled.
+ENV NEXT_PUBLIC_GTM_ID=${NEXT_PUBLIC_GTM_ID:-GTM-T23BP8QS}
 
 # Copy workspace manifests
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./

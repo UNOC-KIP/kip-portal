@@ -40,6 +40,24 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
     render: (row) => <span className="text-ink-500">{String(row.sector)}</span>,
   },
   {
+    key: "zone",
+    header: "Zone of Interest",
+    render: (row) =>
+      row.zoneKey ? (
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`h-2 w-2 shrink-0 rounded-full ${String(row.zoneColor)}`} />
+            <span className="truncate text-ink-700">{String(row.zone)}</span>
+          </div>
+          <div className="truncate text-[11px] text-ink-400">
+            {String(row.landUse)} · {String(row.acres)}
+          </div>
+        </div>
+      ) : (
+        <span className="text-ink-300">Not specified</span>
+      ),
+  },
+  {
     key: "accountStatus",
     header: "Account",
     render: (row) => (
@@ -85,9 +103,11 @@ export function InvestorReportTable({ data }: { data: InvestorReportRow[] }) {
       data={data as unknown as Record<string, unknown>[]}
       rowKey="id"
       pageSize={12}
-      searchPlaceholder="Search company, email, country…"
-      searchKeys={["company", "email", "country", "sector", "reference"] as never[]}
-      emptyState="No investors have registered yet."
+      searchPlaceholder="Search company, email, country, zone…"
+      searchKeys={
+        ["company", "email", "country", "sector", "reference", "zone", "landUse"] as never[]
+      }
+      emptyState="No investors match the current filters."
     />
   );
 }

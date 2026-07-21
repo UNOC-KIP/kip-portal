@@ -20,6 +20,7 @@ import type { SiteVisitRow } from "@/lib/admin/mappers";
 import { SiteVisitDetailModal } from "./site-visit-detail-modal";
 import { ReportExportActions } from "@/components/report/export-actions";
 import { buildSiteVisitsSummary, SITE_VISIT_EXPORT_COLUMNS } from "@/lib/report-export";
+import { formatDateTime } from "@/lib/format";
 
 const STATUS_VARIANT: Record<string, StatusVariant> = {
   NEW:       "status-pending",
@@ -66,7 +67,7 @@ export function SiteVisitsClient({ view }: { view: SiteVisitsView }) {
           action={
             <ReportExportActions
               filenamePrefix="kip-site-visits"
-              summary={buildSiteVisitsSummary(view.bookings, new Date().toLocaleString())}
+              summary={() => buildSiteVisitsSummary(view.bookings, formatDateTime(new Date()))}
               csv={{
                 columns: SITE_VISIT_EXPORT_COLUMNS,
                 rows: view.bookings as unknown as Record<string, unknown>[],
