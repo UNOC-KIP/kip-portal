@@ -55,7 +55,7 @@ import {
   type Granularity,
   type InvestorFilters,
 } from "@/lib/report-filters";
-import type { ReportData } from "@/lib/admin/mappers";
+import { INVESTOR_SITE_VISIT_STATUSES, type ReportData } from "@/lib/admin/mappers";
 
 const GRANULARITIES: Granularity[] = ["day", "week", "month"];
 
@@ -140,6 +140,13 @@ export function InvestorsReportClient({ report }: { report: ReportData }) {
   const bySector = useMemo(() => countBy(rows, "sector").slice(0, 8), [rows]);
   const byCompanyType = useMemo(() => countBy(rows, "companyType").slice(0, 8), [rows]);
 
+  // Site-visit engagement ignores its own filter, for the same reason the zone
+  // cards do: selecting "Scheduled" shouldn't hide how many never booked.
+  const bySiteVisit = useMemo(
+    () => countBy(filterInvestors(all, { ...filters, siteVisit: "" }), "siteVisitStatus"),
+    [all, filters],
+  );
+
   const filterCount = activeFilterCount(filters);
   const filterDescription = describeInvestorFilters(filters);
 
@@ -153,6 +160,7 @@ export function InvestorsReportClient({ report }: { report: ReportData }) {
     trend,
     trendStats,
     zones: zoneRows,
+    bySiteVisit,
     byCountry,
     bySector,
   });
@@ -260,7 +268,15 @@ export function InvestorsReportClient({ report }: { report: ReportData }) {
         </div>
 
         {/* Attribute filters */}
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <FilterSelect
+            label="Site visit"
+            value={filters.siteVisit}
+            // Fixed list, not `optionsFor` — the pipeline order is meaningful,
+            // and a status nobody is in yet must still be selectable.
+            options={INVESTOR_SITE_VISIT_STATUSES}
+            onChange={(v) => set({ siteVisit: v })}
+          />
           <FilterSelect
             label="Account"
             value={filters.account}
@@ -466,6 +482,14 @@ export function InvestorsReportClient({ report }: { report: ReportData }) {
           <BarList rows={byCompanyType} accent="bg-teal-500" empty="No investors match the current filters." />
         </Panel>
       </div>
+
+      <Panel title="Site Visit Engagement" dot="bg-amber-500">
+        <BarList
+          rows={bySiteVisit}
+          accent="bg-amber-500"
+          empty="No investors match the current filters."
+        />
+      </Panel>
 
       {/* ── Investor detail table ──────────────────────────────────────── */}
       <div className="rounded-xl border border-ink-300 bg-white shadow-sm print:break-inside-avoid">

@@ -27,6 +27,8 @@ export function investorRow(over: Partial<InvestorReportRow> = {}): InvestorRepo
     acres: "50 acres",
     acresRaw: 50,
     siteVisits: 1,
+    siteVisitStatus: "Requested",
+    siteVisitOn: "2026-01-04",
     rawAppStatus: "SHORTLISTED",
     registeredOn: "2026-01-01",
     ...over,

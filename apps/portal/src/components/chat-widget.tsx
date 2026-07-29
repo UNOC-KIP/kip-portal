@@ -88,7 +88,7 @@ export function ChatWidget() {
             </span>
             <div className="leading-tight">
               <p className="text-[14px] font-bold">KIP Investor Support</p>
-              <p className="text-[11px] text-white/55">Typically replies within 1–2 business days</p>
+              {/* <p className="text-[11px] text-white/55">Typically replies within 1–2 business days</p> */}
             </div>
           </div>
 

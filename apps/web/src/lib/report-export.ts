@@ -28,6 +28,7 @@ export function buildInvestorReportSummary(data: {
   trend: { label: string; count: number }[];
   trendStats: { total: number; peak: { label: string; count: number } | null; avgPerBucket: number };
   zones: { label: string; count: number; acres: number; pct: number }[];
+  bySiteVisit: { label: string; count: number }[];
   byCountry: { label: string; count: number }[];
   bySector: { label: string; count: number }[];
 }): string {
@@ -64,6 +65,7 @@ export function buildInvestorReportSummary(data: {
       lines.push(`  - ${z.label}: ${z.count} investor${z.count === 1 ? "" : "s"} (${z.pct}%) · ${z.acres} acres`);
     }
   }
+  lines.push(...section("Site visit engagement", data.bySiteVisit));
   lines.push(...section("Top countries", data.byCountry.slice(0, 5)));
   lines.push(...section("By sector", data.bySector.slice(0, 5)));
   return lines.join("\n");
@@ -108,10 +110,12 @@ export const INVESTOR_EXPORT_COLUMNS: { header: string; key: string }[] = [
   { header: "Country", key: "country" },
   { header: "Sector", key: "sector" },
   { header: "Company Type", key: "companyType" },
+  { header: "Site Visit Status", key: "siteVisitStatus" },
+  { header: "Site Visit Requests", key: "siteVisits" },
+  { header: "Site Visit Requested On", key: "siteVisitOn" },
   { header: "Zone of Interest", key: "zone" },
   { header: "Land Use", key: "landUse" },
   { header: "Acres Requested", key: "acresRaw" },
-  { header: "Site Visit Requests", key: "siteVisits" },
   { header: "Account", key: "accountStatus" },
   { header: "Payment", key: "paymentStatus" },
   { header: "EOI Stage", key: "eoiStage" },

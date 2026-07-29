@@ -535,6 +535,42 @@ export function isShortlistedOrBeyond(status: string | null | undefined): boolea
 /** Label used wherever an investor has expressed no zone interest yet. */
 export const NO_ZONE_LABEL = "Not specified";
 
+/** Site-visit engagement of an investor, derived from their bookings. */
+export type InvestorSiteVisitStatus =
+  | "Not booked"
+  | "Requested"
+  | "Scheduled"
+  | "Completed"
+  | "Cancelled";
+
+/** Every value the site-visit column can take, in pipeline order — drives the filter. */
+export const INVESTOR_SITE_VISIT_STATUSES: InvestorSiteVisitStatus[] = [
+  "Not booked",
+  "Requested",
+  "Scheduled",
+  "Completed",
+  "Cancelled",
+];
+
+/**
+ * How far an investor got with a site visit, across *all* their bookings.
+ *
+ * Reports the furthest-along booking rather than the newest: an investor who
+ * completed a visit and later filed a fresh request has still visited the site,
+ * and that is the fact the secretariat is tracking. Cancelled ranks lowest, so
+ * "Cancelled" only shows when every booking was cancelled.
+ */
+export function investorSiteVisitStatus(
+  bookings: { status: string }[],
+): InvestorSiteVisitStatus {
+  if (bookings.length === 0) return "Not booked";
+  const has = (s: string) => bookings.some((b) => b.status === s);
+  if (has("COMPLETED")) return "Completed";
+  if (has("SCHEDULED")) return "Scheduled";
+  if (has("NEW")) return "Requested";
+  return "Cancelled";
+}
+
 /** One row in the detailed investor-onboarding table + CSV export. */
 export type InvestorReportRow = {
   id: string;
@@ -564,6 +600,10 @@ export type InvestorReportRow = {
   acres: string;
   acresRaw: number;
   siteVisits: number;
+  /** Furthest-along booking state — "Not booked" when they never requested one. */
+  siteVisitStatus: InvestorSiteVisitStatus;
+  /** Date of the most recent booking (`YYYY-MM-DD`), "" when never booked. */
+  siteVisitOn: string;
   /** Raw application status ("" = no application) — drives the client funnel. */
   rawAppStatus: string;
   /** `YYYY-MM-DD` (UTC) — sortable key for date-range filters + trend buckets. */
@@ -582,7 +622,8 @@ export function toInvestorReportRow(u: {
   reference: string | null;
   appStatus: string | null;
   payments: { status: string }[];
-  bookings?: { zone: string; landUse: string; acres: number }[];
+  /** Newest first — `bookings[0]` is the investor's latest stated interest. */
+  bookings?: { zone: string; landUse: string; acres: number; status: string; createdAt: Date | string }[];
   createdAt: Date | string;
 }): InvestorReportRow {
   const bookings = u.bookings ?? [];
@@ -612,6 +653,8 @@ export function toInvestorReportRow(u: {
     acres: acresRaw > 0 ? `${acresRaw} acre${acresRaw === 1 ? "" : "s"}` : DASH,
     acresRaw,
     siteVisits: bookings.length,
+    siteVisitStatus: investorSiteVisitStatus(bookings),
+    siteVisitOn: primary ? isoDate(primary.createdAt) : "",
     rawAppStatus: u.appStatus ?? "",
     registeredOn: isoDate(u.createdAt),
   };

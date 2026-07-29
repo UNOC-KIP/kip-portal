@@ -818,7 +818,7 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
           {
             model: SiteVisitBooking,
             as: "siteVisitBookings",
-            attributes: ["zone", "landUse", "acres", "createdAt"],
+            attributes: ["zone", "landUse", "acres", "status", "createdAt"],
             required: false,
           },
         ],
@@ -872,6 +872,8 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
       zone: b.zone,
       landUse: b.landUse,
       acres: b.acres,
+      status: b.status,
+      createdAt: b.createdAt,
     }));
     // Primary application: the one that reached a reference, else the newest.
     const primary = apps.find((a) => a.reference) ?? apps[0] ?? null;

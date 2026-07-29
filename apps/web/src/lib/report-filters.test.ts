@@ -27,7 +27,12 @@ import {
   type SiteVisitFilters,
 } from "./report-filters";
 import { investorRow, siteVisitRow } from "./test-fixtures";
-import type { InvestorReportRow, SiteVisitRow } from "./admin/mappers";
+import {
+  INVESTOR_SITE_VISIT_STATUSES,
+  investorSiteVisitStatus,
+  type InvestorReportRow,
+  type SiteVisitRow,
+} from "./admin/mappers";
 
 const f = (over: Partial<InvestorFilters> = {}): InvestorFilters => ({ ...EMPTY_INVESTOR_FILTERS, ...over });
 const sv = (over: Partial<SiteVisitFilters> = {}): SiteVisitFilters => ({
@@ -104,6 +109,46 @@ describe("filterInvestors", () => {
   it("excludes rows with no registration date once a range is set", () => {
     const rows = filterInvestors([investorRow({ registeredOn: "" })], f({ from: "2026-01-01" }));
     expect(rows).toHaveLength(0);
+  });
+
+  it("filters by site-visit status, including those who never booked", () => {
+    const rows = [
+      investorRow({ id: "a", siteVisitStatus: "Requested" }),
+      investorRow({ id: "b", siteVisitStatus: "Completed" }),
+      investorRow({ id: "c", siteVisitStatus: "Not booked", siteVisits: 0 }),
+    ];
+    expect(filterInvestors(rows, f({ siteVisit: "Completed" })).map((r) => r.id)).toEqual(["b"]);
+    expect(filterInvestors(rows, f({ siteVisit: "Not booked" })).map((r) => r.id)).toEqual(["c"]);
+  });
+});
+
+describe("investorSiteVisitStatus", () => {
+  it("says Not booked when there are no bookings", () => {
+    expect(investorSiteVisitStatus([])).toBe("Not booked");
+  });
+
+  it("reports the furthest-along booking, not the newest", () => {
+    // A completed visit followed by a fresh request still means they visited.
+    expect(investorSiteVisitStatus([{ status: "NEW" }, { status: "COMPLETED" }])).toBe("Completed");
+    expect(investorSiteVisitStatus([{ status: "NEW" }, { status: "SCHEDULED" }])).toBe("Scheduled");
+  });
+
+  it("ranks a scheduled visit below a completed one", () => {
+    expect(investorSiteVisitStatus([{ status: "SCHEDULED" }, { status: "COMPLETED" }])).toBe(
+      "Completed",
+    );
+  });
+
+  it("only says Cancelled when every booking was cancelled", () => {
+    expect(investorSiteVisitStatus([{ status: "CANCELLED" }])).toBe("Cancelled");
+    expect(investorSiteVisitStatus([{ status: "CANCELLED" }, { status: "NEW" }])).toBe("Requested");
+  });
+
+  it("covers every status the filter offers", () => {
+    expect(INVESTOR_SITE_VISIT_STATUSES).toContain(investorSiteVisitStatus([]));
+    for (const s of ["NEW", "SCHEDULED", "COMPLETED", "CANCELLED"]) {
+      expect(INVESTOR_SITE_VISIT_STATUSES).toContain(investorSiteVisitStatus([{ status: s }]));
+    }
   });
 });
 
