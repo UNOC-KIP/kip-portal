@@ -16,6 +16,17 @@ function paymentVariant(status: string): StatusVariant {
   return "payment-pending";
 }
 
+/** Mirrors the site-visit tracker's badge colours so the two pages agree. */
+function siteVisitVariant(status: string): StatusVariant {
+  switch (status) {
+    case "Completed": return "status-active";
+    case "Scheduled": return "eoi-submitted";
+    case "Requested": return "status-pending";
+    case "Cancelled": return "status-rejected";
+    default:          return "eoi-draft"; // Not booked
+  }
+}
+
 const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
   {
     key: "company",
@@ -38,6 +49,15 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
     header: "Sector",
     hideBelow: "lg",
     render: (row) => <span className="text-ink-500">{String(row.sector)}</span>,
+  },
+  {
+    key: "siteVisitStatus",
+    header: "Site Visit",
+    render: (row) => (
+      <StatusBadge variant={siteVisitVariant(String(row.siteVisitStatus))}>
+        {String(row.siteVisitStatus)}
+      </StatusBadge>
+    ),
   },
   {
     key: "zone",
@@ -105,7 +125,16 @@ export function InvestorReportTable({ data }: { data: InvestorReportRow[] }) {
       pageSize={12}
       searchPlaceholder="Search company, email, country, zone…"
       searchKeys={
-        ["company", "email", "country", "sector", "reference", "zone", "landUse"] as never[]
+        [
+          "company",
+          "email",
+          "country",
+          "sector",
+          "reference",
+          "zone",
+          "landUse",
+          "siteVisitStatus",
+        ] as never[]
       }
       emptyState="No investors match the current filters."
     />

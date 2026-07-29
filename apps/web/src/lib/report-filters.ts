@@ -377,6 +377,8 @@ export type InvestorFilters = {
   stage: string;   // applicationStageLabel(...) value
   country: string;
   sector: string;
+  /** An `InvestorSiteVisitStatus` — including "Not booked". */
+  siteVisit: string;
   /** Inclusive `YYYY-MM-DD` bounds on the registration date. */
   from: string;
   to: string;
@@ -389,6 +391,7 @@ export const EMPTY_INVESTOR_FILTERS: InvestorFilters = {
   stage: "",
   country: "",
   sector: "",
+  siteVisit: "",
   from: "",
   to: "",
 };
@@ -408,6 +411,7 @@ export function filterInvestors(
     if (f.stage && r.eoiStage !== f.stage) return false;
     if (f.country && r.country !== f.country) return false;
     if (f.sector && r.sector !== f.sector) return false;
+    if (f.siteVisit && r.siteVisitStatus !== f.siteVisit) return false;
 
     return inRange(r.registeredOn, f.from, f.to);
   });
@@ -483,6 +487,7 @@ export function describeInvestorFilters(f: InvestorFilters): string {
     f.stage && `EOI stage: ${f.stage}`,
     f.country && `Country: ${f.country}`,
     f.sector && `Sector: ${f.sector}`,
+    f.siteVisit && `Site visit: ${f.siteVisit}`,
     describeRange("Registered", f.from, f.to),
   ]);
 }

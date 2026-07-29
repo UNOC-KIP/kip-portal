@@ -46,6 +46,24 @@ describe("buildCsv", () => {
     expect(header).toContain("Registered (ISO)");
   });
 
+  it("carries the site-visit status columns and their values", () => {
+    const lines = buildCsv(INVESTOR_EXPORT_COLUMNS, rows()).split("\r\n");
+    expect(lines[0]).toContain("Site Visit Status");
+    expect(lines[0]).toContain("Site Visit Requests");
+    expect(lines[0]).toContain("Site Visit Requested On");
+    expect(lines[1]).toContain("Requested");
+    expect(lines[1]).toContain("2026-01-04");
+  });
+
+  it("exports an investor who never booked without blowing a hole in the row", () => {
+    const line = buildCsv(INVESTOR_EXPORT_COLUMNS, [
+      investorRow({ siteVisitStatus: "Not booked", siteVisits: 0, siteVisitOn: "" }),
+    ] as unknown as Record<string, unknown>[]).split("\r\n")[1];
+    expect(line).toContain("Not booked");
+    // Trailing empty cell for the never-set date, not a dropped column.
+    expect(line?.split(",").length).toBe(INVESTOR_EXPORT_COLUMNS.length);
+  });
+
   it("escapes a company name containing a comma so columns stay aligned", () => {
     const csv = buildCsv(INVESTOR_EXPORT_COLUMNS, [
       investorRow({ company: "Sabastar General Trading, Co." }),
@@ -73,6 +91,10 @@ describe("buildInvestorReportSummary", () => {
       ],
       trendStats: { total: 2, peak: { label: "Week of 5 Jan 2026", count: 2 }, avgPerBucket: 2 },
       zones: [{ label: "Heavy Industrial Zone", count: 2, acres: 100, pct: 100 }],
+      bySiteVisit: [
+        { label: "Requested", count: 2 },
+        { label: "Not booked", count: 1 },
+      ],
       byCountry: [{ label: "UAE", count: 2 }],
       bySector: [{ label: "Petrochemicals & Refining", count: 2 }],
       ...over,
@@ -96,6 +118,13 @@ describe("buildInvestorReportSummary", () => {
 
   it("reports zone counts with share and acreage", () => {
     expect(summary()).toContain("- Heavy Industrial Zone: 2 investors (100%) · 100 acres");
+  });
+
+  it("breaks down site-visit engagement", () => {
+    const text = summary();
+    expect(text).toContain("Site visit engagement:");
+    expect(text).toContain("- Requested: 2");
+    expect(text).toContain("- Not booked: 1");
   });
 
   it("omits the window line when there is no open window", () => {
