@@ -20,6 +20,8 @@ import { Inquiry } from './models/inquiry'
 import { NotifySignup } from './models/notify-signup'
 import { SiteVisitBooking } from './models/site-visit-booking'
 import { TimelineMilestone } from './models/timeline-milestone'
+import { Communication } from './models/communication'
+import { CommunicationTemplate } from './models/communication-template'
 
 const globalForDb = globalThis as unknown as { sequelize: Sequelize | undefined }
 
@@ -66,6 +68,8 @@ Inquiry.initModel(sequelize)
 NotifySignup.initModel(sequelize)
 SiteVisitBooking.initModel(sequelize)
 TimelineMilestone.initModel(sequelize)
+CommunicationTemplate.initModel(sequelize)
+Communication.initModel(sequelize)
 
 // ─── Associations ────────────────────────────────────────────────────────────
 
@@ -116,6 +120,15 @@ SiteVisitBooking.belongsTo(User, { foreignKey: 'userId', as: 'user' })
 SiteVisitBooking.belongsTo(User, { foreignKey: 'handledById', as: 'handledBy' })
 SiteVisitBooking.belongsTo(InvestorOrg, { foreignKey: 'investorOrgId', as: 'investorOrg' })
 
+Communication.hasMany(Notification, { foreignKey: 'communicationId', as: 'deliveries' })
+Notification.belongsTo(Communication, { foreignKey: 'communicationId', as: 'communication' })
+
+Communication.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' })
+Communication.belongsTo(CommunicationTemplate, { foreignKey: 'templateId', as: 'template' })
+
+User.hasMany(CommunicationTemplate, { foreignKey: 'createdById', as: 'communicationTemplates' })
+CommunicationTemplate.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' })
+
 User.hasMany(Account, { foreignKey: 'userId', as: 'accounts' })
 Account.belongsTo(User, { foreignKey: 'userId', as: 'user' })
 
@@ -142,4 +155,6 @@ export {
   NotifySignup,
   SiteVisitBooking,
   TimelineMilestone,
+  Communication,
+  CommunicationTemplate,
 }

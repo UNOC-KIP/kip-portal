@@ -23,6 +23,15 @@ import {
   TimelineMilestoneStatus,
   KIP_ZONES,
   SITE_VISIT_STATUS_LABELS,
+  COMMUNICATION_AUDIENCE_LABELS,
+  COMMUNICATION_CHANNEL_LABELS,
+  COMMUNICATION_STATUS_LABELS,
+  DELIVERY_STATUS_LABELS,
+  CommunicationStatus,
+  DeliveryStatus,
+  bodyExcerpt,
+  type CommunicationAudience,
+  type CommunicationChannel,
   type CompanyType,
   type BusinessSector,
   type InquiryChannel,
@@ -1060,5 +1069,158 @@ export function toTimelineMilestoneRow(
     status: m.status,
     statusLabel: TIMELINE_STATUS_LABELS[m.status as TimelineMilestoneStatus] ?? m.status,
     effectiveStatus,
+  };
+}
+
+// ─── Communications ──────────────────────────────────────────────────────────
+
+/**
+ * The `StatusVariant` values (see `components/status-badge.tsx`) used by
+ * broadcasts. Inlined rather than imported so this module stays free of any
+ * component import — same approach as `WindowRow.statusVariant`.
+ */
+type CommunicationVariant =
+  | "comm-sent"
+  | "comm-sending"
+  | "comm-partial"
+  | "comm-failed"
+  | "comm-draft";
+
+/** One row in the broadcast history table. */
+export type CommunicationRow = {
+  id: string;
+  subject: string;
+  /** First line or so of the authored body — enough to recognise the message. */
+  excerpt: string;
+  audience: string;
+  audienceSummary: string;
+  channel: string;
+  status: string;
+  rawStatus: string;
+  statusVariant: CommunicationVariant;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  sentBy: string;
+  sentAt: string;
+  /** `YYYY-MM-DD` (UTC) — sortable key for the "sent this month" stat. */
+  sentOn: string;
+  createdAt: string;
+};
+
+function communicationVariant(status: string): CommunicationVariant {
+  switch (status) {
+    case CommunicationStatus.SENT:           return "comm-sent";
+    case CommunicationStatus.SENDING:        return "comm-sending";
+    case CommunicationStatus.PARTIALLY_SENT: return "comm-partial";
+    case CommunicationStatus.FAILED:         return "comm-failed";
+    default:                                 return "comm-draft";
+  }
+}
+
+export function toCommunicationRow(c: {
+  id: string;
+  subject: string;
+  body: string;
+  audience: string;
+  audienceSummary: string | null;
+  channel: string;
+  rawStatus: string;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  sentByName: string | null;
+  sentAt: Date | string | null;
+  createdAt: Date | string;
+}): CommunicationRow {
+  return {
+    id: c.id,
+    subject: c.subject,
+    excerpt: bodyExcerpt(c.body, 120),
+    audience: COMMUNICATION_AUDIENCE_LABELS[c.audience as CommunicationAudience] ?? c.audience,
+    audienceSummary: c.audienceSummary ?? DASH,
+    channel: COMMUNICATION_CHANNEL_LABELS[c.channel as CommunicationChannel] ?? c.channel,
+    status: COMMUNICATION_STATUS_LABELS[c.rawStatus as CommunicationStatus] ?? c.rawStatus,
+    rawStatus: c.rawStatus,
+    statusVariant: communicationVariant(c.rawStatus),
+    recipientCount: c.recipientCount,
+    sentCount: c.sentCount,
+    failedCount: c.failedCount,
+    sentBy: c.sentByName ?? DASH,
+    sentAt: c.sentAt ? formatDateTime(c.sentAt) : DASH,
+    sentOn: isoDate(c.sentAt ?? c.createdAt),
+    createdAt: formatDateTime(c.createdAt),
+  };
+}
+
+/** One recipient's delivery outcome, shown on the broadcast detail page. */
+export type DeliveryRow = {
+  id: string;
+  recipient: string;
+  email: string;
+  status: string;
+  rawStatus: string;
+  statusVariant: CommunicationVariant;
+  /** SMTP failure reason — the whole point of the delivery log. */
+  error: string;
+  sentAt: string;
+  /** "Read" / "Unread" / "—" for email-only sends with no portal recipient. */
+  readState: string;
+  hasAccount: boolean;
+};
+
+export function toDeliveryRow(d: {
+  id: string;
+  recipientName: string | null;
+  email: string | null;
+  rawStatus: string;
+  error: string | null;
+  sentAt: Date | string | null;
+  readAt: Date | string | null;
+  userId: string | null;
+}): DeliveryRow {
+  return {
+    id: d.id,
+    recipient: d.recipientName ?? DASH,
+    email: d.email ?? DASH,
+    status: DELIVERY_STATUS_LABELS[d.rawStatus as DeliveryStatus] ?? d.rawStatus,
+    rawStatus: d.rawStatus,
+    statusVariant:
+      d.rawStatus === DeliveryStatus.SENT
+        ? "comm-sent"
+        : d.rawStatus === DeliveryStatus.FAILED
+          ? "comm-failed"
+          : "comm-sending",
+    error: d.error ?? DASH,
+    sentAt: d.sentAt ? formatDateTime(d.sentAt) : DASH,
+    readState: !d.userId ? DASH : d.readAt ? "Read" : "Unread",
+    hasAccount: Boolean(d.userId),
+  };
+}
+
+export type CommunicationTemplateRow = {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  description: string;
+  createdAt: string;
+};
+
+export function toCommunicationTemplateRow(t: {
+  id: string;
+  name: string;
+  subject: string;
+  body: string;
+  description: string | null;
+  createdAt: Date | string;
+}): CommunicationTemplateRow {
+  return {
+    id: t.id,
+    name: t.name,
+    subject: t.subject,
+    body: t.body,
+    description: t.description ?? DASH,
+    createdAt: formatShortDate(t.createdAt),
   };
 }

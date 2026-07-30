@@ -23,7 +23,12 @@ export type StatusVariant =
   | "plot-hold"
   | "tc-approved"
   | "tc-rejected"
-  | "tc-in-progress";
+  | "tc-in-progress"
+  | "comm-sent"
+  | "comm-sending"
+  | "comm-partial"
+  | "comm-failed"
+  | "comm-draft";
 
 const VARIANT_CLASSES: Record<StatusVariant, string> = {
   "payment-confirmed": "bg-green-100 text-green-700 border-green-200 hover:bg-green-100",
@@ -48,6 +53,11 @@ const VARIANT_CLASSES: Record<StatusVariant, string> = {
   "tc-approved":       "bg-green-100 text-green-700 border-green-200 hover:bg-green-100",
   "tc-rejected":       "bg-red-100 text-red-700 border-red-200 hover:bg-red-100",
   "tc-in-progress":    "bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-100",
+  "comm-sent":         "bg-green-100 text-green-700 border-green-200 hover:bg-green-100",
+  "comm-sending":      "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100",
+  "comm-partial":      "bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100",
+  "comm-failed":       "bg-red-100 text-red-700 border-red-200 hover:bg-red-100",
+  "comm-draft":        "bg-ink-100 text-ink-500 border-ink-300 hover:bg-ink-100",
 };
 
 interface StatusBadgeProps {

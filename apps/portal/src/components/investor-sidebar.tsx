@@ -7,6 +7,7 @@ import {
   FolderOpen,
   LayoutDashboard,
   LogOut,
+  Mail,
   Menu,
   Settings,
 } from "lucide-react";
@@ -28,6 +29,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const INVESTOR_NAV = [
   { icon: LayoutDashboard, href: "/dashboard",            label: "Overview" },
+  { icon: Mail,            href: "/dashboard/messages",   label: "Messages" },
   { icon: CalendarDays,    href: "/dashboard/site-visit", label: "Site Visit" },
   { icon: FolderOpen,      href: "/dashboard/documents",  label: "Documents" },
   { icon: Settings,        href: "/dashboard/settings",   label: "Settings" },
@@ -38,11 +40,14 @@ function NavLink({
   href,
   label,
   collapsed,
+  badge,
 }: {
   icon: React.ElementType;
   href: string;
   label: string;
   collapsed: boolean;
+  /** Unread count; rendered as a pill when > 0. */
+  badge?: number;
 }) {
   const pathname = usePathname();
   const isActive =
@@ -54,7 +59,7 @@ function NavLink({
     <Link
       href={href}
       className={cn(
-        "flex h-10 items-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white",
+        "relative flex h-10 items-center rounded-md text-white/60 transition-colors hover:bg-white/10 hover:text-white",
         isActive && "bg-white/10 text-white",
         collapsed ? "w-10 justify-center" : "w-full gap-3 px-3",
       )}
@@ -62,6 +67,16 @@ function NavLink({
       <Icon size={20} className="shrink-0" />
       {!collapsed && (
         <span className="truncate text-sm font-medium">{label}</span>
+      )}
+      {badge !== undefined && badge > 0 && (
+        <span
+          className={cn(
+            "flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-500 px-1 text-[10px] font-bold text-black",
+            collapsed ? "absolute right-1 top-1" : "ml-auto",
+          )}
+        >
+          {badge > 9 ? "9+" : badge}
+        </span>
       )}
     </Link>
   );
@@ -83,9 +98,11 @@ function NavLink({
 function SidebarNav({
   collapsed,
   onNavigate,
+  unreadCount = 0,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
+  unreadCount?: number;
 }) {
   const { data: session } = useSession();
   const displayName = session?.user?.name ?? "Investor";
@@ -101,7 +118,12 @@ function SidebarNav({
         onClick={onNavigate}
       >
         {INVESTOR_NAV.map((item) => (
-          <NavLink key={item.label} {...item} collapsed={collapsed} />
+          <NavLink
+            key={item.label}
+            {...item}
+            collapsed={collapsed}
+            badge={item.href === "/dashboard/messages" ? unreadCount : undefined}
+          />
         ))}
       </nav>
 
@@ -163,7 +185,8 @@ function SidebarNav({
   );
 }
 
-export function InvestorSidebar() {
+/** `unreadCount` is read server-side in the layout — the sidebar cannot query the DB. */
+export function InvestorSidebar({ unreadCount = 0 }: { unreadCount?: number }) {
   const { isCollapsed, toggle } = useSidebar();
 
   return (
@@ -201,7 +224,7 @@ export function InvestorSidebar() {
           </button>
         </div>
 
-        <SidebarNav collapsed={isCollapsed} />
+        <SidebarNav collapsed={isCollapsed} unreadCount={unreadCount} />
       </aside>
 
       {/* ── Mobile sidebar (Sheet overlay) ───────────── */}
@@ -215,7 +238,7 @@ export function InvestorSidebar() {
           </button>
         </SheetTrigger>
         <SheetContent side="left" className="w-56 border-0 bg-black p-0">
-          <SidebarNav collapsed={false} />
+          <SidebarNav collapsed={false} unreadCount={unreadCount} />
         </SheetContent>
       </Sheet>
     </TooltipProvider>

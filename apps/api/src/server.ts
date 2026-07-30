@@ -15,6 +15,7 @@ import { windowsRouter } from "./modules/windows/windows.router.js";
 import { inquiriesRouter } from "./modules/inquiries/inquiries.router.js";
 import { siteVisitsRouter } from "./modules/site-visits/site-visits.router.js";
 import { timelineRouter } from "./modules/timeline/timeline.router.js";
+import { communicationsRouter } from "./modules/communications/communications.router.js";
 
 export function createServer(): Application {
   const app = express();
@@ -40,6 +41,7 @@ export function createServer(): Application {
   app.use("/inquiries", inquiriesRouter);
   app.use("/timeline", timelineRouter);
   app.use("/site-visits", siteVisitsRouter);
+  app.use("/communications", communicationsRouter);
 
   app.use(errorHandler);
 

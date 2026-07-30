@@ -4,7 +4,12 @@
  * rows the same way — a field added to `InvestorReportRow` then only has to be
  * defaulted once.
  */
-import type { InvestorReportRow, SiteVisitRow } from "./admin/mappers";
+import type {
+  InvestorReportRow,
+  NotifySignupRow,
+  SiteVisitRow,
+  StaffRow,
+} from "./admin/mappers";
 
 export function investorRow(over: Partial<InvestorReportRow> = {}): InvestorReportRow {
   return {
@@ -58,6 +63,26 @@ export function siteVisitRow(over: Partial<SiteVisitRow> = {}): SiteVisitRow {
     daysToSchedule: null,
     country: "UAE",
     sector: "Petrochemicals & Refining",
+    ...over,
+  };
+}
+
+export function staffRow(over: Partial<StaffRow> = {}): StaffRow {
+  return {
+    id: "s1",
+    name: "James Mukasa",
+    email: "tc.chair@kip.unoc.co.ug",
+    role: "TC Chair",
+    createdAt: "1 Jan 2026",
+    ...over,
+  };
+}
+
+export function notifySignupRow(over: Partial<NotifySignupRow> = {}): NotifySignupRow {
+  return {
+    id: "n1",
+    email: "watcher@example.com",
+    signedUpAt: "3 Jan 2026 · 10:00 UTC",
     ...over,
   };
 }

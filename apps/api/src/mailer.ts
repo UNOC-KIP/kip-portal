@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { env } from "./env.js";
 import { logger } from "./logger.js";
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -500,4 +500,70 @@ export function passwordResetEmail(opts: {
   </table>
 </body>
 </html>`;
+}
+
+// ─── Broadcasts ──────────────────────────────────────────────────────────────
+
+/**
+ * The standard card chrome, mirroring `shell()` in `apps/portal/src/lib/mailer.ts`.
+ * The templates above predate this helper and still inline their own copy —
+ * they are left alone deliberately rather than reflowed for cosmetics.
+ */
+function shell(bodyHtml: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e4e4e7">
+
+        <tr>
+          <td style="background:#000;padding:28px 36px">
+            <p style="margin:0;color:#fff;font-size:18px;font-weight:700;letter-spacing:-0.3px">
+              UNOC / KIP Investor Portal
+            </p>
+          </td>
+        </tr>
+
+        <tr><td style="padding:36px">${bodyHtml}</td></tr>
+
+        <tr>
+          <td style="background:#f4f4f5;padding:18px 36px;border-top:1px solid #e4e4e7">
+            <p style="margin:0;font-size:11px;color:#a1a1aa">
+              Uganda National Oil Company (UNOC) · Kabalega Industrial Park Secretariat ·
+              This is an automated message — please do not reply directly.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+/**
+ * An admin-composed broadcast. `bodyHtml` must already have come through
+ * `renderBodyHtml()` from `@kip/shared` — that function is what escapes the
+ * authored text, so nothing here may interpolate the raw body.
+ */
+export function announcementEmail(opts: {
+  subject: string;
+  bodyHtml: string;
+  portalUrl: string;
+}): string {
+  return shell(`
+    <p style="margin:0 0 20px;color:#09090b;font-size:16px;font-weight:600">
+      ${escapeHtml(opts.subject)}
+    </p>
+    ${opts.bodyHtml}
+    <p style="margin:28px 0 0;padding-top:20px;border-top:1px solid #e4e4e7">
+      <a href="${escapeHtml(opts.portalUrl)}/dashboard/messages"
+         style="display:inline-block;background:#000;color:#fff;font-size:14px;font-weight:600;padding:11px 24px;border-radius:8px;text-decoration:none">
+        View in portal
+      </a>
+    </p>
+  `);
 }

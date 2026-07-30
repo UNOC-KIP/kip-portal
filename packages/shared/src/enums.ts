@@ -191,6 +191,74 @@ export const SITE_VISIT_STATUS_LABELS: Record<SiteVisitStatus, string> = {
   CANCELLED: "Cancelled",
 };
 
+/**
+ * Lifecycle of an admin-composed broadcast. `SENDING` is the state while the
+ * paced nodemailer loop is draining; the terminal state depends on how many
+ * deliveries failed — all good is `SENT`, none good is `FAILED`.
+ */
+export const CommunicationStatus = {
+  DRAFT:          "DRAFT",
+  SENDING:        "SENDING",
+  SENT:           "SENT",
+  PARTIALLY_SENT: "PARTIALLY_SENT",
+  FAILED:         "FAILED",
+} as const;
+export type CommunicationStatus = (typeof CommunicationStatus)[keyof typeof CommunicationStatus];
+
+export const COMMUNICATION_STATUS_LABELS: Record<CommunicationStatus, string> = {
+  DRAFT:          "Draft",
+  SENDING:        "Sending",
+  SENT:           "Sent",
+  PARTIALLY_SENT: "Partially Sent",
+  FAILED:         "Failed",
+};
+
+/** How the recipient list for a broadcast was chosen. */
+export const CommunicationAudience = {
+  ALL_INVESTORS:    "ALL_INVESTORS",
+  INVESTOR_SEGMENT: "INVESTOR_SEGMENT",
+  STAFF:            "STAFF",
+  NOTIFY_LIST:      "NOTIFY_LIST",
+  CUSTOM:           "CUSTOM",
+} as const;
+export type CommunicationAudience = (typeof CommunicationAudience)[keyof typeof CommunicationAudience];
+
+export const COMMUNICATION_AUDIENCE_LABELS: Record<CommunicationAudience, string> = {
+  ALL_INVESTORS:    "All Investors",
+  INVESTOR_SEGMENT: "Investor Segment",
+  STAFF:            "Staff",
+  NOTIFY_LIST:      "Notify List",
+  CUSTOM:           "Hand-picked",
+};
+
+/** Where a broadcast lands. `IN_APP` skips SMTP entirely. */
+export const CommunicationChannel = {
+  EMAIL:           "EMAIL",
+  IN_APP:          "IN_APP",
+  EMAIL_AND_IN_APP: "EMAIL_AND_IN_APP",
+} as const;
+export type CommunicationChannel = (typeof CommunicationChannel)[keyof typeof CommunicationChannel];
+
+export const COMMUNICATION_CHANNEL_LABELS: Record<CommunicationChannel, string> = {
+  EMAIL:            "Email only",
+  IN_APP:           "Portal inbox only",
+  EMAIL_AND_IN_APP: "Email + portal inbox",
+};
+
+/** Per-recipient delivery state of one broadcast. */
+export const DeliveryStatus = {
+  PENDING: "PENDING",
+  SENT:    "SENT",
+  FAILED:  "FAILED",
+} as const;
+export type DeliveryStatus = (typeof DeliveryStatus)[keyof typeof DeliveryStatus];
+
+export const DELIVERY_STATUS_LABELS: Record<DeliveryStatus, string> = {
+  PENDING: "Pending",
+  SENT:    "Sent",
+  FAILED:  "Failed",
+};
+
 /** Application window lifecycle. */
 export const ApplicationWindowStatus = {
   DRAFT:    "DRAFT",
