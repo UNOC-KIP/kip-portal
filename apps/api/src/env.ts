@@ -34,6 +34,13 @@ const schema = z.object({
   EMAIL_FROM: z.string().default("KIP Portal <no-reply@kip.unoc.co.ug>"),
   PORTAL_PUBLIC_URL: z.string().url().default("http://localhost:4002"),
 
+  // Broadcast pacing. The shared Office 365 mailbox throttles at ~30 msg/min,
+  // so the communications sender waits this long between sends. Lower it in
+  // dev (MailHog has no limit) to make test runs finish quickly.
+  EMAIL_SEND_INTERVAL_MS: z.coerce.number().int().min(0).default(2200),
+  // Hard ceiling on one broadcast. Anything larger needs SES/n8n, not this mailbox.
+  COMMUNICATION_MAX_RECIPIENTS: z.coerce.number().int().positive().default(500),
+
   ANTHROPIC_API_KEY: z.string().optional(),
 
   EOI_APPLICATION_FEE_USD: z.coerce.number().int().positive().default(1000),

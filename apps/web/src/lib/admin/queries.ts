@@ -1338,3 +1338,222 @@ export async function listTimelineMilestones(
   const effectiveById = new Map<string, string>(items.map((i) => [i.id, i.status as string]));
   return data.map((m) => toTimelineMilestoneRow(m, activeId, effectiveById.get(m.id) ?? "UPCOMING"));
 }
+
+// ─── Communications ──────────────────────────────────────────────────────────
+
+import { Communication, CommunicationTemplate, Notification } from "@kip/db";
+import {
+  toCommunicationRow,
+  toCommunicationTemplateRow,
+  toDeliveryRow,
+  type CommunicationRow,
+  type CommunicationTemplateRow,
+  type DeliveryRow,
+} from "./mappers";
+
+/**
+ * Everyone an admin can broadcast to. The composer resolves the audience in the
+ * browser from this pool (see `lib/communication-audience.ts`), which is why the
+ * investor rows are the full `InvestorReportRow` shape — it already carries every
+ * segmentation axis the report filters know about.
+ */
+export type RecipientPool = {
+  investors: InvestorReportRow[];
+  staff: StaffRow[];
+  signups: NotifySignupRow[];
+};
+
+/**
+ * Investor rows in report shape, without the rest of the onboarding report's
+ * aggregation. Same query + mapper as `getReportData()`, so the recipient count
+ * for a given filter always matches what `/console/report/investors` shows.
+ */
+async function listInvestorReportRows(limit = 1000): Promise<InvestorReportRow[]> {
+  const users = await User.findAll({
+    where: { role: UserRole.INVESTOR },
+    attributes: ["id", "name", "email", "status", "createdAt"],
+    include: [
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType"],
+      },
+      {
+        model: Application,
+        as: "applications",
+        attributes: ["reference", "status", "createdAt"],
+        required: false,
+        include: [{ model: Payment, as: "payments", attributes: ["status"], required: false }],
+      },
+      {
+        model: SiteVisitBooking,
+        as: "siteVisitBookings",
+        attributes: ["zone", "landUse", "acres", "status", "createdAt"],
+        required: false,
+      },
+    ],
+    order: [
+      ["createdAt", "DESC"],
+      [{ model: SiteVisitBooking, as: "siteVisitBookings" }, "createdAt", "DESC"],
+    ],
+    limit,
+  });
+
+  return users.map((row) => {
+    const u = row as User & {
+      investorOrg?: InvestorOrg;
+      applications?: (Application & { payments?: Payment[] })[];
+      siteVisitBookings?: SiteVisitBooking[];
+    };
+    const org = u.investorOrg;
+    const apps = u.applications ?? [];
+    const primary = apps.find((a) => a.reference) ?? apps[0] ?? null;
+    return toInvestorReportRow({
+      id: u.id,
+      name: u.name ?? null,
+      email: u.email,
+      rawStatus: u.status as string,
+      orgName: org?.legalName ?? null,
+      country: org?.countryOfIncorporation ?? null,
+      businessSector: org?.businessSector ?? null,
+      companyType: org?.companyType ?? null,
+      reference: primary?.reference ?? null,
+      appStatus: primary?.status ?? null,
+      payments: (primary?.payments ?? []).map((p) => ({ status: p.status })),
+      bookings: (u.siteVisitBookings ?? []).map((b) => ({
+        zone: b.zone,
+        landUse: b.landUse,
+        acres: b.acres,
+        status: b.status,
+        createdAt: b.createdAt,
+      })),
+      createdAt: u.createdAt,
+    });
+  });
+}
+
+export type CommunicationsView = {
+  communications: CommunicationRow[];
+  templates: CommunicationTemplateRow[];
+  pool: RecipientPool;
+  stats: { sentThisMonth: number; recipientsReached: number; failed: number };
+};
+
+export async function getCommunicationsView(now: Date = new Date()): Promise<CommunicationsView> {
+  const [rows, templateRows, investors, staff, signupRows] = await Promise.all([
+    Communication.findAll({
+      include: [{ model: User, as: "createdBy", attributes: ["name", "email"], required: false }],
+      order: [["createdAt", "DESC"]],
+      limit: 200,
+    }),
+    CommunicationTemplate.findAll({ order: [["name", "ASC"]], limit: 100 }),
+    listInvestorReportRows(),
+    listStaffUsers({ limit: 200 }),
+    NotifySignup.findAll({
+      attributes: ["id", "email", "createdAt"],
+      order: [["createdAt", "DESC"]],
+      limit: 1000,
+    }),
+  ]);
+
+  const communications = rows.map((row) => {
+    const c = row as Communication & { createdBy?: User };
+    return toCommunicationRow({
+      id: c.id,
+      subject: c.subject,
+      body: c.body,
+      audience: c.audience,
+      audienceSummary: c.audienceSummary ?? null,
+      channel: c.channel,
+      rawStatus: c.status,
+      recipientCount: c.recipientCount,
+      sentCount: c.sentCount,
+      failedCount: c.failedCount,
+      sentByName: c.createdBy?.name ?? c.createdBy?.email ?? null,
+      sentAt: c.sentAt ?? null,
+      createdAt: c.createdAt,
+    });
+  });
+
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  return {
+    communications,
+    templates: templateRows.map((t) =>
+      toCommunicationTemplateRow({
+        id: t.id,
+        name: t.name,
+        subject: t.subject,
+        body: t.body,
+        description: t.description ?? null,
+        createdAt: t.createdAt,
+      }),
+    ),
+    pool: {
+      investors,
+      staff,
+      signups: signupRows.map((s) =>
+        toNotifySignupRow({ id: s.id, email: s.email, createdAt: s.createdAt }),
+      ),
+    },
+    stats: {
+      sentThisMonth: communications.filter((c) => c.sentOn.startsWith(monthKey)).length,
+      recipientsReached: communications.reduce((sum, c) => sum + c.sentCount, 0),
+      failed: communications.reduce((sum, c) => sum + c.failedCount, 0),
+    },
+  };
+}
+
+export type CommunicationDetail = {
+  communication: CommunicationRow;
+  /** Raw authored body — the detail page renders it with `renderBodyHtml()`. */
+  body: string;
+  deliveries: DeliveryRow[];
+};
+
+export async function getCommunicationDetail(id: string): Promise<CommunicationDetail | null> {
+  const row = await Communication.findByPk(id, {
+    include: [{ model: User, as: "createdBy", attributes: ["name", "email"], required: false }],
+  });
+  if (!row) return null;
+
+  const c = row as Communication & { createdBy?: User };
+  const deliveryRows = await Notification.findAll({
+    where: { communicationId: id },
+    attributes: ["id", "email", "subject", "status", "error", "sentAt", "readAt", "userId"],
+    include: [{ model: User, attributes: ["name"], required: false }],
+    order: [["createdAt", "ASC"]],
+    limit: 1000,
+  });
+
+  return {
+    communication: toCommunicationRow({
+      id: c.id,
+      subject: c.subject,
+      body: c.body,
+      audience: c.audience,
+      audienceSummary: c.audienceSummary ?? null,
+      channel: c.channel,
+      rawStatus: c.status,
+      recipientCount: c.recipientCount,
+      sentCount: c.sentCount,
+      failedCount: c.failedCount,
+      sentByName: c.createdBy?.name ?? c.createdBy?.email ?? null,
+      sentAt: c.sentAt ?? null,
+      createdAt: c.createdAt,
+    }),
+    body: c.body,
+    deliveries: deliveryRows.map((d) => {
+      const n = d as Notification & { User?: User };
+      return toDeliveryRow({
+        id: n.id,
+        recipientName: n.User?.name ?? null,
+        email: n.email ?? null,
+        rawStatus: n.status,
+        error: n.error ?? null,
+        sentAt: n.sentAt ?? null,
+        readAt: n.readAt ?? null,
+        userId: n.userId ?? null,
+      });
+    }),
+  };
+}

@@ -14,7 +14,8 @@ export type WebhookEvent =
   | "clarification-requested"
   | "window-closed"
   | "staff-invited"
-  | "site-visit-requested";
+  | "site-visit-requested"
+  | "communication-sent";
 
 /**
  * Fire an outbound n8n webhook. Non-blocking — errors are logged but never

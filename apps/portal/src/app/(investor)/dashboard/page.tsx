@@ -17,6 +17,7 @@ import {
   Activity,
   ArrowRight,
   ShieldAlert,
+  Mail,
 } from "lucide-react";
 import { KIP_ZONE_LABELS, type KipZone } from "@kip/shared";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
@@ -31,6 +32,7 @@ import {
   type ActivityItem,
 } from "@/lib/investor-data";
 import { getTimelineData } from "@/lib/timeline-data";
+import { getUnreadCount } from "@/lib/inbox-data";
 import Link from "next/link";
 
 // ─── Local formatters ─────────────────────────────────────────────────────────
@@ -165,9 +167,10 @@ export default async function InvestorDashboardPage() {
   if (!session) redirect("/sign-in");
 
   const userId = (session.user as { id: string }).id;
-  const [data, siteVisit] = await Promise.all([
+  const [data, siteVisit, unreadMessages] = await Promise.all([
     getInvestorDashboardData(userId),
     getSiteVisitBooking(userId),
+    getUnreadCount(userId),
   ]);
   const {
     orgName,
@@ -265,6 +268,25 @@ export default async function InvestorDashboardPage() {
             </p>
           )}
         </div>
+
+        {/* Unread secretariat announcements. */}
+        {unreadMessages > 0 && (
+          <Link
+            href="/dashboard/messages"
+            className="mb-4 flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 transition hover:bg-brand-100"
+          >
+            <Mail size={18} className="shrink-0 text-brand-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-ink-900">
+                You have {unreadMessages} unread message{unreadMessages === 1 ? "" : "s"}
+              </p>
+              <p className="text-xs text-ink-600">
+                New announcements from the KIP secretariat.
+              </p>
+            </div>
+            <ChevronRight size={16} className="shrink-0 text-brand-600" />
+          </Link>
+        )}
 
         {/* Nudge investors still on the auto-generated password. */}
         {mustChangePassword && (

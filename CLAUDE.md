@@ -1,5 +1,5 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 21 July 2026. Update this file in the same commit as any architectural change.
+> Last updated: 30 July 2026. Update this file in the same commit as any architectural change.
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
 ---
@@ -35,7 +35,7 @@ kip-portal/
 │           ├── env.ts, errors.ts, server.ts, webhooks.ts
 ├── packages/
 │   ├── db/           @kip/db — Sequelize 6, compiled to dist/ (run pnpm db:build after changes)
-│   │   ├── src/models/        15 model files
+│   │   ├── src/models/        19 model files
 │   │   ├── migrations/        umzug TypeScript migrations
 │   │   └── seed.ts            Raw pg seed, idempotent
 │   └── shared/       @kip/shared — enums.ts + zones.ts + timeline.ts (source of truth) + Zod schemas
@@ -114,6 +114,8 @@ Two layers per portal, each with its own policy file:
 | portal | Investor dashboard | `/dashboard/*` | `INVESTOR` |
 | portal | Site-visit booking | `/dashboard/site-visit` | `INVESTOR` |
 | portal | Account settings | `/dashboard/settings` | `INVESTOR` |
+| portal | Messages inbox | `/dashboard/messages` | `INVESTOR` |
+| web | Communications | `/console/communications` | `ADMIN` |
 | web | Admin console | `/console/*` (non-TC) | `ADMIN` |
 | web | TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
 | both | Post-login router | `/launch` | any authenticated |
@@ -208,7 +210,9 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Payment` | `amount DECIMAL(14,2)`, `currency`, gates DRAFT_PAYMENT_PENDING→DRAFT |
 | `ReviewAction` | append-only audit log |
 | `ClarificationRequest` | LAC REQUEST_MORE_INFO records |
-| `Notification` | in-app + email records |
+| `Notification` | **per-recipient delivery row for one `Communication`** — `userId` (nullable: notify-list recipients have no account), `communicationId`, `email`, `channel`, `subject`, `body` (stored already merge-rendered for *this* recipient, so inbox and email match word for word), `status (DeliveryStatus)`, `error` (SMTP failure reason), `sentAt`, `readAt`. Doubles as the investor Messages inbox when `userId` is set and the channel includes the portal. Was an unused table until 30 July 2026 |
+| `Communication` | one admin-composed broadcast — `subject`, `body` (raw markdown-lite), `channel (CommunicationChannel)`, `audience (CommunicationAudience)`, `audienceSummary` (human-readable, from `describeAudience()`), `filters JSONB` (the selection that produced the list), `status (CommunicationStatus)`, `recipientCount` / `sentCount` / `failedCount`, `templateId`, `createdById`, `sentAt`. Recipients are materialised as `Notification` rows at create time |
+| `CommunicationTemplate` | reusable subject + body for the composer — `name` (unique), `subject`, `body`, `description`, `createdById`. Bodies may carry `{{company}}`-style merge tokens |
 | `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
 | `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
 | `TimelineMilestone` | admin-managed application timeline — `position` (unique, orders the list), `kind` (`GENERIC \| SITE_VISIT_BOOKING \| SITE_VISIT \| EOI_CALL`), `title`, `dateLabel` (display text), `startsAt` (drives the active stage), `endsAt`, `status` (`AUTO \| UPCOMING \| CURRENT \| COMPLETED` — AUTO derives from dates, others are manual overrides); pure logic + fallback in `@kip/shared` timeline.ts. `SITE_VISIT_BOOKING` = the booking window (bookings open until its `endsAt`); `SITE_VISIT` = the visits themselves (display; also gates bookings as a legacy fallback when no booking milestone exists) |
@@ -230,7 +234,11 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `InquiryChannel`: `CONTACT_FORM | LIVE_CHAT`
 - `InquiryStatus`: `NEW | RESPONDED | CLOSED`
 - `SiteVisitStatus`: `NEW | SCHEDULED | COMPLETED | CANCELLED`
-- `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` / `INQUIRY_CHANNEL_LABELS` / `SITE_VISIT_STATUS_LABELS` display-label maps live beside the enums
+- `CommunicationStatus`: `DRAFT | SENDING | SENT | PARTIALLY_SENT | FAILED`
+- `CommunicationAudience`: `ALL_INVESTORS | INVESTOR_SEGMENT | STAFF | NOTIFY_LIST | CUSTOM`
+- `CommunicationChannel`: `EMAIL | IN_APP | EMAIL_AND_IN_APP`
+- `DeliveryStatus`: `PENDING | SENT | FAILED`
+- `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` / `INQUIRY_CHANNEL_LABELS` / `SITE_VISIT_STATUS_LABELS` / `COMMUNICATION_STATUS_LABELS` / `COMMUNICATION_AUDIENCE_LABELS` / `COMMUNICATION_CHANNEL_LABELS` / `DELIVERY_STATUS_LABELS` display-label maps live beside the enums
 
 **Zones** (`packages/shared/src/zones.ts` — source of truth): `KipZone` = `HEAVY_INDUSTRIAL | LIGHT_DOWNSTREAM | AGRO_INDUSTRIAL | BUSINESS_COMMERCIAL | RESIDENTIAL_ESTATE | ADMINISTRATION`. `KIP_ZONES` carries each zone's label, legend colour, area, description, `investable` flag and `landUses[]`. Only the four `investable` zones are offered in the site-visit form (`INVESTABLE_ZONES`); the land map renders all six. Helpers: `landUsesForZone()`, `isInvestableZone()`, `KIP_ZONE_LABELS`, `SITE_VISIT_MIN_ACRES` / `SITE_VISIT_MAX_ACRES`.
 
@@ -270,6 +278,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
 | `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `PATCH /:id` edit + `DELETE /:id` (owner INVESTOR or ADMIN, **only while status = NEW** — delete is a hard delete so the investor can immediately re-book); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `timeline/` | `POST /` create, `PATCH /:id` update, `DELETE /:id` delete timeline milestones (ADMIN only). Position uniqueness + end-after-start guarded in the service; both portals read the table directly with `FALLBACK_MILESTONES` when empty |
+| `communications/` | admin broadcasts. `POST /` compose + send (ADMIN) — writes the `Communication` + one `Notification` per recipient in one transaction, then drains delivery **detached from the request**; `POST /test` send the draft to the acting admin only (deliberately no `to` field, so it can't relay); `POST /:id/retry` re-queue failed *and* stalled-`PENDING` rows; `DELETE /:id` (blocked while `SENDING`); `POST /templates`, `PATCH /templates/:id`, `DELETE /templates/:id`; `POST /inbox/:id/read` (INVESTOR/ADMIN, owner-checked in the service). Literal routes are declared before `/:id`. **The recipient list is resolved in the browser and posted** — see the Communications section below |
 | `health/` | complete |
 
 ---
@@ -287,7 +296,7 @@ Global error handler maps `AppError`, `ZodError`, Sequelize errors → `{ "error
 
 `fireWebhook(event, payload)` — `apps/api/src/webhooks.ts`. HMAC-SHA256 signed (`N8N_WEBHOOK_SECRET`). No-op when `N8N_BASE_URL` or `N8N_WEBHOOK_SECRET` absent. Fire **after** transaction commits, never before. Web mirror: `apps/web/src/lib/webhooks.ts`.
 
-Events: `investor-registered` (company + rep profile, `activatedAt`; **never** carries the generated password), `investor-approved` (includes `generatedPassword` — legacy approval path only), `investor-rejected`, `staff-invited` (includes `tempPassword`), `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`, `site-visit-requested`
+Events: `investor-registered` (company + rep profile, `activatedAt`; **never** carries the generated password), `investor-approved` (includes `generatedPassword` — legacy approval path only), `investor-rejected`, `staff-invited` (includes `tempPassword`), `application-submitted`, `payment-confirmed`, `tc-decision`, `lac-decision`, `exco-decision`, `clarification-requested`, `window-closed`, `site-visit-requested`, `communication-sent` (fired once a broadcast finishes draining — counts + terminal status, never the recipient list)
 
 **Omit `N8N_WEBHOOK_SECRET` from test `.env`** — setting it to `''` causes startup failure (Zod requires `min(8)` when key is present).
 
@@ -323,6 +332,8 @@ S3_FORCE_PATH_STYLE=true
 ANTHROPIC_API_KEY=        # optional
 EOI_APPLICATION_FEE_USD=1000
 EOI_APPLICATION_FEE_UGX=3700000
+EMAIL_SEND_INTERVAL_MS=2200        # broadcast pacing — ~27 msg/min, under the O365 cap
+COMMUNICATION_MAX_RECIPIENTS=500   # hard ceiling on one broadcast
 ```
 
 ### Admin portal (`apps/web`) / NextAuth
@@ -368,21 +379,38 @@ Rules and gotchas:
 - **Port 587 + STARTTLS.** `secure` is true only on 465; Office 365 submission does not offer implicit TLS. `requireTLS` is set whenever `EMAIL_SERVER_USER` is present, so a credentialed login can never silently downgrade to plaintext. MailHog advertises no STARTTLS, so leaving `EMAIL_SERVER_USER` blank keeps offline dev working.
 - **`EMAIL_FROM` must be the authenticated mailbox** (or a permitted *Send As* alias). Any other address is rejected with `5.7.60 Client does not have permissions to send as this sender`.
 - The mailbox needs **SMTP AUTH enabled** and must be exempt from MFA / security defaults. If Exchange later enforces MFA, basic auth breaks and the fix is OAuth2, not a new password.
-- **Throttle: ~30 messages/minute, 10,000 recipients/day.** Bulk sends (window-open blasts) must go through n8n/SES, not this mailbox.
+- **Throttle: ~30 messages/minute, 10,000 recipients/day.** The Communications module paces its own sends at `EMAIL_SEND_INTERVAL_MS` (default 2200ms ≈ 27/min) and caps one broadcast at `COMMUNICATION_MAX_RECIPIENTS` (500). Anything larger than that — a full window-open blast to thousands — must go through n8n/SES, not this mailbox.
 - In `deploy/.env.production`, write `EMAIL_FROM` **unquoted** — Compose `env_file` reads values literally and quotes would land in the header.
 - Auth can take several seconds on first connect; that is Exchange throttling, not a hang.
 
 ---
 
+## Communications (admin broadcasts)
+
+Admins compose and send messages to investors or staff from **`/console/communications`**; recipients with a portal account also see them at **`/dashboard/messages`** on the investor portal.
+
+**Rendering is shared, and escaping is the security boundary.** `packages/shared/src/communications.ts` owns `renderBodyHtml()`, which **escapes the whole authored body first and only then applies formatting** (blank-line paragraphs, `**bold**`, `*italic*`, `- ` lists, `[text](https://…)` links; `javascript:`/`data:`/protocol-relative hrefs are dropped and render as plain text). The composer preview, the email, the admin detail page and the portal inbox all call the same function, so a preview can never disagree with what a recipient sees. It is the only reason the three `dangerouslySetInnerHTML` call sites are safe — never hand-render a body.
+
+**Merge tokens.** `MERGE_TOKENS` / `applyMergeTokens()` support `{{company}}`, `{{repName}}`, `{{email}}`, `{{reference}}`. Unknown tokens are left verbatim (a typo stays visible); empty values fall back to neutral wording, so a broadcast never reads "Dear ,". Tokens are resolved **per recipient at send time** and the result is stored on the `Notification` row — the inbox copy and the emailed copy are identical, and a retry replays the same text.
+
+**The recipient list is resolved in the browser.** `apps/web/src/lib/communication-audience.ts` (pure, DB-free, unit-tested) turns an `AudienceSelection` into concrete recipients, delegating segment filtering to the existing `filterInvestors()` in `report-filters.ts`. The console posts that explicit array to `POST /communications`. This keeps one filter implementation (a broadcast to "Heavy Industrial · Shortlisted" hits exactly the rows `/console/report/investors` shows) and guarantees the count next to the Send button is the count that gets mailed. It is not a privilege hole — the route is ADMIN-only and admins already read every address — but the API still validates each email, rejects duplicate addresses, and caps the array at `COMMUNICATION_MAX_RECIPIENTS`.
+
+**Sending is direct nodemailer, paced, and detached.** No queue table and no worker: `createAndSend()` commits the `Communication` plus one `PENDING` `Notification` per recipient in a single transaction, then kicks off `deliver()` with `void … .catch(log)`. `deliver()` loops sequentially, sleeping `EMAIL_SEND_INTERVAL_MS` between SMTP calls, and records each outcome (`SENT` + `sentAt`, or `FAILED` + the SMTP error). Consequences to keep in mind:
+
+- A 500-recipient send takes ~18 minutes. The request returns **202**, not 200 — the caller must poll (the console has a Refresh button), never assume "sent".
+- Rows left `PENDING` by a restart keep the broadcast in `SENDING`, and **`POST /:id/retry` re-queues failed *and* stalled rows** — that is why it isn't named "resend failed" in the service.
+- Terminal status is derived, not set: no failures → `SENT`, none delivered → `FAILED`, otherwise `PARTIALLY_SENT`.
+- `CommunicationChannel.IN_APP` skips SMTP entirely; the `Notification` row *is* the message. An `EMAIL`-only send still writes rows (that's the delivery log) but the portal inbox filters them out.
+
 ## Analytics — Google Tag Manager
 
-Container **`GTM-T23BP8QS`**. **`apps/portal` only, and only on the public marketing pages** — `apps/web` (admin) has no GTM at all, and neither does the investor dashboard, the auth pages or `/launch`.
+Container **`GTM-T23BP8QS`**. **`apps/portal` only, but now across the whole app** — public marketing pages, the signed-in investor dashboard, the auth pages and `/launch`. `apps/web` (admin) still has no GTM at all. Widened from public-pages-only on 30 July 2026.
 
-- Mounted in `apps/portal/src/app/(public)/layout.tsx`, not the root layout: `<GoogleTagManagerNoScript />` (the `<noscript>` iframe) then `<GoogleTagManager />` (loader, `next/script` `strategy="afterInteractive"`). Component: `apps/portal/src/components/google-tag-manager.tsx`.
-- The **`(public)` route group** holds home + about, contact, faq, for-investors, help, how-it-works, land-map, privacy, resources, terms. Route groups don't change URLs. **A new public page must go inside `(public)` or it gets no analytics**; a new signed-in page must stay outside it.
+- Mounted in the **root layout**, `apps/portal/src/app/layout.tsx`: `<GoogleTagManagerNoScript />` (the `<noscript>` iframe, must stay the first child of `<body>`) then `<GoogleTagManager />` (loader, `next/script` `strategy="afterInteractive"`). Component: `apps/portal/src/components/google-tag-manager.tsx`.
+- Because it's in the root layout, **every portal route is tracked automatically** — including `not-found.tsx` (404s are now tracked) and the `(investor)` dashboard, where URLs and interactions describe signed-in behaviour. Keep PII out of any `dataLayer` push, and remember GTM tags fire on `/dashboard/*` pages.
+- `(public)/layout.tsx` deliberately mounts **nothing** — re-adding GTM there loads the container twice on every marketing page.
 - Gated on **`NEXT_PUBLIC_GTM_ID`**; both components return `null` when unset, so local dev, CI and preview builds send nothing.
 - `NEXT_PUBLIC_*` is baked in at **build time**. In Docker the id comes from the `NEXT_PUBLIC_GTM_ID` build arg (`apps/portal/Dockerfile` defaults to the real container, matching the `NEXT_PUBLIC_API_URL` pattern) and is passed by `deploy.yml` from `vars.NEXT_PUBLIC_GTM_ID`. Setting it only in `/opt/kip/.env.production` changes nothing — GTM is client-side.
-- `not-found.tsx` must stay at the app root, so 404s are untracked.
 - Never hand-write the GTM snippet into a page or a `dangerouslySetInnerHTML` block — render the component so the env gate can't be bypassed.
 
 ## Seed accounts (`pnpm db:seed`)
@@ -412,13 +440,14 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 
 | File | What it is |
 |---|---|
-| `packages/db/src/index.ts` | Sequelize singleton + 14 model inits + associations |
-| `packages/db/src/models/` | 14 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones) |
+| `packages/db/src/index.ts` | Sequelize singleton + 19 model inits + associations |
+| `packages/db/src/models/` | 19 model files |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones, communications) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `TimelineMilestoneStatus`, `computeTimeline()` (active = last started, manual status overrides win), `findMilestoneOfKind()`, `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
+| `packages/shared/src/communications.ts` | Pure broadcast rendering — `MERGE_TOKENS`, `applyMergeTokens()`, `sampleMergeVars()`, `renderBodyHtml()` (escape-then-format; the XSS boundary), `bodyExcerpt()`. Shared by the composer preview, the API's send, and the portal inbox. Tested in `apps/web/src/lib/communications.test.ts` |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
 | `apps/api/src/errors.ts` | `AppError` + factory functions |
 | `apps/api/src/env.ts` | Zod-validated env |
@@ -430,7 +459,8 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/api/src/modules/payments/` | Initiate payment |
 | `apps/api/src/modules/users/` | Approve + reject investor accounts |
 | `apps/api/src/modules/site-visits/` | Create / list / schedule site-visit bookings |
-| `apps/api/src/mailer.ts` | `sendMail()` + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail` (request received), `siteVisitScheduledEmail` (admin confirmed the visit), `siteVisitNotificationEmail`, `passwordChangedEmail`, `passwordResetEmail` (admin reset — temp credentials) |
+| `apps/api/src/modules/communications/` | Broadcasts — `createAndSend()` (transaction → detached paced `deliver()`), `retryUnsent()`, `sendTest()`, template CRUD, `markRead()` (owner-checked) |
+| `apps/api/src/mailer.ts` | `sendMail()` + `escapeHtml()` + a private `shell()` (card chrome; the older templates still inline their own copy — left alone deliberately) + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail` (request received), `siteVisitScheduledEmail` (admin confirmed the visit), `siteVisitNotificationEmail`, `passwordChangedEmail`, `passwordResetEmail` (admin reset — temp credentials), `announcementEmail` (broadcasts — takes body HTML already rendered by `renderBodyHtml()`, never a raw body) |
 | `apps/portal/src/lib/mailer.ts` | Portal-side `sendMail()` + `escapeHtml()` + `credentialsEmail` (registration). Shared transport for contact form + live chat |
 | `apps/portal/src/lib/smtp.ts` | `smtpTransportOptions()` — single source for the portal's SMTP options (mailer, NextAuth EmailProvider, notify-me action) |
 | `apps/web/src/lib/smtp.ts` | `smtpTransportOptions()` — same, for the admin app's NextAuth EmailProvider |
@@ -443,6 +473,10 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/(admin)/console/report/investors/` | Investor Onboarding report. `page.tsx` is a thin server shell — one `getReportData()` read, then `investors-report-client.tsx` owns **all** filtering in the browser: zone drill-down cards, registration date range (presets + custom `from`/`to`), site-visit/account/payment/stage/country/sector selects, and a day/week/month sign-up trend. `siteVisitStatus` (`investorSiteVisitStatus()` in `mappers.ts`) collapses an investor's bookings to the **furthest-along** one — Completed > Scheduled > Requested > Cancelled, else "Not booked" — so it answers "have they booked a site visit?" in the table, the filter and the CSV. Every KPI, funnel, breakdown, chart and CSV re-derives from the *filtered* subset, so the numbers and the export always describe the same slice. Zone cards deliberately ignore the zone filter (denominator = `zoneScopeStats`, not `stats`) so you can still see what you drilled away from |
 | `apps/web/src/app/(admin)/console/report/site-visits/` | Site Visits report — same server-shell + client-drill-down shape as `investors/`, over `getSiteVisitsReportData()`. Zone demand cards (requests + acreage), request date range, status / land-use / plot-size / country filters, day/week/month request trend, request→scheduled→completed funnel (a completed visit still counts as scheduled), avg days to schedule. **Distinct from `/console/site-visits`**, which is the operational tracker where admins schedule/complete/cancel; this tab is read-only analysis |
 | `apps/web/src/components/report/` | Reports-hub building blocks: `report-ui.tsx` server-safe primitives (`Panel`, `BarList`, `MiniStat`, `FunnelBars`, `TrendBars`, `SeriesBars` labelled trend chart, `PrintHeading`), `report-tabs.tsx` tab bar, `report-table.tsx` generic searchable detail table (declarative column spec, badge maps), `export-actions.tsx` generic export dropdown — CSV via `buildCsv()` (Blob + UTF-8 BOM), Print/Save-as-PDF (`window.print()`), Copy summary; `extraCsvs` adds sibling downloads. All client-side so exports work on the read-only demo |
+| `apps/web/src/app/(admin)/console/communications/` | Communications hub (ADMIN) — `page.tsx` server shell → `communications-client.tsx` (Compose / History / Templates tabs + KPI row). `compose-form.tsx` owns subject + body + merge-token inserts + live preview + "Send test to me" + `send-confirm-dialog.tsx`; `audience-picker.tsx` is the audience mode selector (reuses the investors-report filter controls, staff role chips, searchable hand-pick list) with a live recipient count; `templates-tab.tsx` + `template-dialog.tsx` are template CRUD; `[id]/page.tsx` is the broadcast detail page (roll-up, rendered message, per-recipient delivery log) with `[id]/communication-actions.tsx` for retry/delete |
+| `apps/web/src/lib/communication-audience.ts` | Pure audience resolution — `resolveRecipients()` (delegates to `filterInvestors`, de-dupes by lowercased email, drops unusable addresses), `describeAudience()`, `previewVarsFor()`. No `@kip/db`/`server-only`/React; unit-tested (`communication-audience.test.ts`) |
+| `apps/portal/src/lib/inbox-data.ts` | `server-only` — `getInbox(userId)` + `getUnreadCount(userId)` over `Notification`, filtered to channels that include the portal. Try/catch-guarded like `timeline-data.ts` so a dashboard still renders if the read fails |
+| `apps/portal/src/app/(investor)/dashboard/messages/` | Investor Messages inbox — expandable list, marks read via `POST /communications/inbox/:id/read`. Unread count drives the sidebar badge (passed from `(investor)/layout.tsx`, which is where the DB read happens) and a dashboard nudge |
 | `apps/web/src/lib/report-filters.ts` | Pure filter + aggregation logic behind the drill-down report tabs. Shared core: `zoneBreakdown()` (any `{zoneKey, acresRaw}` row), `countBy()`, `bucketByPeriod()` (day/week/month, gap-filled, capped at 200 buckets then falls back to occupied ones), `trendStats()`, `presetRange()`/`matchPreset()`, `activeFilterCount()`. Then one section per report: `filterInvestors`/`computeInvestorStats`/`computeFunnel`/`describeInvestorFilters` and `filterSiteVisits`/`computeSiteVisitStats`/`computeSiteVisitFunnel`/`describeSiteVisitFilters` + `ACRE_BANDS`. Filter shapes are written out per report rather than driven by a generic predicate engine — keep it that way. No `@kip/db`/`server-only`/React; unit-tested (`report-filters.test.ts`) |
 | `apps/web/src/lib/report-export.ts` | Pure CSV + text-summary builders for all report exports (`buildCsv`, column specs incl. `INVESTOR_EXPORT_COLUMNS` / `SITE_VISIT_EXPORT_COLUMNS` / `PERIOD_TREND_COLUMNS` / `ZONE_BREAKDOWN_COLUMNS` / `INQUIRY_EXPORT_COLUMNS`, per-report `build*Summary`, filename stampers) — no `@kip/db`/`server-only`, unit-tested (`report-export.test.ts`). Shared row fixtures live in `lib/test-fixtures.ts` |
 | `apps/web/src/lib/auth.ts` | NextAuth config — Email + Credentials, custom SequelizeAdapter |
@@ -453,7 +487,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/lib/investor-data.ts` | Investor read data layer — live on seeded data |
 | `apps/web/src/lib/webhooks.ts` | Server-only `fireWebhook()` for Next.js API routes |
 | `apps/web/src/components/` | Shared UI: `site-nav`, `admin-topbar`, `dashboard-sidebar`, `stat-card`, `status-badge`, `data-table`, `payment-amount-card`, `countdown-timer`, `confirm-delete-dialog` (all admin deletes go through it) — check before building new UI |
-| `apps/web/src/components/ui/` | Primitives: `alert`, `avatar`, `badge`, `button`, `card`, `dropdown-menu`, `input`, `separator`, `sheet`, `table`, `tooltip` |
+| `apps/web/src/components/ui/` | Primitives: `alert`, `avatar`, `badge`, `button`, `card`, `dropdown-menu`, `input`, `separator`, `sheet`, `table`, `textarea`, `tooltip` |
 | `apps/web/src/app/(admin)/console/users/[id]/page.tsx` | User detail page — identity header (avatar, role/status badges), pending-review banner, Account & Security / Representative / Company cards (password state from `passwordChangedAt`, EOI ref + stage) |
 | `apps/web/src/app/(admin)/console/users/[id]/user-action-buttons.tsx` | Approve/Reject client component |
 | `apps/web/src/app/(admin)/console/users/[id]/user-manage-buttons.tsx` | Admin Edit + Delete for any account (opens `edit-user-dialog.tsx`, calls `PATCH`/`DELETE /users/:id`) |
@@ -465,7 +499,8 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/web/src/app/(admin)/console/windows/create-window-dialog.tsx` | Create/edit window dialog |
 | `apps/web/src/app/(admin)/console/windows/window-actions.tsx` | Per-window open/close/archive action buttons |
 | `apps/portal/src/app/api/register/route.ts` | `POST /api/register` — one-step registration (company name/country/type/sector + authorized rep), creates InvestorOrg + User (**ACTIVE**), emails generated credentials, fires webhook. The web app's `/sign-up` redirects to the portal form |
-| `apps/portal/src/app/(public)/layout.tsx` | Public marketing route group — the only place GTM is mounted (see Analytics). No chrome of its own; pages render their own nav/footer |
+| `apps/portal/src/app/layout.tsx` | Portal root layout — fonts, `Providers`, chat widget, and the GTM mount that covers every portal route (see Analytics) |
+| `apps/portal/src/app/(public)/layout.tsx` | Public marketing route group — pass-through only (no chrome, no GTM); pages render their own nav/footer |
 | `apps/portal/src/components/google-tag-manager.tsx` | GTM loader + `<noscript>` fallback, gated on `NEXT_PUBLIC_GTM_ID` |
 | `apps/portal/src/app/(public)/contact/page.tsx` | Public contact form — server action persists an `Inquiry` row, then best-effort email to kipinvestorrelations@unoc.com |
 | `apps/portal/src/app/api/inquiry/route.ts` | Live-chat widget endpoint — persists an `Inquiry` row (channel LIVE_CHAT), then best-effort email |
@@ -568,6 +603,10 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Expose AI screening data to INVESTOR role
 - Send a generated password through a webhook from the register route
 - Interpolate user input into email HTML unescaped — use `escapeHtml()` from the app's `mailer.ts`
+- Render a broadcast body any way other than `renderBodyHtml()` from `@kip/shared` — it escapes before formatting, and is what makes the `dangerouslySetInnerHTML` call sites safe
+- Add a free-form `to` field to `POST /communications/test` — a test send goes to the acting admin's own address, or it becomes an open relay
+- Send a broadcast larger than `COMMUNICATION_MAX_RECIPIENTS` through the shared mailbox — that needs SES/n8n
+- Await `deliver()` inside a request handler — a paced send runs for minutes and would time out the browser
 - Build a nodemailer transport by hand — call `smtpTransportOptions()` so STARTTLS stays enforced
 - Set `EMAIL_FROM` to anything but the authenticated mailbox or a Send As alias — Exchange rejects it with 5.7.60
 - Commit the `Support.Kip@unoc.com` password — it lives only in gitignored `.env` files and `/opt/kip/.env.production`
