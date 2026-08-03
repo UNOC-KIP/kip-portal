@@ -97,6 +97,33 @@ docker build -f apps/portal/Dockerfile -t kip-portal-app \
   | Nothing else. Postgres/n8n are never exposed. |                                                                                                                                                                                                                                   |
 
 4. **IAM instance role** with S3 read/write on the documents bucket + a backups bucket (used by the backup cron; the API's presigner uses the `S3_`* env keys).
+   **The documents bucket needs a CORS policy or every upload fails.** Investors PUT their EOI
+   attachments **straight from the browser to S3** using a presigned URL — the file never passes
+   through the API — so the bucket must allow cross-origin PUT/GET from the two portal hosts.
+   Without it the presign call succeeds (signing is offline and makes no network call, so nothing
+   fails server-side) and the browser silently blocks the PUT. Symptom: uploads fail in the wizard
+   while the API log shows a clean 200 on `/documents/presign`.
+   ```bash
+   cat > cors.json <<'JSON'
+   {"CORSRules":[{
+     "AllowedOrigins":["https://kip.unoc.com","https://portal.kip.unoc.com"],
+     "AllowedMethods":["PUT","GET","HEAD"],
+     "AllowedHeaders":["*"],
+     "ExposeHeaders":["ETag"],
+     "MaxAgeSeconds":3000
+   }]}
+   JSON
+   aws s3api create-bucket --bucket kip-documents --region ap-south-1 \
+     --create-bucket-configuration LocationConstraint=ap-south-1
+   aws s3api put-bucket-cors --bucket kip-documents --cors-configuration file://cors.json
+   aws s3api put-public-access-block --bucket kip-documents \
+     --public-access-block-configuration \
+     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+   ```
+   Keep the bucket **private** — presigned URLs are the only intended access path (PUT expires in
+   10 min, GET in 5). Re-run `put-bucket-cors` whenever the portal hostnames change.
+   `S3_REGION` must be the bucket's real region (`ap-south-1`, not the `auto` used for R2-style
+   endpoints) and `S3_FORCE_PATH_STYLE=false` for AWS.
 5. **Install Docker + AWS CLI v2** (Ubuntu 24.04 no longer ships an `awscli` apt package):
   ```bash
    curl -fsSL https://get.docker.com | sudo sh

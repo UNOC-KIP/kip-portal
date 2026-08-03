@@ -368,17 +368,20 @@ export async function getUserDetail(id: string): Promise<UserDetail | null> {
 
 // ─── Application windows ─────────────────────────────────────────────────────
 
-export async function listWindows(): Promise<WindowRow[]> {
+export async function listWindows(now: Date = new Date()): Promise<WindowRow[]> {
   const windows = await ApplicationWindow.findAll({ order: [["openAt", "DESC"]], limit: 1000 });
   return windows.map((w) =>
-    toWindowRow({
-      id: w.id,
-      name: w.name,
-      status: w.status,
-      openAt: w.openAt,
-      closeAt: w.closeAt,
-      sequenceCounter: w.sequenceCounter,
-    }),
+    toWindowRow(
+      {
+        id: w.id,
+        name: w.name,
+        status: w.status,
+        openAt: w.openAt,
+        closeAt: w.closeAt,
+        sequenceCounter: w.sequenceCounter,
+      },
+      now,
+    ),
   );
 }
 
@@ -981,7 +984,9 @@ import {
   toPaymentReportRow,
   toSiteVisitInvestor,
   toTimelineMilestoneRow,
+  eoiCallReadiness,
   type AppsReportRow,
+  type EoiCallReadiness,
   type PaymentReportRow,
   type StageDuration,
   type TimelineMilestoneRow,
@@ -1337,6 +1342,31 @@ export async function listTimelineMilestones(
   const activeId = items.find((i) => i.active)?.id ?? null;
   const effectiveById = new Map<string, string>(items.map((i) => [i.id, i.status as string]));
   return data.map((m) => toTimelineMilestoneRow(m, activeId, effectiveById.get(m.id) ?? "UPCOMING"));
+}
+
+/**
+ * Cross-check the advertised EOI stage against the window that actually gates
+ * applications. See `eoiCallReadiness()` for why the two can disagree.
+ */
+export async function getEoiCallReadiness(
+  milestones: TimelineMilestoneRow[],
+  now: Date = new Date(),
+): Promise<EoiCallReadiness> {
+  const windows = await ApplicationWindow.findAll({
+    attributes: ["name", "status", "openAt", "closeAt"],
+    order: [["openAt", "DESC"]],
+    limit: 100,
+  });
+  return eoiCallReadiness(
+    milestones,
+    windows.map((w) => ({
+      name: w.name,
+      status: w.status,
+      openAt: w.openAt,
+      closeAt: w.closeAt,
+    })),
+    now,
+  );
 }
 
 // ─── Communications ──────────────────────────────────────────────────────────

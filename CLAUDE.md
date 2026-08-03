@@ -313,6 +313,10 @@ MIME: `application/pdf`, `image/jpeg`, `image/png`. Max: 10 MB. PUT expiry: 10 m
 **EOI attachments are stricter — PDF only, 5 MB** (spec §8, enforced by `validateEoiFile()` + the `documents/` Zod schemas). The looser rule above applies only to payment proof, where spec §1 permits a photo of a deposit slip.
 Helper: `apps/api/src/storage/index.ts` — `presignUpload()`, `presignDownload()`.
 
+**Presigning is offline — a 200 from `/documents/presign` proves nothing.** `getSignedUrl()` signs locally and makes no network call, so it cannot tell you the bucket exists, the key is authorised, or the browser will be allowed to PUT. The one failure it does raise locally is a total absence of credentials, and `asConfigError()` turns that `CredentialsProviderError` into a **503 `STORAGE_NOT_CONFIGURED`** instead of an unexplained 500 mid-upload; the API also warns at boot when no static keys are set (`hasStaticS3Credentials()` in `index.ts`). Everything else surfaces at the browser's PUT.
+
+**The documents bucket needs a CORS policy allowing PUT from both portal hosts** — investors upload straight from the browser to S3, bypassing the API. Missing CORS is invisible server-side and presents as uploads failing in the wizard while the API log looks clean. Setup + the exact `put-bucket-cors` call: DEPLOYMENT.md Phase 3 step 4. Re-run it whenever the hostnames change.
+
 ---
 
 ## Environment variables
@@ -424,6 +428,10 @@ The six-section EOI is a transcription of the UNOC **"KIP Expression of Interest
 **One checklist, three consumers.** `packages/shared/src/eoi-documents.ts` (`EOI_DOCUMENT_REQUIREMENTS`) drives the wizard's upload slots, the submit-time completeness guard and the committee's view of what was supplied. Add an attachment there, not in the UI. Requirements are filtered by `ApplicantCategory` (LOCAL / INTERNATIONAL) — until the investor picks one, category-specific slots stay hidden rather than inviting the wrong upload.
 
 **`TimelineMilestone` and `ApplicationWindow` are different things — the window is the only gate.** The `EOI_CALL` milestone in `/console/settings` is *display*: it drives the portal stage tracker and the public schedule. Whether an investor can start or submit an EOI is decided solely by an `ApplicationWindow` with `status = OPEN` **and `now` inside `openAt`…`closeAt`** (`investor-data.ts`, `createApplication()`, `submitApplication()`). Setting the milestone to CURRENT opens nothing. Keep the two aligned by hand in `/console/windows`; a stale window left OPEN with a past `closeAt` presents as "the EOI application window is not currently open" with no explanation.
+
+Two guards now make that divergence visible instead of leaving it to be discovered by an investor:
+- **`eoiCallReadiness()`** (`admin/mappers.ts`, pure, `now` injected) cross-checks the advertised stage against the gate, and `/console/settings` renders it above the timeline editor — amber when an `EOI_CALL` milestone is CURRENT but no window is live (naming the stale window and whether it expired or hasn't started), blue for the reverse.
+- **`toWindowRow()` takes `now`** and no longer labels an out-of-range OPEN window "Active" — it reads `Open · date passed` / `Open · not started`. Status `OPEN` alone was rendering as Active on `/console/windows`, which is precisely what made an expired window look healthy.
 
 **`POST /applications` is the single entry point, and it is idempotent.** The dashboard's "Start my EOI application" card (`start-eoi-button.tsx`) is the only way an investor gets an `Application` row — one is never created at registration. The service returns an existing non-`WITHDRAWN` application instead of making a second, so a double-click cannot leave the investor with two drafts (only the newest is ever shown, so the other would be invisible but still counted in admin reports). `lotReference` is optional and defaults to `UNASSIGNED_LOT_REFERENCE` — the EOI states the area required (§2.1); a specific plot is assigned at allocation.
 
