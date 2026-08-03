@@ -4,5 +4,6 @@ export * from "./timeline";
 export * from "./communications";
 export * from "./reference";
 export * from "./schemas/application";
+export * from "./eoi-documents";
 export * from "./schemas/document";
 export * from "./schemas/payment";

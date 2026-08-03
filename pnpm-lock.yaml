@@ -308,6 +308,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@kip/shared':
+        specifier: workspace:*
+        version: link:../shared
       pg:
         specifier: ^8.21.0
         version: 8.21.0

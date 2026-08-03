@@ -94,22 +94,78 @@ export const ReviewActionType = {
 } as const;
 export type ReviewActionType = (typeof ReviewActionType)[keyof typeof ReviewActionType];
 
-/** Document categories. */
+/**
+ * Document categories — one per attachment the EOI spec asks for.
+ *
+ * Backed by a Postgres ENUM type, so ADDING A VALUE HERE NEEDS A MIGRATION
+ * (`ALTER TYPE "DocumentKind" ADD VALUE …`). The 12 original values are kept
+ * even where the spec renamed the item, because rows already reference them.
+ */
 export const DocumentKind = {
+  // Section 1.1 — Legal status
   CERTIFICATE_OF_INCORPORATION: "CERTIFICATE_OF_INCORPORATION",
+  MEMORANDUM_AND_ARTICLES:      "MEMORANDUM_AND_ARTICLES",
+  UGANDA_BRANCH_REGISTRATION:   "UGANDA_BRANCH_REGISTRATION",
+  // Section 1.2 — Power of attorney
   POWER_OF_ATTORNEY:            "POWER_OF_ATTORNEY",
+  // Section 1.3 — Ownership
   SHAREHOLDER_ID:               "SHAREHOLDER_ID",
+  BENEFICIAL_OWNERSHIP_FORM:    "BENEFICIAL_OWNERSHIP_FORM",
+  // Section 1.4 — Management structure
   ORGANOGRAM:                   "ORGANOGRAM",
+  // Section 1.6 — Letter of EOI
   LETTER_OF_INTEREST:           "LETTER_OF_INTEREST",
+  // Section 1.7 — Statutory & tax compliance
+  TAX_CLEARANCE_CERTIFICATE:    "TAX_CLEARANCE_CERTIFICATE",
+  NSSF_COMPLIANCE_CERTIFICATE:  "NSSF_COMPLIANCE_CERTIFICATE",
+  // Section 2.2 / 2.3 — Business operations and track record
+  TRADING_LICENCE:              "TRADING_LICENCE",
   BUSINESS_EVIDENCE:            "BUSINESS_EVIDENCE",
   SIMILAR_PROJECT_EVIDENCE:     "SIMILAR_PROJECT_EVIDENCE",
+  // Section 4 — H3SE
   H3SE_RECORD:                  "H3SE_RECORD",
+  H3SE_CERTIFICATE:             "H3SE_CERTIFICATE",
   H3SE_POLICY:                  "H3SE_POLICY",
+  H3SE_ORGANOGRAM:              "H3SE_ORGANOGRAM",
+  H3SE_AUDIT_REPORT:            "H3SE_AUDIT_REPORT",
+  // Section 5 — National content
   NATIONAL_CONTENT_EVIDENCE:    "NATIONAL_CONTENT_EVIDENCE",
+  TRAINING_RECORD:              "TRAINING_RECORD",
+  PROCUREMENT_RECORD:           "PROCUREMENT_RECORD",
+  // Section 6 — Declaration
+  SIGNED_DECLARATION:           "SIGNED_DECLARATION",
+  // Fee step
   PAYMENT_PROOF:                "PAYMENT_PROOF",
   OTHER:                        "OTHER",
 } as const;
 export type DocumentKind = (typeof DocumentKind)[keyof typeof DocumentKind];
+
+export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
+  CERTIFICATE_OF_INCORPORATION: "Certificate of Incorporation / Registration",
+  MEMORANDUM_AND_ARTICLES:      "Memorandum & Articles of Association",
+  UGANDA_BRANCH_REGISTRATION:   "Uganda branch registration certificate",
+  POWER_OF_ATTORNEY:            "Power of Attorney / Board Resolution",
+  SHAREHOLDER_ID:               "Shareholder passport or National ID",
+  BENEFICIAL_OWNERSHIP_FORM:    "Beneficial ownership declaration",
+  ORGANOGRAM:                   "Company organogram",
+  LETTER_OF_INTEREST:           "Letter of Expression of Interest",
+  TAX_CLEARANCE_CERTIFICATE:    "Tax Clearance Certificate",
+  NSSF_COMPLIANCE_CERTIFICATE:  "NSSF Compliance Certificate",
+  TRADING_LICENCE:              "Trading Licence",
+  BUSINESS_EVIDENCE:            "Business operations evidence",
+  SIMILAR_PROJECT_EVIDENCE:     "Comparable project evidence",
+  H3SE_RECORD:                  "H3SE incident register / safety evidence",
+  H3SE_CERTIFICATE:             "H3SE certificate (ISO 45001, ISO 14001, …)",
+  H3SE_POLICY:                  "Signed H3SE policy",
+  H3SE_ORGANOGRAM:              "H3SE organizational chart",
+  H3SE_AUDIT_REPORT:            "Most recent H3SE audit report",
+  NATIONAL_CONTENT_EVIDENCE:    "Payroll / NSSF remittance evidence",
+  TRAINING_RECORD:              "Training attendance & completion records",
+  PROCUREMENT_RECORD:           "Procurement register / local content report",
+  SIGNED_DECLARATION:           "Signed declaration page",
+  PAYMENT_PROOF:                "Proof of payment",
+  OTHER:                        "Other supporting document",
+};
 
 /** Legal form of an investor company — captured at registration. */
 export const CompanyType = {

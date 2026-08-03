@@ -1,17 +1,26 @@
+import { Op } from "sequelize";
 import {
   sequelize,
   Application,
   ApplicationSection,
   ApplicationWindow,
+  Document,
   Payment,
+  User,
 } from "@kip/db";
 import {
   ApplicationStatus,
   ApplicationWindowStatus,
   EoiSection,
   UserRole,
+  UNASSIGNED_LOT_REFERENCE,
   canTransition,
+  crossSectionIssues,
   formatReference,
+  missingRequiredDocuments,
+  sectionSchemas,
+  EOI_SECTION_LABELS,
+  type ApplicantCategory,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
@@ -34,12 +43,235 @@ export async function deleteApplication(applicationId: string): Promise<void> {
 }
 
 /**
+ * Save one section.
+ *
+ * Two modes, because the spec asks for both save-and-resume (§8) and a hard
+ * completeness gate (§0):
+ *
+ *   complete = false — a draft. The payload is stored exactly as the form had
+ *     it, half-filled fields and all, and `completedAt` is CLEARED. Editing a
+ *     finished section back into a draft state has to un-complete it, or the
+ *     submit guard would still be counting a section the investor has since
+ *     emptied.
+ *
+ *   complete = true — run the full section schema. A ZodError here surfaces as
+ *     a 400 with per-field messages via the global error handler.
+ */
+export async function saveSection(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: { section: EoiSection; payload: Record<string, unknown>; complete: boolean },
+): Promise<ApplicationSection> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId", "status"],
+  });
+  if (!app) throw NotFound("Application");
+
+  if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
+    throw Forbidden("You can only edit your own application");
+  }
+
+  // Once submitted the payload is evidence before a committee, so an investor
+  // can no longer edit it. ADMIN keeps write access for the raw-JSON corrections
+  // the console offers.
+  const editable: string[] = [
+    ApplicationStatus.DRAFT_PAYMENT_PENDING,
+    ApplicationStatus.DRAFT,
+    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ];
+  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
+    throw Conflict(
+      `This application can no longer be edited (status ${app.status})`,
+    );
+  }
+
+  const payload = input.complete
+    ? (sectionSchemas[input.section].parse(input.payload) as object)
+    : (input.payload as object);
+
+  const existing = await ApplicationSection.findOne({
+    where: { applicationId, section: input.section },
+  });
+
+  const completedAt = input.complete ? new Date() : null;
+
+  return existing
+    ? existing.update({ payload, completedAt })
+    : ApplicationSection.create({
+        applicationId,
+        section: input.section,
+        payload,
+        completedAt,
+      });
+}
+
+/**
+ * Start an EOI. Idempotent by design: an investor who already has a live
+ * application gets that one back rather than a second draft.
+ *
+ * Without this guard a double-click, or simply revisiting the dashboard,
+ * would leave the investor with two drafts and the console with a duplicate —
+ * and `getInvestorDashboardData()` only ever shows the most recent, so the
+ * other would become invisible but still countable in admin reports.
+ */
+export async function createApplication(
+  actor: { id: string; role: string },
+  input: { lotReference?: string },
+): Promise<{ application: Application; created: boolean }> {
+  const user = await User.findByPk(actor.id, {
+    attributes: ["id", "investorOrgId"],
+  });
+  if (!user?.investorOrgId) {
+    throw BadRequest("User has no associated investor organisation");
+  }
+
+  const existing = await Application.findOne({
+    where: {
+      ownerUserId: actor.id,
+      status: { [Op.ne]: ApplicationStatus.WITHDRAWN },
+    },
+    order: [["createdAt", "DESC"]],
+  });
+  if (existing) return { application: existing, created: false };
+
+  // The window must be open to start, for the same reason it must be open to
+  // submit — an EOI begun outside a call has nothing to be submitted into.
+  const window = await ApplicationWindow.findOne({
+    where: { status: ApplicationWindowStatus.OPEN },
+    order: [["openAt", "DESC"]],
+  });
+  const now = new Date();
+  if (!window || now < window.openAt || now > window.closeAt) {
+    throw Conflict(
+      "The EOI application window is not currently open. You will be notified when the next Call for Expressions of Interest opens.",
+    );
+  }
+
+  // No reference yet — it is assigned atomically at the SUBMITTED transition
+  // from the active window's sequence (see submitApplication).
+  const application = await Application.create({
+    lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
+    status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
+    ownerUserId: actor.id,
+    investorOrgId: user.investorOrgId,
+  });
+
+  return { application, created: true };
+}
+
+/** A reason the application is not yet submittable, in investor-facing wording. */
+export type SubmissionBlocker = {
+  section: EoiSection | null;
+  field: string | null;
+  message: string;
+};
+
+/**
+ * Everything standing between this application and SUBMITTED.
+ *
+ * Deliberately re-validates each stored payload against its section schema
+ * rather than trusting `completedAt`. The flag records that a section passed
+ * validation *at the time it was saved*; a schema change, an admin raw-JSON
+ * edit, or a payload written before the field set was tightened can all leave a
+ * section flagged complete but no longer compliant. Spec §0 puts the burden on
+ * the portal to guarantee no required field is blank at submission, so the
+ * check runs against the data itself.
+ *
+ * Shared by the dry-run preflight the wizard calls and the submit path, so the
+ * review screen can never disagree with what submit enforces.
+ */
+export async function submissionBlockers(
+  applicationId: string,
+): Promise<SubmissionBlocker[]> {
+  const [sections, documents] = await Promise.all([
+    ApplicationSection.findAll({ where: { applicationId } }),
+    Document.findAll({ where: { applicationId }, attributes: ["kind"] }),
+  ]);
+
+  const blockers: SubmissionBlocker[] = [];
+  const payloads: Partial<Record<EoiSection, unknown>> = {};
+  /** N/A notes gathered across sections, keyed by DocumentKind. */
+  const documentNaNotes: Record<string, string> = {};
+
+  for (const section of ALL_SECTIONS) {
+    const row = sections.find((s) => s.section === section);
+    const label = EOI_SECTION_LABELS[section];
+
+    if (!row) {
+      blockers.push({
+        section,
+        field: null,
+        message: `${label} has not been started.`,
+      });
+      continue;
+    }
+
+    const parsed = sectionSchemas[section].safeParse(row.payload);
+    if (!parsed.success) {
+      for (const issue of parsed.error.issues) {
+        blockers.push({
+          section,
+          field: issue.path.join("."),
+          message: `${label}: ${issue.message}`,
+        });
+      }
+      continue;
+    }
+
+    payloads[section] = parsed.data;
+
+    const notes = (row.payload as { notApplicable?: Record<string, string> })
+      ?.notApplicable;
+    if (notes) Object.assign(documentNaNotes, notes);
+  }
+
+  // Attachments. The applicant category decides which slots apply, so a payload
+  // too broken to tell us the category means the document check cannot run —
+  // the section-level blockers above already cover that case.
+  const category = (
+    payloads[EoiSection.PRELIMINARY_INFO] as
+      | { applicantCategory?: ApplicantCategory }
+      | undefined
+  )?.applicantCategory;
+
+  if (category) {
+    const missing = missingRequiredDocuments({
+      category,
+      uploadedKinds: documents.map((d) => d.kind),
+      naNotes: documentNaNotes,
+    });
+    for (const req of missing) {
+      blockers.push({
+        section: req.section,
+        field: req.kind,
+        message: `${EOI_SECTION_LABELS[req.section]}: attach the ${req.label} (spec ${req.clause}).`,
+      });
+    }
+  }
+
+  // Cross-field consistency (spec §8) — only worth running once every section
+  // parsed, since it reads fields from two sections at once.
+  if (blockers.length === 0) {
+    for (const issue of crossSectionIssues(payloads)) {
+      blockers.push({
+        section: issue.section,
+        field: issue.field,
+        message: issue.message,
+      });
+    }
+  }
+
+  return blockers;
+}
+
+/**
  * SUBMITTED transition. Owns the status machine for this step (the API is the
  * single writer; see CLAUDE.md "Service pattern"):
  *   1. fetch + ownership guard
  *   2. status guard (DRAFT → SUBMITTED, via the shared transition table)
- *   3. completeness guard (all 6 sections) + window-open guard
- *   4. atomically increment the window sequence and assign KIP-EOI-YYYY-NNNN
+ *   3. completeness guard (every section re-validated + required attachments)
+ *   4. window-open guard
+ *   5. atomically increment the window sequence and assign KIP-EOI-YYYY-NNNN
  *
  * Reference assignment and the counter bump happen in one transaction, so two
  * concurrent submits can never collide on a number.
@@ -48,11 +280,7 @@ export async function submitApplication(
   applicationId: string,
   actor: { id: string; role: string },
 ): Promise<Application> {
-  const app = await Application.findByPk(applicationId, {
-    include: [
-      { model: ApplicationSection, as: "sections", attributes: ["section", "completedAt"] },
-    ],
-  });
+  const app = await Application.findByPk(applicationId);
   if (!app) throw NotFound("Application");
 
   // Ownership: only the applicant may submit (ADMIN may act on their behalf).
@@ -66,16 +294,14 @@ export async function submitApplication(
     throw Conflict(`Cannot submit an application in status ${app.status}`);
   }
 
-  // Completeness: every section present and completed.
-  const sections =
-    (app as Application & { sections?: ApplicationSection[] }).sections ?? [];
-  const completed = new Set(
-    sections.filter((s) => s.completedAt != null).map((s) => s.section),
-  );
-  const missing = ALL_SECTIONS.filter((s) => !completed.has(s));
-  if (missing.length > 0) {
+  const blockers = await submissionBlockers(applicationId);
+  if (blockers.length > 0) {
     throw BadRequest(
-      `All sections must be completed before submitting. Missing: ${missing.join(", ")}`,
+      `This application is not complete. ${blockers.length} item(s) need attention: ${blockers
+        .slice(0, 5)
+        .map((b) => b.message)
+        .join(" ")}${blockers.length > 5 ? " …" : ""}`,
+      { blockers },
     );
   }
 

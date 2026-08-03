@@ -9,7 +9,19 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
       error: {
         code: "VALIDATION_ERROR",
         message: "Request validation failed",
-        details: err.flatten(),
+        details: {
+          ...err.flatten(),
+          /**
+           * `flatten()` keys everything by its TOP-LEVEL field, so a nested
+           * failure like `ownership.shareholders.0.name` collapses to
+           * "ownership" and the form cannot mark the offending input. The EOI
+           * sections are deeply nested, so the full dotted paths are sent too.
+           */
+          issues: err.issues.map((i) => ({
+            path: i.path.join("."),
+            message: i.message,
+          })),
+        },
       },
     });
     return;
