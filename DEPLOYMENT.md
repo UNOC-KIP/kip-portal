@@ -103,27 +103,41 @@ docker build -f apps/portal/Dockerfile -t kip-portal-app \
    Without it the presign call succeeds (signing is offline and makes no network call, so nothing
    fails server-side) and the browser silently blocks the PUT. Symptom: uploads fail in the wizard
    while the API log shows a clean 200 on `/documents/presign`.
+   Bucket creation needs **admin credentials** — the `kip-ec2-role` instance role is deliberately
+   object-level only, so running this from the EC2 fails with
+   `not authorized to perform: s3:CreateBucket`. Use CloudShell in the AWS console (it inherits
+   your console identity) or an admin profile locally. The CORS document is versioned at
+   `deploy/s3-cors.json`:
    ```bash
-   cat > cors.json <<'JSON'
-   {"CORSRules":[{
-     "AllowedOrigins":["https://kip.unoc.com","https://portal.kip.unoc.com"],
-     "AllowedMethods":["PUT","GET","HEAD"],
-     "AllowedHeaders":["*"],
-     "ExposeHeaders":["ETag"],
-     "MaxAgeSeconds":3000
-   }]}
-   JSON
    aws s3api create-bucket --bucket kip-documents --region ap-south-1 \
      --create-bucket-configuration LocationConstraint=ap-south-1
-   aws s3api put-bucket-cors --bucket kip-documents --cors-configuration file://cors.json
    aws s3api put-public-access-block --bucket kip-documents \
      --public-access-block-configuration \
      BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+   aws s3api put-bucket-cors --bucket kip-documents --cors-configuration file://deploy/s3-cors.json
    ```
    Keep the bucket **private** — presigned URLs are the only intended access path (PUT expires in
    10 min, GET in 5). Re-run `put-bucket-cors` whenever the portal hostnames change.
    `S3_REGION` must be the bucket's real region (`ap-south-1`, not the `auto` used for R2-style
    endpoints) and `S3_FORCE_PATH_STYLE=false` for AWS.
+
+   **Credentials: prefer the instance role over static keys.** Attach this to `kip-ec2-role` and
+   leave `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` **empty** in `.env.production` — the SDK's
+   default chain then picks the role up and no long-lived secret exists to leak or rotate:
+   ```json
+   { "Version": "2012-10-17", "Statement": [{
+       "Effect": "Allow",
+       "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+       "Resource": "arn:aws:s3:::kip-documents/*"
+   }]}
+   ```
+   This works only because the API container can reach the instance metadata service — verified
+   on this instance (IMDSv2 `PUT /latest/api/token` from inside a container returns 200, i.e. the
+   metadata hop limit is ≥ 2). If the hop limit is ever reset to the AWS default of 1, containers
+   lose IMDS access and presigning fails with `CredentialsProviderError` (surfacing as
+   503 `STORAGE_NOT_CONFIGURED`); fix with
+   `aws ec2 modify-instance-metadata-options --instance-id <id> --http-put-response-hop-limit 2 --http-tokens required`,
+   or fall back to static keys from a dedicated IAM user.
 5. **Install Docker + AWS CLI v2** (Ubuntu 24.04 no longer ships an `awscli` apt package):
   ```bash
    curl -fsSL https://get.docker.com | sudo sh
