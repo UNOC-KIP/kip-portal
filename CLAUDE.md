@@ -317,6 +317,8 @@ Helper: `apps/api/src/storage/index.ts` — `presignUpload()`, `presignDownload(
 
 **The documents bucket needs a CORS policy allowing PUT from both portal hosts** — investors upload straight from the browser to S3, bypassing the API. Missing CORS is invisible server-side and presents as uploads failing in the wizard while the API log looks clean. Setup + the exact `put-bucket-cors` call: DEPLOYMENT.md Phase 3 step 4. Re-run it whenever the hostnames change.
 
+**The bucket is `kip-documents-unoc` in `af-south-1` — a different region from the rest of the stack** (`ap-south-1`). `S3_REGION` must name the *bucket's* region: presigned URLs are signed for it, and a browser cannot follow S3's cross-region redirect, so a mismatch fails every upload with `400 IllegalLocationConstraintException`. Do not diagnose this with the AWS CLI — it silently retries in the correct region and reports success while the app is broken. Check with `curl -sI https://<bucket>.s3.amazonaws.com | grep x-amz-bucket-region`, and validate access with an object round-trip rather than `head-bucket` (the `kip-api` IAM user has object rights only, so `head-bucket` 403s even when everything works).
+
 ---
 
 ## Environment variables
@@ -333,11 +335,11 @@ NEXTAUTH_SECRET=          # REQUIRED; must match both portals
 N8N_WEBHOOK_SECRET=       # optional; omit for tests
 N8N_BASE_URL=             # e.g. http://localhost:5678
 S3_ENDPOINT=              # empty = AWS
-S3_REGION=auto
-S3_BUCKET=kip-documents
+S3_REGION=auto            # PROD: af-south-1 — the bucket's region, NOT the stack's ap-south-1
+S3_BUCKET=kip-documents   # PROD: kip-documents-unoc (already exists; also holds the promo video)
 S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
-S3_FORCE_PATH_STYLE=true
+S3_FORCE_PATH_STYLE=true  # PROD: false for real AWS
 ANTHROPIC_API_KEY=        # optional
 EOI_APPLICATION_FEE_USD=1000
 EOI_APPLICATION_FEE_UGX=3700000

@@ -96,48 +96,40 @@ docker build -f apps/portal/Dockerfile -t kip-portal-app \
   | 80, 443                                       | 0.0.0.0/0                                                                                                                                                                                                                         |
   | Nothing else. Postgres/n8n are never exposed. |                                                                                                                                                                                                                                   |
 
-4. **IAM instance role** with S3 read/write on the documents bucket + a backups bucket (used by the backup cron; the API's presigner uses the `S3_`* env keys).
-   **The documents bucket needs a CORS policy or every upload fails.** Investors PUT their EOI
-   attachments **straight from the browser to S3** using a presigned URL — the file never passes
-   through the API — so the bucket must allow cross-origin PUT/GET from the two portal hosts.
-   Without it the presign call succeeds (signing is offline and makes no network call, so nothing
-   fails server-side) and the browser silently blocks the PUT. Symptom: uploads fail in the wizard
-   while the API log shows a clean 200 on `/documents/presign`.
-   Bucket creation needs **admin credentials** — the `kip-ec2-role` instance role is deliberately
-   object-level only, so running this from the EC2 fails with
-   `not authorized to perform: s3:CreateBucket`. Use CloudShell in the AWS console (it inherits
-   your console identity) or an admin profile locally. The CORS document is versioned at
-   `deploy/s3-cors.json`:
-   ```bash
-   aws s3api create-bucket --bucket kip-documents --region ap-south-1 \
-     --create-bucket-configuration LocationConstraint=ap-south-1
-   aws s3api put-public-access-block --bucket kip-documents \
-     --public-access-block-configuration \
-     BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
-   aws s3api put-bucket-cors --bucket kip-documents --cors-configuration file://deploy/s3-cors.json
-   ```
-   Keep the bucket **private** — presigned URLs are the only intended access path (PUT expires in
-   10 min, GET in 5). Re-run `put-bucket-cors` whenever the portal hostnames change.
-   `S3_REGION` must be the bucket's real region (`ap-south-1`, not the `auto` used for R2-style
-   endpoints) and `S3_FORCE_PATH_STYLE=false` for AWS.
+4. **S3 — the documents bucket already exists: `kip-documents-unoc`.** Do not create a new one;
+   it also holds the public marketing video assets referenced by the portal. The API authenticates
+   as the IAM user **`kip-api`** via the `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` keys in
+   `.env.production` (not the instance role — `kip-ec2-role` is used by the backup cron). That
+   user has object-level rights only: `s3:GetBucketLocation`, `s3:GetBucketCORS` and
+   `s3:ListAllMyBuckets` are all denied, so `head-bucket` returns **403 even when object
+   access works perfectly**. Verify with an object round-trip, never with `head-bucket`.
 
-   **Credentials: prefer the instance role over static keys.** Attach this to `kip-ec2-role` and
-   leave `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` **empty** in `.env.production` — the SDK's
-   default chain then picks the role up and no long-lived secret exists to leak or rotate:
-   ```json
-   { "Version": "2012-10-17", "Statement": [{
-       "Effect": "Allow",
-       "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
-       "Resource": "arn:aws:s3:::kip-documents/*"
-   }]}
+   **`S3_REGION` must be the bucket's region, and it is not the region the rest of the stack
+   runs in.** `kip-documents-unoc` is in **`af-south-1` (Cape Town)**; EC2/RDS are in `ap-south-1`
+   (Mumbai). This has bitten once already: `.env.production` said `ap-south-1`, and because
+   presigned URLs are signed for the configured region and **a browser cannot follow S3's
+   cross-region redirect**, every upload and download failed with
+   `400 IllegalLocationConstraintException`. The AWS CLI hides the problem — it transparently
+   retries in the correct region, so `aws s3api put-object` succeeds while the app is broken.
+   Confirm the true region without any credentials:
+   ```bash
+   curl -sI https://kip-documents-unoc.s3.amazonaws.com | grep -i x-amz-bucket-region
    ```
-   This works only because the API container can reach the instance metadata service — verified
-   on this instance (IMDSv2 `PUT /latest/api/token` from inside a container returns 200, i.e. the
-   metadata hop limit is ≥ 2). If the hop limit is ever reset to the AWS default of 1, containers
-   lose IMDS access and presigning fails with `CredentialsProviderError` (surfacing as
-   503 `STORAGE_NOT_CONFIGURED`); fix with
-   `aws ec2 modify-instance-metadata-options --instance-id <id> --http-put-response-hop-limit 2 --http-tokens required`,
-   or fall back to static keys from a dedicated IAM user.
+
+   **CORS is required or every upload fails.** Investors PUT their EOI attachments **straight from
+   the browser to S3** using a presigned URL — the file never passes through the API — so the
+   bucket must allow cross-origin PUT from the two portal hosts. Missing CORS is invisible
+   server-side: presigning is offline, so `/documents/presign` still returns a clean 200 while the
+   browser blocks the PUT. The policy is versioned at `deploy/s3-cors.json`; apply it with admin
+   credentials (CloudShell, or the S3 console → bucket → Permissions → CORS, which takes the
+   **bare array** without the `CORSRules` wrapper):
+   ```bash
+   aws s3api put-bucket-cors --bucket kip-documents-unoc --region af-south-1 \
+     --cors-configuration file://deploy/s3-cors.json
+   ```
+   Re-apply whenever the portal hostnames change. Keep the bucket otherwise private — presigned
+   URLs are the only intended access path for documents (PUT expires in 10 min, GET in 5); the
+   `public/` prefix holding the marketing video is the deliberate exception.
 5. **Install Docker + AWS CLI v2** (Ubuntu 24.04 no longer ships an `awscli` apt package):
   ```bash
    curl -fsSL https://get.docker.com | sudo sh
