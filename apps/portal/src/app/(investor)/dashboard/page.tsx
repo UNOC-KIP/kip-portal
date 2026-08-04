@@ -19,12 +19,18 @@ import {
   ShieldAlert,
   Mail,
 } from "lucide-react";
-import { KIP_ZONE_LABELS, type KipZone } from "@kip/shared";
+import {
+  DOCUMENT_KIND_LABELS,
+  KIP_ZONE_LABELS,
+  type DocumentKind,
+  type KipZone,
+} from "@kip/shared";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { SiteVisitSummary } from "@/components/site-visit-summary";
+import { StartEoiButton } from "./start-eoi-button";
 import {
   getInvestorDashboardData,
   getSiteVisitBooking,
@@ -37,23 +43,12 @@ import Link from "next/link";
 
 // ─── Local formatters ─────────────────────────────────────────────────────────
 
-const DOC_KIND_LABELS: Record<string, string> = {
-  CERTIFICATE_OF_INCORPORATION: "Certificate of Incorporation",
-  POWER_OF_ATTORNEY: "Power of Attorney",
-  SHAREHOLDER_ID: "Shareholder ID",
-  ORGANOGRAM: "Organogram",
-  LETTER_OF_INTEREST: "Letter of Interest",
-  BUSINESS_EVIDENCE: "Business Evidence",
-  SIMILAR_PROJECT_EVIDENCE: "Similar Project Evidence",
-  H3SE_RECORD: "H3SE Record",
-  H3SE_POLICY: "H3SE Policy",
-  NATIONAL_CONTENT_EVIDENCE: "National Content Evidence",
-  PAYMENT_PROOF: "Proof of Payment",
-  OTHER: "Document",
-};
-
+/** Labels come from `DOCUMENT_KIND_LABELS` so this list can never fall behind
+ *  the enum; the fallback only covers a value written before a deploy. */
 function docLabel(kind: string) {
-  return DOC_KIND_LABELS[kind] ?? kind.replace(/_/g, " ");
+  return (
+    DOCUMENT_KIND_LABELS[kind as DocumentKind] ?? kind.replace(/_/g, " ")
+  );
 }
 
 function formatFileSize(bytes: number) {
@@ -307,16 +302,21 @@ export default async function InvestorDashboardPage() {
           </Link>
         )}
 
-        {/* No application at all while a window is open — unexpected. */}
+        {/* No application yet, and the call is open — this is the way in. */}
         {!app && windowOpen && (
-          <Card className="text-center">
-            <p className="text-sm text-ink-500">
-              No EOI application found. Contact the KIP secretariat at{" "}
-              <a href="mailto:kipinvestorrelations@unoc.com" className="font-medium underline">
-                kipinvestorrelations@unoc.com
-              </a>{" "}
-              if this is unexpected.
+          <Card>
+            <p className="text-base font-bold text-ink-900">
+              The Call for Expressions of Interest is open
             </p>
+            <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
+              Starting creates your EOI application. You&apos;ll pay the USD 1,000
+              non-refundable processing fee first, then complete six sections covering your
+              company, the land and business you propose, utilities, H3SE, and national
+              content. You can save and come back at any point before the window closes.
+            </p>
+            <div className="mt-4">
+              <StartEoiButton />
+            </div>
           </Card>
         )}
 

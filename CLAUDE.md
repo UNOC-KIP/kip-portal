@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 30 July 2026. Update this file in the same commit as any architectural change.
+> Last updated: 2 August 2026. Update this file in the same commit as any architectural change.
+> EOI module rebuilt 2 August 2026 to the UNOC Master Content Specification — see "EOI module".
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
 ---
@@ -196,6 +197,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 **Import:** `import { sequelize, User, Application, ... } from "@kip/db"`
 **Models:** `packages/db/src/models/` — `Model.init()` pattern, no decorators. Column names are camelCase.
 **Long text:** always `DataTypes.TEXT`, never `DataTypes.STRING`.
+**`@kip/db` depends on `@kip/shared`** (the seed validates section payloads). Never add the reverse dependency — `@kip/shared` must stay importable from client components.
 **Soft delete:** `User`, `InvestorOrg`, `Application`, `ApplicationWindow`, `Payment` are `paranoid: true` (`deletedAt` column) — `destroy()` hides the row from every default-scope query; recoverable in SQL. A soft-deleted user still owns its email (unique index) — pass `paranoid: false` when checking email uniqueness. Child tables (sections, documents, review actions) are not paranoid; they become unreachable when their parent Application is hidden.
 
 | Model | Key columns / notes |
@@ -226,7 +228,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `PaymentMethod`: `CARD | STANBIC_TRANSFER`
 - `PaymentStatus`: `PENDING | PROOF_UPLOADED | CONFIRMED | FAILED | REFUNDED`
 - `Currency`: `USD | UGX`
-- `DocumentKind`: 12 values incl. `CERTIFICATE_OF_INCORPORATION`, `PAYMENT_PROOF`, `OTHER`
+- `DocumentKind`: 24 values — one per "Attach:" bullet in the EOI spec, plus `PAYMENT_PROOF` and `OTHER`. **Backed by a Postgres ENUM type, so adding a value needs a migration** (`ALTER TYPE … ADD VALUE`). Labels in `DOCUMENT_KIND_LABELS`
 - `ReviewActionType`: `ASSIGNED | COMMENTED | REQUESTED_CLARIFICATION | CLARIFICATION_PROVIDED | RECOMMENDED | REJECTED | APPROVED | SHORTLISTED | NOT_SHORTLISTED | LAC_APPROVED | LAC_REJECTED | ALLOCATED | RETURNED_TO_TC | ESCALATED`
 - `ApplicationWindowStatus`: `DRAFT | OPEN | CLOSED | ARCHIVED`
 - `CompanyType`: `LIMITED_LIABILITY_COMPANY | PUBLIC_LIMITED_COMPANY | JOINT_VENTURE | PARTNERSHIP | SOLE_PROPRIETORSHIP | OTHER`
@@ -238,6 +240,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `CommunicationAudience`: `ALL_INVESTORS | INVESTOR_SEGMENT | STAFF | NOTIFY_LIST | CUSTOM`
 - `CommunicationChannel`: `EMAIL | IN_APP | EMAIL_AND_IN_APP`
 - `DeliveryStatus`: `PENDING | SENT | FAILED`
+- **EOI form enums live in `packages/shared/src/schemas/application.ts`, not `enums.ts`** (they describe the application payload, not a DB column): `ApplicantCategory`, `LegalForm`, `LocalPresenceType`, `ActingMode`, `NotarizationType`, `HolderType`, `IdentificationType`, `LandAreaUnit`, `TargetMarket`, `SupplyConfiguration`, `WastewaterCharacter`, `ReportingEntity`, `UgandaTinStatus` — each with a `*_LABELS` map
 - `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` / `INQUIRY_CHANNEL_LABELS` / `SITE_VISIT_STATUS_LABELS` / `COMMUNICATION_STATUS_LABELS` / `COMMUNICATION_AUDIENCE_LABELS` / `COMMUNICATION_CHANNEL_LABELS` / `DELIVERY_STATUS_LABELS` display-label maps live beside the enums
 
 **Zones** (`packages/shared/src/zones.ts` — source of truth): `KipZone` = `HEAVY_INDUSTRIAL | LIGHT_DOWNSTREAM | AGRO_INDUSTRIAL | BUSINESS_COMMERCIAL | RESIDENTIAL_ESTATE | ADMINISTRATION`. `KIP_ZONES` carries each zone's label, legend colour, area, description, `investable` flag and `landUses[]`. Only the four `investable` zones are offered in the site-visit form (`INVESTABLE_ZONES`); the land map renders all six. Helpers: `landUsesForZone()`, `isInvestableZone()`, `KIP_ZONE_LABELS`, `SITE_VISIT_MIN_ACRES` / `SITE_VISIT_MAX_ACRES`.
@@ -271,7 +274,8 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 
 | Module | Status |
 |---|---|
-| `applications/` | create draft, get, update section (owner or ADMIN), submit (DRAFT→SUBMITTED assigns ref); `DELETE /:id` soft delete + payments (ADMIN only) |
+| `applications/` | create draft, get, `PUT /:id/section` (owner or ADMIN — **`complete` flag splits draft saves from completion**), `GET /:id/blockers` (dry run of the submit guard), submit (DRAFT→SUBMITTED assigns ref); `DELETE /:id` soft delete + payments (ADMIN only) |
+| `documents/` | EOI attachments. `POST /presign` → S3 PUT URL; `POST /` registers the row **after** the upload succeeds; `GET /?applicationId=`; `GET /:id/download`; `DELETE /:id`. Owner-or-ADMIN, PDF-only, 5 MB. Payment proof is rejected here — it belongs to `payments/` |
 | `payments/` | initiate only |
 | `users/` | **Self-service (any authenticated user, declared before `/:id`):** `PATCH /me` (own rep details + own org contact block — never email/role/status/legal identity); `POST /me/password` (verify current → set new, stamps `passwordChangedAt`, best-effort confirmation email). **ADMIN only:** `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject`; `POST /:id/reset-password` (ACTIVE accounts only — generates a new temp password, clears `passwordChangedAt`, emails it to the login address; plaintext never returned to the admin or any webhook) |
 | `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
@@ -306,7 +310,14 @@ Events: `investor-registered` (company + rep profile, `activatedAt`; **never** c
 
 Path: `applications/{applicationId}/documents/{documentId}/{originalFilename}`
 MIME: `application/pdf`, `image/jpeg`, `image/png`. Max: 10 MB. PUT expiry: 10 min. GET expiry: 5 min.
+**EOI attachments are stricter — PDF only, 5 MB** (spec §8, enforced by `validateEoiFile()` + the `documents/` Zod schemas). The looser rule above applies only to payment proof, where spec §1 permits a photo of a deposit slip.
 Helper: `apps/api/src/storage/index.ts` — `presignUpload()`, `presignDownload()`.
+
+**Presigning is offline — a 200 from `/documents/presign` proves nothing.** `getSignedUrl()` signs locally and makes no network call, so it cannot tell you the bucket exists, the key is authorised, or the browser will be allowed to PUT. The one failure it does raise locally is a total absence of credentials, and `asConfigError()` turns that `CredentialsProviderError` into a **503 `STORAGE_NOT_CONFIGURED`** instead of an unexplained 500 mid-upload; the API also warns at boot when no static keys are set (`hasStaticS3Credentials()` in `index.ts`). Everything else surfaces at the browser's PUT.
+
+**The documents bucket needs a CORS policy allowing PUT from both portal hosts** — investors upload straight from the browser to S3, bypassing the API. Missing CORS is invisible server-side and presents as uploads failing in the wizard while the API log looks clean. Setup + the exact `put-bucket-cors` call: DEPLOYMENT.md Phase 3 step 4. Re-run it whenever the hostnames change.
+
+**The bucket is `kip-documents-unoc` in `af-south-1` — a different region from the rest of the stack** (`ap-south-1`). `S3_REGION` must name the *bucket's* region: presigned URLs are signed for it, and a browser cannot follow S3's cross-region redirect, so a mismatch fails every upload with `400 IllegalLocationConstraintException`. Do not diagnose this with the AWS CLI — it silently retries in the correct region and reports success while the app is broken. Check with `curl -sI https://<bucket>.s3.amazonaws.com | grep x-amz-bucket-region`, and validate access with an object round-trip rather than `head-bucket` (the `kip-api` IAM user has object rights only, so `head-bucket` 403s even when everything works).
 
 ---
 
@@ -324,11 +335,11 @@ NEXTAUTH_SECRET=          # REQUIRED; must match both portals
 N8N_WEBHOOK_SECRET=       # optional; omit for tests
 N8N_BASE_URL=             # e.g. http://localhost:5678
 S3_ENDPOINT=              # empty = AWS
-S3_REGION=auto
-S3_BUCKET=kip-documents
+S3_REGION=auto            # PROD: af-south-1 — the bucket's region, NOT the stack's ap-south-1
+S3_BUCKET=kip-documents   # PROD: kip-documents-unoc (already exists; also holds the promo video)
 S3_ACCESS_KEY_ID=
 S3_SECRET_ACCESS_KEY=
-S3_FORCE_PATH_STYLE=true
+S3_FORCE_PATH_STYLE=true  # PROD: false for real AWS
 ANTHROPIC_API_KEY=        # optional
 EOI_APPLICATION_FEE_USD=1000
 EOI_APPLICATION_FEE_UGX=3700000
@@ -402,6 +413,34 @@ Admins compose and send messages to investors or staff from **`/console/communic
 - Terminal status is derived, not set: no failures → `SENT`, none delivered → `FAILED`, otherwise `PARTIALLY_SENT`.
 - `CommunicationChannel.IN_APP` skips SMTP entirely; the `Notification` row *is* the message. An `EMAIL`-only send still writes rows (that's the delivery log) but the portal inbox filters them out.
 
+## EOI module (investor application)
+
+The six-section EOI is a transcription of the UNOC **"KIP Expression of Interest — Investor Portal Module: Master Content Specification"** (Business Development Unit). When a field's wording, requiredness or unit is in question, that document is the authority; `packages/shared/src/schemas/application.ts` is its executable form and carries the clause numbers in comments.
+
+**Two principles run through the schemas.** First, anything the Technical Committee tabulates across bidders is a **number in a fixed-length array**, never prose — the 3-year H3SE table (TRIR, LTIFR, fatalities, environmental incidents, penalties, lost days) and the 3-year Ugandan employment table exist so applicants for the same plot compare like for like. Attachments verify those numbers; they never replace them. Second, percentages are **derived, not typed** (`ugandanEmploymentPercentages()`) — a self-reported percentage that disagrees with its own counts is precisely what triggers a Request for Clarification.
+
+**Draft vs complete is the save-and-resume mechanism.** `PUT /applications/:id/section` takes `complete`. `false` stores the payload as-is without validating and **clears `completedAt`**; `true` runs the full section schema. Editing a finished section back into a partial state must un-complete it, or the submit guard counts a section the investor has since emptied. The wizard runs the *same* schema in the browser first, so errors land per-field before a request is made, and saves a draft even when validation fails — an investor who filled nine fields of ten never loses the nine.
+
+**Not Applicable is a first-class answer** (spec §8). Each section payload carries `notApplicable: Record<string, string>` — a path (`"statutoryCompliance.nssfCertificate"`) or a `DocumentKind` mapped to a written explanation. A blank field and a deliberate N/A are different things to an evaluator; collapsing them is what drives clarification requests. `requireUnlessNA()` in the schema treats a field as satisfied when it carries an explanation of 5+ characters. Document-kind keys and field paths share the map but can never collide (one is SCREAMING_SNAKE, the other dotted camelCase).
+
+**The submit guard re-validates the data, not the flags.** `submissionBlockers()` re-parses every stored payload against its section schema rather than trusting `completedAt` — a schema change, an admin raw-JSON edit, or an older payload can all leave a section flagged complete but no longer compliant. It also checks required attachments and the spec §8 cross-field rules (`crossSectionIssues()`: the declaration signatory must be one of the people named in the Power of Attorney, and the POA's granting company must match the Certificate of Incorporation). `GET /:id/blockers` is the same function exposed as a dry run, so the wizard's "Check my application" can never disagree with what submit enforces.
+
+**Attachments are registered after the upload, not before.** `POST /documents/presign` hands out a PUT URL but creates **no row**; `POST /documents` creates it once the browser's PUT succeeded. The payment-proof path in `payments/` does the opposite (row first) — do not copy it here: the submit guard counts rows, so a failed transfer would tell an investor their certificate was attached when the bucket held nothing. Single-file slots replace rather than accumulate. EOI limits are **PDF only, 5 MB** (`validateEoiFile()`), deliberately stricter than the 10 MB PDF/JPEG/PNG the S3 helper allows payment proof, because spec §1 explicitly permits a photo of a deposit slip.
+
+**One checklist, three consumers.** `packages/shared/src/eoi-documents.ts` (`EOI_DOCUMENT_REQUIREMENTS`) drives the wizard's upload slots, the submit-time completeness guard and the committee's view of what was supplied. Add an attachment there, not in the UI. Requirements are filtered by `ApplicantCategory` (LOCAL / INTERNATIONAL) — until the investor picks one, category-specific slots stay hidden rather than inviting the wrong upload.
+
+**`TimelineMilestone` and `ApplicationWindow` are different things — the window is the only gate.** The `EOI_CALL` milestone in `/console/settings` is *display*: it drives the portal stage tracker and the public schedule. Whether an investor can start or submit an EOI is decided solely by an `ApplicationWindow` with `status = OPEN` **and `now` inside `openAt`…`closeAt`** (`investor-data.ts`, `createApplication()`, `submitApplication()`). Setting the milestone to CURRENT opens nothing. Keep the two aligned by hand in `/console/windows`; a stale window left OPEN with a past `closeAt` presents as "the EOI application window is not currently open" with no explanation.
+
+Two guards now make that divergence visible instead of leaving it to be discovered by an investor:
+- **`eoiCallReadiness()`** (`admin/mappers.ts`, pure, `now` injected) cross-checks the advertised stage against the gate, and `/console/settings` renders it above the timeline editor — amber when an `EOI_CALL` milestone is CURRENT but no window is live (naming the stale window and whether it expired or hasn't started), blue for the reverse.
+- **`toWindowRow()` takes `now`** and no longer labels an out-of-range OPEN window "Active" — it reads `Open · date passed` / `Open · not started`. Status `OPEN` alone was rendering as Active on `/console/windows`, which is precisely what made an expired window look healthy.
+
+**`POST /applications` is the single entry point, and it is idempotent.** The dashboard's "Start my EOI application" card (`start-eoi-button.tsx`) is the only way an investor gets an `Application` row — one is never created at registration. The service returns an existing non-`WITHDRAWN` application instead of making a second, so a double-click cannot leave the investor with two drafts (only the newest is ever shown, so the other would be invisible but still counted in admin reports). `lotReference` is optional and defaults to `UNASSIGNED_LOT_REFERENCE` — the EOI states the area required (§2.1); a specific plot is assigned at allocation.
+
+**Section 1 is prefilled from registration but stays editable.** `prefillPreliminaryInfo()` seeds company name, registration number, country, legal form, TIN and contacts from `InvestorOrg`/`User`; the confirmed values are written into the section payload. The submitted EOI is therefore a self-contained record — a committee reading it later sees what was declared at submission, not whatever the org row says by then.
+
+**The seed validates itself.** `upsertSection()` in `packages/db/seed.ts` parses every payload against `sectionSchemas` and throws on failure, which is why `@kip/db` now depends on `@kip/shared`. Demo data that drifts from the schema otherwise fails silently — sections show as complete while submit rejects them.
+
 ## Analytics — Google Tag Manager
 
 Container **`GTM-T23BP8QS`**. **`apps/portal` only, but now across the whole app** — public marketing pages, the signed-in investor dashboard, the auth pages and `/launch`. `apps/web` (admin) still has no GTM at all. Widened from public-pages-only on 30 July 2026.
@@ -442,13 +481,19 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 |---|---|
 | `packages/db/src/index.ts` | Sequelize singleton + 19 model inits + associations |
 | `packages/db/src/models/` | 19 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones, communications) |
-| `packages/db/seed.ts` | Raw pg seed — idempotent |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones, communications, eoi-document-kinds) |
+| `packages/db/seed.ts` | Raw pg seed — idempotent. Section payloads are Zod-validated on write (see EOI module) |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `TimelineMilestoneStatus`, `computeTimeline()` (active = last started, manual status overrides win), `findMilestoneOfKind()`, `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
 | `packages/shared/src/communications.ts` | Pure broadcast rendering — `MERGE_TOKENS`, `applyMergeTokens()`, `sampleMergeVars()`, `renderBodyHtml()` (escape-then-format; the XSS boundary), `bodyExcerpt()`. Shared by the composer preview, the API's send, and the portal inbox. Tested in `apps/web/src/lib/communications.test.ts` |
+| `packages/shared/src/schemas/application.ts` | **The EOI, in executable form** — six section schemas transcribed from the Master Content Specification, the `notApplicable` mechanism (`requireUnlessNA`), EOI form enums + label maps, `ugandanEmploymentPercentages()`, `crossSectionIssues()`, `EOI_SECTION_ORDER`/`_LABELS`, `updateSectionSchema` (the `complete` flag), and the status transition table |
+| `packages/shared/src/eoi-documents.ts` | The attachment checklist — `EOI_DOCUMENT_REQUIREMENTS` (kind, clause, descriptor, required, multiple, applicant category, N/A allowed), `documentRequirementsFor()`, `missingRequiredDocuments()`, `validateEoiFile()`, `EOI_MAX_FILE_BYTES` (5 MB, PDF only). Pure |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
+| `apps/api/src/modules/documents/` | EOI attachments — presign / register-after-upload / list / download / delete, owner-or-ADMIN scoped |
+| `apps/portal/src/lib/eoi-data.ts` | `server-only` — `getEoiWizardData()` (application + sections + documents + prefill in one read) and `prefillPreliminaryInfo()` |
+| `apps/portal/src/lib/form-path.ts` | Pure dotted-path `getIn`/`setIn`/`appendTo`/`removeAt`/`issuesByPath` over section payloads — paths match Zod's `issue.path.join(".")` so errors map onto inputs with no translation layer. Unit-tested |
+| `apps/portal/src/app/(investor)/dashboard/eoi/` | The EOI wizard — `[section]/page.tsx` server shell → `eoi-wizard.tsx` (state, draft/complete saves, submit, blockers) + `eoi-sections.tsx` (the six forms) + `eoi-fields.tsx` (path-bound primitives, N/A toggles, repeatables, year rows) + `document-slots.tsx` (presign → PUT → register) |
 | `apps/api/src/errors.ts` | `AppError` + factory functions |
 | `apps/api/src/env.ts` | Zod-validated env |
 | `apps/api/src/server.ts` | Express setup — CORS, helmet, middleware, routes |
@@ -590,6 +635,16 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - `DataTypes.STRING` for long text — use `DataTypes.TEXT`
 - Select/return `passwordHash` or any secret in a view-model
 - Write through the read layer — mutations go via the API
+- Trust `ApplicationSection.completedAt` as proof a section is valid — re-validate the payload (`submissionBlockers()`); the flag only records that it passed *when saved*
+- Full-validate a section on a draft save, or stamp `completedAt` on one — that breaks save-and-resume (spec §8)
+- Create a `Document` row before the S3 upload succeeds — the submit guard counts rows, so a failed transfer would report a missing attachment as attached
+- Add an EOI attachment slot in the wizard UI — add it to `EOI_DOCUMENT_REQUIREMENTS`, which the guard and the committee view also read
+- Add a `DocumentKind` value without a migration — it is a Postgres ENUM type
+- Store a self-reported percentage the payload can already derive from its own counts (Ugandan employment); derive it instead
+- Ask for H3SE or National Content history as prose — those are the cross-bidder comparison tables and must stay numeric
+- Treat a blank field as Not Applicable — N/A needs a written explanation in the section's `notApplicable` map
+- Expect a `TimelineMilestone` (incl. `EOI_CALL`) to open or close anything — only `ApplicationWindow` gates the EOI
+- Assume an investor has an `Application` — registration creates none; `POST /applications` from the dashboard does
 - Query `@kip/db` from a client component or directly inside a page
 - One-layer route protection — need both middleware policy entry AND `requireRole()`
 - `NEXTAUTH_SECRET` drift between web and api

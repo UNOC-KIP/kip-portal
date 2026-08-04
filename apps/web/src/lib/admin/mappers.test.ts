@@ -19,6 +19,7 @@ import {
   toUserRow,
   toTcAppRow,
   toWindowRow,
+  eoiCallReadiness,
   toSiteVisitRow,
 } from "./mappers";
 
@@ -235,10 +236,95 @@ describe("row mappers", () => {
 
   it("toWindowRow maps lifecycle to badge variants", () => {
     const base = { id: "00000000-0000-0000-0000-000000000001", name: "Round 1", openAt: "2026-01-15T00:00:00Z", closeAt: "2026-06-30T00:00:00Z", sequenceCounter: 3 };
-    expect(toWindowRow({ ...base, status: "OPEN" }).statusVariant).toBe("window-active");
-    expect(toWindowRow({ ...base, status: "OPEN" }).statusLabel).toBe("Active");
-    expect(toWindowRow({ ...base, status: "CLOSED" }).statusVariant).toBe("window-closed");
-    expect(toWindowRow({ ...base, status: "WEIRD" }).statusVariant).toBe(null);
+    const during = new Date("2026-03-01T00:00:00Z");
+    expect(toWindowRow({ ...base, status: "OPEN" }, during).statusVariant).toBe("window-active");
+    expect(toWindowRow({ ...base, status: "OPEN" }, during).statusLabel).toBe("Active");
+    expect(toWindowRow({ ...base, status: "CLOSED" }, during).statusVariant).toBe("window-closed");
+    expect(toWindowRow({ ...base, status: "WEIRD" }, during).statusVariant).toBe(null);
+  });
+
+  // Status OPEN alone does not accept applications — the portal and the API also
+  // require `now` to be in range. The row must not claim "Active" when it isn't.
+  it("toWindowRow does not call an out-of-range OPEN window Active", () => {
+    const base = { id: "00000000-0000-0000-0000-000000000001", name: "Round 1", openAt: "2026-01-15T00:00:00Z", closeAt: "2026-06-30T00:00:00Z", status: "OPEN", sequenceCounter: 3 };
+
+    const expired = toWindowRow(base, new Date("2026-08-02T00:00:00Z"));
+    expect(expired.statusLabel).toBe("Open · date passed");
+    expect(expired.statusVariant).not.toBe("window-active");
+    expect(expired.detail).toContain("Not accepting applications");
+
+    const notYet = toWindowRow(base, new Date("2026-01-01T00:00:00Z"));
+    expect(notYet.statusLabel).toBe("Open · not started");
+    expect(notYet.statusVariant).not.toBe("window-active");
+  });
+});
+
+describe("eoiCallReadiness", () => {
+  const NOW = new Date("2026-08-02T12:00:00Z");
+  const CURRENT_CALL = [{ kind: "EOI_CALL", effectiveStatus: "CURRENT" }];
+  const liveWindow = {
+    name: "Round 1",
+    status: "OPEN",
+    openAt: "2026-08-01T00:00:00Z",
+    closeAt: "2026-09-02T00:00:00Z",
+  };
+
+  it("flags a current EOI_CALL milestone with an expired open window", () => {
+    const r = eoiCallReadiness(
+      CURRENT_CALL,
+      [{ ...liveWindow, openAt: "2026-01-15T00:00:00Z", closeAt: "2026-07-01T00:00:00Z" }],
+      NOW,
+    );
+    expect(r.issue).toBe("NO_OPEN_WINDOW");
+    expect(r.windowLive).toBe(false);
+    expect(r.staleWindow).toEqual({ name: "Round 1", reason: "ALREADY_CLOSED" });
+  });
+
+  it("flags a current EOI_CALL milestone with no open window at all", () => {
+    const r = eoiCallReadiness(CURRENT_CALL, [{ ...liveWindow, status: "CLOSED" }], NOW);
+    expect(r.issue).toBe("NO_OPEN_WINDOW");
+    expect(r.staleWindow).toBeNull();
+  });
+
+  it("reports no issue when the milestone and a live window agree", () => {
+    const r = eoiCallReadiness(CURRENT_CALL, [liveWindow], NOW);
+    expect(r.issue).toBeNull();
+    expect(r.windowLive).toBe(true);
+    expect(r.liveWindowName).toBe("Round 1");
+  });
+
+  it("flags a live window that the timeline does not advertise", () => {
+    const r = eoiCallReadiness(
+      [{ kind: "EOI_CALL", effectiveStatus: "UPCOMING" }],
+      [liveWindow],
+      NOW,
+    );
+    expect(r.issue).toBe("WINDOW_NOT_ADVERTISED");
+    expect(r.windowLive).toBe(true);
+  });
+
+  // A superseded window left OPEN must not mask the one that is actually live.
+  it("ignores a stale open window when a newer one is live", () => {
+    const r = eoiCallReadiness(
+      CURRENT_CALL,
+      [
+        { name: "Old", status: "OPEN", openAt: "2026-01-15T00:00:00Z", closeAt: "2026-07-01T00:00:00Z" },
+        liveWindow,
+      ],
+      NOW,
+    );
+    expect(r.issue).toBeNull();
+    expect(r.liveWindowName).toBe("Round 1");
+    expect(r.staleWindow).toBeNull();
+  });
+
+  it("stays quiet when neither the call nor a window is running", () => {
+    const r = eoiCallReadiness(
+      [{ kind: "EOI_CALL", effectiveStatus: "COMPLETED" }],
+      [{ ...liveWindow, status: "CLOSED" }],
+      NOW,
+    );
+    expect(r.issue).toBeNull();
   });
 });
 

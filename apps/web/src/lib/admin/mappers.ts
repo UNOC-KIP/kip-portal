@@ -705,14 +705,17 @@ export type ReportData = {
   investors: InvestorReportRow[];
 };
 
-export function toWindowRow(w: {
-  id: string;
-  name: string;
-  status: string;
-  openAt: Date | string;
-  closeAt: Date | string;
-  sequenceCounter: number;
-}): WindowRow {
+export function toWindowRow(
+  w: {
+    id: string;
+    name: string;
+    status: string;
+    openAt: Date | string;
+    closeAt: Date | string;
+    sequenceCounter: number;
+  },
+  now: Date = new Date(),
+): WindowRow {
   const span = `Open: ${formatShortDate(w.openAt)} · Closes: ${formatShortDate(w.closeAt)}`;
   const received = `${w.sequenceCounter} reference${w.sequenceCounter === 1 ? "" : "s"} assigned`;
   const base = {
@@ -724,8 +727,25 @@ export function toWindowRow(w: {
     sequenceCounter: w.sequenceCounter,
   };
   switch (w.status) {
-    case ApplicationWindowStatus.OPEN:
+    case ApplicationWindowStatus.OPEN: {
+      // Status OPEN is necessary but not sufficient: the API and the portal both
+      // additionally require `now` to be inside openAt…closeAt. Labelling an
+      // out-of-range window "Active" hid exactly that — it read as accepting
+      // applications while every investor was turned away.
+      const notYet = now < new Date(w.openAt);
+      const expired = now > new Date(w.closeAt);
+      if (notYet || expired) {
+        return {
+          ...base,
+          statusVariant: "window-scheduled",
+          statusLabel: notYet ? "Open · not started" : "Open · date passed",
+          detail: `${span} · ${received} · Not accepting applications — ${
+            notYet ? "the opening date is in the future" : "the closing date has passed"
+          }`,
+        };
+      }
       return { ...base, statusVariant: "window-active",    statusLabel: "Active",    detail: `${span} · ${received}` };
+    }
     case ApplicationWindowStatus.DRAFT:
       return { ...base, statusVariant: "window-scheduled", statusLabel: "Scheduled", detail: `${span} · Not yet open` };
     case ApplicationWindowStatus.CLOSED:
@@ -1069,6 +1089,80 @@ export function toTimelineMilestoneRow(
     status: m.status,
     statusLabel: TIMELINE_STATUS_LABELS[m.status as TimelineMilestoneStatus] ?? m.status,
     effectiveStatus,
+  };
+}
+
+/**
+ * Whether the "Call for EOI" the portal *advertises* matches what it will
+ * actually *accept*.
+ *
+ * These are two different tables and only one of them is a gate. A
+ * `TimelineMilestone` of kind `EOI_CALL` drives the portal stage tracker and the
+ * public schedule; whether an investor can start or submit an EOI is decided
+ * solely by an `ApplicationWindow` that is `OPEN` **and** whose `openAt…closeAt`
+ * contains `now`. Setting the milestone to CURRENT opens nothing.
+ *
+ * Nothing in the console made that visible, so the natural action — mark the EOI
+ * stage as the current one — produced a portal that announced an open call while
+ * every investor got "The EOI application window is not currently open". This
+ * surfaces the mismatch at the point where the milestone is edited.
+ *
+ * Pure: takes `now` rather than reading the clock, so it is deterministic.
+ */
+export type EoiCallReadiness = {
+  /** A window is OPEN *and* `now` falls inside it — investors can apply. */
+  windowLive: boolean;
+  /** Name of that window, for the message. */
+  liveWindowName: string | null;
+  /** An EOI_CALL milestone is showing as the current stage on the portal. */
+  milestoneCurrent: boolean;
+  /**
+   * `NO_OPEN_WINDOW` — advertised but shut: the damaging case.
+   * `WINDOW_NOT_ADVERTISED` — accepting EOIs the public schedule doesn't mention.
+   */
+  issue: "NO_OPEN_WINDOW" | "WINDOW_NOT_ADVERTISED" | null;
+  /** Why the newest OPEN window isn't live, when one exists but is out of range. */
+  staleWindow: { name: string; reason: "NOT_YET_OPEN" | "ALREADY_CLOSED" } | null;
+};
+
+export function eoiCallReadiness(
+  milestones: { kind: string; effectiveStatus: string }[],
+  windows: { name: string; status: string; openAt: Date | string; closeAt: Date | string }[],
+  now: Date,
+): EoiCallReadiness {
+  const milestoneCurrent = milestones.some(
+    (m) =>
+      m.kind === TimelineMilestoneKind.EOI_CALL &&
+      m.effectiveStatus === TimelineMilestoneStatus.CURRENT,
+  );
+
+  const open = windows
+    .filter((w) => w.status === ApplicationWindowStatus.OPEN)
+    .map((w) => ({ ...w, openAt: new Date(w.openAt), closeAt: new Date(w.closeAt) }))
+    .sort((a, b) => b.openAt.getTime() - a.openAt.getTime());
+
+  const live = open.find((w) => now >= w.openAt && now <= w.closeAt) ?? null;
+
+  // Only describe a stale window when nothing is live — otherwise an older
+  // expired-but-still-OPEN row would raise a false alarm.
+  let staleWindow: EoiCallReadiness["staleWindow"] = null;
+  if (!live && open[0]) {
+    staleWindow = {
+      name: open[0].name,
+      reason: now < open[0].openAt ? "NOT_YET_OPEN" : "ALREADY_CLOSED",
+    };
+  }
+
+  let issue: EoiCallReadiness["issue"] = null;
+  if (milestoneCurrent && !live) issue = "NO_OPEN_WINDOW";
+  else if (!milestoneCurrent && live) issue = "WINDOW_NOT_ADVERTISED";
+
+  return {
+    windowLive: !!live,
+    liveWindowName: live?.name ?? null,
+    milestoneCurrent,
+    issue,
+    staleWindow,
   };
 }
 

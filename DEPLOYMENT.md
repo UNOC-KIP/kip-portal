@@ -96,7 +96,40 @@ docker build -f apps/portal/Dockerfile -t kip-portal-app \
   | 80, 443                                       | 0.0.0.0/0                                                                                                                                                                                                                         |
   | Nothing else. Postgres/n8n are never exposed. |                                                                                                                                                                                                                                   |
 
-4. **IAM instance role** with S3 read/write on the documents bucket + a backups bucket (used by the backup cron; the API's presigner uses the `S3_`* env keys).
+4. **S3 — the documents bucket already exists: `kip-documents-unoc`.** Do not create a new one;
+   it also holds the public marketing video assets referenced by the portal. The API authenticates
+   as the IAM user **`kip-api`** via the `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` keys in
+   `.env.production` (not the instance role — `kip-ec2-role` is used by the backup cron). That
+   user has object-level rights only: `s3:GetBucketLocation`, `s3:GetBucketCORS` and
+   `s3:ListAllMyBuckets` are all denied, so `head-bucket` returns **403 even when object
+   access works perfectly**. Verify with an object round-trip, never with `head-bucket`.
+
+   **`S3_REGION` must be the bucket's region, and it is not the region the rest of the stack
+   runs in.** `kip-documents-unoc` is in **`af-south-1` (Cape Town)**; EC2/RDS are in `ap-south-1`
+   (Mumbai). This has bitten once already: `.env.production` said `ap-south-1`, and because
+   presigned URLs are signed for the configured region and **a browser cannot follow S3's
+   cross-region redirect**, every upload and download failed with
+   `400 IllegalLocationConstraintException`. The AWS CLI hides the problem — it transparently
+   retries in the correct region, so `aws s3api put-object` succeeds while the app is broken.
+   Confirm the true region without any credentials:
+   ```bash
+   curl -sI https://kip-documents-unoc.s3.amazonaws.com | grep -i x-amz-bucket-region
+   ```
+
+   **CORS is required or every upload fails.** Investors PUT their EOI attachments **straight from
+   the browser to S3** using a presigned URL — the file never passes through the API — so the
+   bucket must allow cross-origin PUT from the two portal hosts. Missing CORS is invisible
+   server-side: presigning is offline, so `/documents/presign` still returns a clean 200 while the
+   browser blocks the PUT. The policy is versioned at `deploy/s3-cors.json`; apply it with admin
+   credentials (CloudShell, or the S3 console → bucket → Permissions → CORS, which takes the
+   **bare array** without the `CORSRules` wrapper):
+   ```bash
+   aws s3api put-bucket-cors --bucket kip-documents-unoc --region af-south-1 \
+     --cors-configuration file://deploy/s3-cors.json
+   ```
+   Re-apply whenever the portal hostnames change. Keep the bucket otherwise private — presigned
+   URLs are the only intended access path for documents (PUT expires in 10 min, GET in 5); the
+   `public/` prefix holding the marketing video is the deliberate exception.
 5. **Install Docker + AWS CLI v2** (Ubuntu 24.04 no longer ships an `awscli` apt package):
   ```bash
    curl -fsSL https://get.docker.com | sudo sh

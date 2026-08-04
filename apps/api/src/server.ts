@@ -9,6 +9,7 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./modules/health/route.js";
 import { applicationsRouter } from "./modules/applications/route.js";
 import { paymentsRouter } from "./modules/payments/route.js";
+import { documentsRouter } from "./modules/documents/documents.router.js";
 import { n8nWebhookRouter } from "./modules/webhooks/n8n.js";
 import { usersRouter } from "./modules/users/users.router.js";
 import { windowsRouter } from "./modules/windows/windows.router.js";
@@ -35,6 +36,7 @@ export function createServer(): Application {
   app.use("/health", healthRouter);
   app.use("/applications", applicationsRouter);
   app.use("/payments", paymentsRouter);
+  app.use("/documents", documentsRouter);
   app.use("/webhooks/n8n", n8nWebhookRouter);
   app.use("/users", usersRouter);
   app.use("/windows", windowsRouter);

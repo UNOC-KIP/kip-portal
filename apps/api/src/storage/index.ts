@@ -2,6 +2,7 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../env.js";
+import { AppError } from "../errors.js";
 
 const s3 = new S3Client({
   region: env.S3_REGION,
@@ -16,6 +17,38 @@ const s3 = new S3Client({
       : undefined,
 });
 
+/**
+ * Static keys are configured. When false the SDK falls back to its default
+ * credential chain (env vars, then the EC2 instance role) — which is a valid
+ * production setup, so this is not on its own an error.
+ */
+export function hasStaticS3Credentials(): boolean {
+  return !!(env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY);
+}
+
+/**
+ * Presigning is an offline signing operation: it makes no network call and so
+ * never proves the bucket exists, the key is authorised, or CORS permits the
+ * browser's PUT. The only failure it *can* raise locally is the absence of any
+ * credentials at all, and the raw `CredentialsProviderError` reaches the
+ * investor as an unexplained 500 while they are trying to attach a document.
+ *
+ * Translate it into something an operator can act on. The remaining failure
+ * modes surface at the browser's PUT/GET against S3, not here.
+ */
+function asConfigError(e: unknown): never {
+  const name = e instanceof Error ? e.name : "";
+  if (name === "CredentialsProviderError" || name === "CredentialsError") {
+    throw new AppError({
+      statusCode: 503,
+      code: "STORAGE_NOT_CONFIGURED",
+      message:
+        "Document storage is not configured on this server, so files cannot be uploaded or downloaded. An administrator needs to set S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY (or attach an instance role with access to the documents bucket).",
+    });
+  }
+  throw e;
+}
+
 export async function presignUpload(opts: {
   key: string;
   contentType: string;
@@ -26,10 +59,14 @@ export async function presignUpload(opts: {
     Key: opts.key,
     ContentType: opts.contentType,
   });
-  const url = await getSignedUrl(s3, cmd, {
-    expiresIn: opts.expiresInSeconds ?? 300,
-  });
-  return { url, key: opts.key };
+  try {
+    const url = await getSignedUrl(s3, cmd, {
+      expiresIn: opts.expiresInSeconds ?? 300,
+    });
+    return { url, key: opts.key };
+  } catch (e) {
+    asConfigError(e);
+  }
 }
 
 export async function presignDownload(opts: {
@@ -40,7 +77,11 @@ export async function presignDownload(opts: {
     Bucket: env.S3_BUCKET,
     Key: opts.key,
   });
-  return getSignedUrl(s3, cmd, {
-    expiresIn: opts.expiresInSeconds ?? 300,
-  });
+  try {
+    return await getSignedUrl(s3, cmd, {
+      expiresIn: opts.expiresInSeconds ?? 300,
+    });
+  } catch (e) {
+    asConfigError(e);
+  }
 }
