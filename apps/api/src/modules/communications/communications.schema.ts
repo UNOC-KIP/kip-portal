@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { CommunicationAudience, CommunicationChannel } from "@kip/shared";
+import {
+  CommunicationAudience,
+  CommunicationChannel,
+  COMMUNICATION_ATTACHMENT_MAX_BYTES,
+  COMMUNICATION_ATTACHMENT_TYPES,
+} from "@kip/shared";
 import { env } from "../../env.js";
 
 /**
@@ -80,3 +85,50 @@ export type CreateCommunicationInput = z.infer<typeof createCommunicationSchema>
 export type SendTestInput = z.infer<typeof sendTestSchema>;
 export type TemplateInput = z.infer<typeof templateSchema>;
 export type RecipientInput = z.infer<typeof recipientSchema>;
+
+/**
+ * Broadcast attachment contracts.
+ *
+ * Mirrors the documents module's register-after-upload shape: presign hands out
+ * a PUT URL but creates no row, and the row is written only once the browser's
+ * PUT has succeeded. A row created up front would leave the composer offering a
+ * link to an object that was never stored.
+ */
+const attachmentFilename = z
+  .string()
+  .trim()
+  .min(1, "Filename is required")
+  .max(200, "Filename is too long")
+  // Anything that could climb out of the key prefix or confuse the S3 key.
+  .regex(/^[^/\:*?"<>|\r\n]+$/, "Filename contains invalid characters")
+  .refine((v) => !v.includes(".."), "Filename contains invalid characters");
+
+const attachmentContentType = z
+  .string()
+  .refine(
+    (v) => !!COMMUNICATION_ATTACHMENT_TYPES[v],
+    "That file type is not supported",
+  );
+
+const attachmentSize = z
+  .number()
+  .int()
+  .positive("That file is empty")
+  .max(COMMUNICATION_ATTACHMENT_MAX_BYTES, "Attachments must not exceed 25MB");
+
+export const presignAttachmentSchema = z.object({
+  filename: attachmentFilename,
+  contentType: attachmentContentType,
+  sizeBytes: attachmentSize,
+});
+
+export const registerAttachmentSchema = z.object({
+  attachmentId: z.string().uuid(),
+  filename: attachmentFilename,
+  storageKey: z.string().min(1),
+  mimeType: attachmentContentType,
+  sizeBytes: attachmentSize,
+});
+
+export type PresignAttachmentInput = z.infer<typeof presignAttachmentSchema>;
+export type RegisterAttachmentInput = z.infer<typeof registerAttachmentSchema>;

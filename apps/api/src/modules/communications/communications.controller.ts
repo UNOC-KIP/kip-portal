@@ -2,6 +2,8 @@ import type { RequestHandler } from "express";
 import {
   createCommunicationSchema,
   idParamSchema,
+  presignAttachmentSchema,
+  registerAttachmentSchema,
   sendTestSchema,
   templateSchema,
 } from "./communications.schema.js";
@@ -11,6 +13,9 @@ import {
   deleteCommunication,
   deleteTemplate,
   markRead,
+  presignAttachment,
+  registerAttachment,
+  resolveAttachmentDownload,
   retryUnsent,
   sendTest,
   updateTemplate,
@@ -94,6 +99,38 @@ export const handleMarkRead: RequestHandler = async (req, res, next) => {
     const { id } = idParamSchema.parse(req.params);
     await markRead(id, req.user!.id);
     res.json({ ok: true });
+  } catch (e) {
+    next(e);
+  }
+};
+
+export const handlePresignAttachment: RequestHandler = async (req, res, next) => {
+  try {
+    const input = presignAttachmentSchema.parse(req.body ?? {});
+    res.json(await presignAttachment(input));
+  } catch (e) {
+    next(e);
+  }
+};
+
+export const handleRegisterAttachment: RequestHandler = async (req, res, next) => {
+  try {
+    const input = registerAttachmentSchema.parse(req.body ?? {});
+    res.status(201).json(await registerAttachment(input, req.user!));
+  } catch (e) {
+    next(e);
+  }
+};
+
+/**
+ * Public download. Unauthenticated by design — see `resolveAttachmentDownload`.
+ * 302 to a freshly signed S3 URL rather than proxying the bytes, so a large
+ * file never occupies an API worker.
+ */
+export const handleDownloadAttachment: RequestHandler = async (req, res, next) => {
+  try {
+    const { id } = idParamSchema.parse(req.params);
+    res.redirect(302, await resolveAttachmentDownload(id));
   } catch (e) {
     next(e);
   }

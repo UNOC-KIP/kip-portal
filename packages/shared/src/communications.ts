@@ -171,3 +171,69 @@ export function bodyExcerpt(body: string, max = 160): string {
   const flat = body.replace(/\s+/g, " ").trim();
   return flat.length <= max ? flat : `${flat.slice(0, max - 1).trimEnd()}…`;
 }
+
+// ─── Broadcast attachments ───────────────────────────────────────────────────
+
+/**
+ * Files linked from a broadcast body.
+ *
+ * The limit is generous (25MB) precisely *because* the file is not mailed:
+ * it goes to S3 once and recipients follow a link, so neither the Office 365
+ * per-message size cap nor its ~30/minute throttle applies. Attaching the same
+ * file to a 500-recipient send would push it through the shared mailbox 500
+ * times; linking uploads it once.
+ */
+export const COMMUNICATION_ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Deliberately broader than the EOI's PDF-only rule. EOI attachments are
+ * evidence a committee must read in a fixed format; a broadcast attachment is
+ * whatever the secretariat needs to hand out — a map, a spreadsheet of plot
+ * dimensions, a slide deck.
+ */
+export const COMMUNICATION_ATTACHMENT_TYPES: Record<string, string> = {
+  "application/pdf": "PDF",
+  "image/jpeg": "JPEG image",
+  "image/png": "PNG image",
+  "application/msword": "Word document",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word document",
+  "application/vnd.ms-excel": "Excel spreadsheet",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel spreadsheet",
+  "application/vnd.ms-powerpoint": "PowerPoint deck",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation": "PowerPoint deck",
+};
+
+/** `accept` attribute for the composer's file input. */
+export const COMMUNICATION_ATTACHMENT_ACCEPT = Object.keys(
+  COMMUNICATION_ATTACHMENT_TYPES,
+).join(",");
+
+/** Human-readable size, for the composer's attachment list. */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Same check in the browser and in the API. The client-side call is a courtesy
+ * that gives an immediate error; the presign route is the actual control, since
+ * that is what hands out write access to the bucket.
+ */
+export function validateCommunicationFile(file: {
+  type: string;
+  size: number;
+}): string | null {
+  if (!COMMUNICATION_ATTACHMENT_TYPES[file.type]) {
+    return `That file type is not supported. Allowed: ${[
+      ...new Set(Object.values(COMMUNICATION_ATTACHMENT_TYPES)),
+    ].join(", ")}.`;
+  }
+  if (file.size <= 0) return "That file is empty.";
+  if (file.size > COMMUNICATION_ATTACHMENT_MAX_BYTES) {
+    return `Attachments must not exceed ${formatFileSize(
+      COMMUNICATION_ATTACHMENT_MAX_BYTES,
+    )}.`;
+  }
+  return null;
+}

@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
+  COMMUNICATION_ATTACHMENT_MAX_BYTES,
   MERGE_TOKENS,
   applyMergeTokens,
   bodyExcerpt,
+  formatFileSize,
   renderBodyHtml,
   sampleMergeVars,
+  validateCommunicationFile,
   type MergeVars,
 } from "@kip/shared";
 
@@ -207,5 +210,55 @@ describe("bodyExcerpt", () => {
 
   it("is empty-safe", () => {
     expect(bodyExcerpt("")).toBe("");
+  });
+});
+
+describe("validateCommunicationFile", () => {
+  const PDF = "application/pdf";
+
+  it("accepts a normal PDF", () => {
+    expect(validateCommunicationFile({ type: PDF, size: 2_000_000 })).toBeNull();
+  });
+
+  it("accepts office formats the secretariat actually sends", () => {
+    const xlsx =
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    expect(validateCommunicationFile({ type: xlsx, size: 1024 })).toBeNull();
+  });
+
+  it("rejects an unsupported type", () => {
+    const err = validateCommunicationFile({ type: "application/zip", size: 1024 });
+    expect(err).toContain("not supported");
+  });
+
+  it("rejects an empty file", () => {
+    expect(validateCommunicationFile({ type: PDF, size: 0 })).toContain("empty");
+  });
+
+  // The cap exists so one upload can't sit in the bucket unboundedly; it is far
+  // above the O365 message limit because the file is linked, never mailed.
+  it("rejects a file over the size cap", () => {
+    const err = validateCommunicationFile({
+      type: PDF,
+      size: COMMUNICATION_ATTACHMENT_MAX_BYTES + 1,
+    });
+    expect(err).toContain("25.0 MB");
+  });
+
+  it("accepts a file exactly at the cap", () => {
+    expect(
+      validateCommunicationFile({
+        type: PDF,
+        size: COMMUNICATION_ATTACHMENT_MAX_BYTES,
+      }),
+    ).toBeNull();
+  });
+});
+
+describe("formatFileSize", () => {
+  it("scales across units", () => {
+    expect(formatFileSize(512)).toBe("512 B");
+    expect(formatFileSize(2048)).toBe("2 KB");
+    expect(formatFileSize(3_500_000)).toBe("3.3 MB");
   });
 });
