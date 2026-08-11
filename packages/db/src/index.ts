@@ -22,6 +22,7 @@ import { SiteVisitBooking } from './models/site-visit-booking'
 import { TimelineMilestone } from './models/timeline-milestone'
 import { Communication } from './models/communication'
 import { CommunicationTemplate } from './models/communication-template'
+import { CommunicationAttachment } from './models/communication-attachment'
 
 const globalForDb = globalThis as unknown as { sequelize: Sequelize | undefined }
 
@@ -69,6 +70,7 @@ NotifySignup.initModel(sequelize)
 SiteVisitBooking.initModel(sequelize)
 TimelineMilestone.initModel(sequelize)
 CommunicationTemplate.initModel(sequelize)
+CommunicationAttachment.initModel(sequelize)
 Communication.initModel(sequelize)
 
 // ─── Associations ────────────────────────────────────────────────────────────
@@ -128,6 +130,8 @@ Communication.belongsTo(CommunicationTemplate, { foreignKey: 'templateId', as: '
 
 User.hasMany(CommunicationTemplate, { foreignKey: 'createdById', as: 'communicationTemplates' })
 CommunicationTemplate.belongsTo(User, { foreignKey: 'createdById', as: 'createdBy' })
+User.hasMany(CommunicationAttachment, { foreignKey: 'uploadedById', as: 'communicationAttachments' })
+CommunicationAttachment.belongsTo(User, { foreignKey: 'uploadedById', as: 'uploadedBy' })
 
 User.hasMany(Account, { foreignKey: 'userId', as: 'accounts' })
 Account.belongsTo(User, { foreignKey: 'userId', as: 'user' })
@@ -157,4 +161,5 @@ export {
   TimelineMilestone,
   Communication,
   CommunicationTemplate,
+  CommunicationAttachment,
 }

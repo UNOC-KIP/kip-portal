@@ -261,6 +261,9 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
         as: "reviewActions",
         include: [{ model: User, as: "actor", attributes: ["role"] }],
       },
+      // Falls back for a preview actor (ADMIN), whose own User row carries no
+      // `investorOrgId` — their org hangs off the application instead.
+      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] },
     ],
   });
 
@@ -282,6 +285,7 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
   const appWith = app as (Application & {
     sections?: ApplicationSection[];
     reviewActions?: (ReviewAction & { actor: User })[];
+    investorOrg?: InvestorOrg;
   }) | null;
   const sections = appWith?.sections ?? [];
 
@@ -297,7 +301,7 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
     : [];
 
   return {
-    orgName: org?.legalName ?? null,
+    orgName: org?.legalName ?? appWith?.investorOrg?.legalName ?? null,
     application: app
       ? {
           id: app.id,

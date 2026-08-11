@@ -8,6 +8,13 @@ const schema = z.object({
   DATABASE_URL: z.string().url(),
   API_PORT: z.coerce.number().int().positive().default(4001),
   WEB_PUBLIC_URL: z.string().url().default("http://localhost:4000"),
+  /**
+   * How the API is reached from a browser. Used to build broadcast attachment
+   * links, which are embedded in emails and so must be absolute and
+   * externally resolvable — the compose-time origin is not available at send
+   * time, and an internal compose hostname would be a dead link for recipients.
+   */
+  API_PUBLIC_URL: z.string().url().default("http://localhost:4001"),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace"])
     .default("info"),

@@ -5,7 +5,7 @@ import "server-only";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "./auth";
-import { INVESTOR_ONLY, homePathForRole, type Role } from "./rbac";
+import { PORTAL_WORKSPACE_ROLES, homePathForRole, type Role } from "./rbac";
 
 /**
  * Require an authenticated user whose role is in `allowed`.
@@ -20,7 +20,11 @@ export async function requireRole(allowed: readonly Role[]) {
   return { session, role };
 }
 
-/** Require the INVESTOR role. */
-export async function requireInvestor() {
-  return requireRole(INVESTOR_ONLY);
+/**
+ * Require a role that has a workspace on this portal — INVESTOR, or a preview
+ * role (ADMIN) driving the EOI journey. Returns the role so a layout can render
+ * the preview banner without a second session read.
+ */
+export async function requirePortalWorkspace() {
+  return requireRole(PORTAL_WORKSPACE_ROLES);
 }

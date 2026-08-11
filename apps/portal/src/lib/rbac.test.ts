@@ -1,14 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { homePathForRole, allowedRolesForPath, roleSatisfies, INVESTOR_ONLY } from "./rbac";
+import {
+  homePathForRole,
+  allowedRolesForPath,
+  roleSatisfies,
+  INVESTOR_ONLY,
+  PORTAL_WORKSPACE_ROLES,
+} from "./rbac";
 
 const ALL_ROLES = ["INVESTOR", "ADMIN", "TC_MEMBER", "TC_CHAIR", "LAC_MEMBER", "EXCO_MEMBER"];
+/** Staff with no workspace here — reviewers, who belong on the admin portal. */
+const NON_WORKSPACE_STAFF = ["TC_MEMBER", "TC_CHAIR", "LAC_MEMBER", "EXCO_MEMBER"];
 
 describe("homePathForRole", () => {
   it("routes INVESTOR to /dashboard", () => {
     expect(homePathForRole("INVESTOR")).toBe("/dashboard");
   });
-  it("sends all staff and unknown roles to sign-in", () => {
-    for (const role of ["ADMIN", "TC_MEMBER", "TC_CHAIR", "LAC_MEMBER", "EXCO_MEMBER"]) {
+  it("routes ADMIN to /dashboard for EOI preview", () => {
+    expect(homePathForRole("ADMIN")).toBe("/dashboard");
+  });
+  it("sends reviewer staff and unknown roles to sign-in", () => {
+    for (const role of NON_WORKSPACE_STAFF) {
       expect(homePathForRole(role)).toBe("/sign-in");
     }
     expect(homePathForRole(undefined)).toBe("/sign-in");
@@ -17,10 +28,10 @@ describe("homePathForRole", () => {
 });
 
 describe("allowedRolesForPath", () => {
-  it("gates /dashboard to INVESTOR only", () => {
-    expect(allowedRolesForPath("/dashboard")).toBe(INVESTOR_ONLY);
-    expect(allowedRolesForPath("/dashboard/eoi/1")).toBe(INVESTOR_ONLY);
-    expect(allowedRolesForPath("/dashboard/payment/bank")).toBe(INVESTOR_ONLY);
+  it("gates /dashboard to the portal workspace roles", () => {
+    expect(allowedRolesForPath("/dashboard")).toBe(PORTAL_WORKSPACE_ROLES);
+    expect(allowedRolesForPath("/dashboard/eoi/1")).toBe(PORTAL_WORKSPACE_ROLES);
+    expect(allowedRolesForPath("/dashboard/payment/bank")).toBe(PORTAL_WORKSPACE_ROLES);
   });
   it("allows /launch and /unauthorized for any authenticated role", () => {
     expect(allowedRolesForPath("/launch")).toBe("any");
@@ -36,8 +47,15 @@ describe("allowedRolesForPath", () => {
 describe("roleSatisfies", () => {
   it("only INVESTOR satisfies INVESTOR_ONLY", () => {
     expect(roleSatisfies(INVESTOR_ONLY, "INVESTOR")).toBe(true);
-    for (const role of ["ADMIN", "TC_MEMBER", "TC_CHAIR", "LAC_MEMBER", "EXCO_MEMBER"]) {
+    for (const role of ["ADMIN", ...NON_WORKSPACE_STAFF]) {
       expect(roleSatisfies(INVESTOR_ONLY, role)).toBe(false);
+    }
+  });
+  it("INVESTOR and ADMIN satisfy the dashboard policy, reviewers do not", () => {
+    expect(roleSatisfies(PORTAL_WORKSPACE_ROLES, "INVESTOR")).toBe(true);
+    expect(roleSatisfies(PORTAL_WORKSPACE_ROLES, "ADMIN")).toBe(true);
+    for (const role of NON_WORKSPACE_STAFF) {
+      expect(roleSatisfies(PORTAL_WORKSPACE_ROLES, role)).toBe(false);
     }
   });
   it("'any' allows all roles; null is public", () => {
@@ -49,13 +67,14 @@ describe("roleSatisfies", () => {
 });
 
 describe("no redirect loops (safety invariant)", () => {
-  it("INVESTOR home page is accessible to INVESTOR", () => {
-    const home = homePathForRole("INVESTOR");
-    const policy = allowedRolesForPath(home);
-    expect(roleSatisfies(policy, "INVESTOR")).toBe(true);
+  it("every role's home page is accessible to that role", () => {
+    for (const role of ["INVESTOR", "ADMIN"]) {
+      const home = homePathForRole(role);
+      expect(roleSatisfies(allowedRolesForPath(home), role)).toBe(true);
+    }
   });
-  it("staff home (/sign-in) is public", () => {
-    for (const role of ["ADMIN", "TC_MEMBER", "TC_CHAIR", "LAC_MEMBER", "EXCO_MEMBER"]) {
+  it("reviewer-staff home (/sign-in) is public", () => {
+    for (const role of NON_WORKSPACE_STAFF) {
       const home = homePathForRole(role);
       expect(home).toBe("/sign-in");
       expect(allowedRolesForPath(home)).toBeNull();

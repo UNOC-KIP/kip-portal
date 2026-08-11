@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import EmailProvider from "next-auth/providers/email";
 import { compare } from "bcryptjs";
 import { smtpTransportOptions } from "./smtp";
+import { UserRole, canPreviewEoi } from "@kip/shared";
 import {
   User,
   Account,
@@ -190,8 +191,14 @@ export const authOptions: NextAuthOptions = {
           );
         }
 
-        // Block staff accounts — they must use the admin portal
-        if (user.role && user.role !== "INVESTOR") {
+        // Staff belong on the admin portal — except the preview roles (ADMIN),
+        // which sign in here to exercise the investor EOI journey end to end.
+        // See `canPreviewEoi` in @kip/shared for why that is not a bypass.
+        if (
+          user.role &&
+          user.role !== UserRole.INVESTOR &&
+          !canPreviewEoi(user.role)
+        ) {
           throw new Error("Staff accounts must sign in at the admin portal.");
         }
 

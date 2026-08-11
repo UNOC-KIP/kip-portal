@@ -1,4 +1,12 @@
-import { sequelize, Communication, CommunicationTemplate, Notification, User } from "@kip/db";
+import { randomUUID } from "node:crypto";
+import {
+  sequelize,
+  Communication,
+  CommunicationAttachment,
+  CommunicationTemplate,
+  Notification,
+  User,
+} from "@kip/db";
 import {
   CommunicationChannel,
   CommunicationStatus,
@@ -13,8 +21,11 @@ import { logger } from "../../logger.js";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 import { fireWebhook } from "../../webhooks.js";
 import { announcementEmail, sendMail } from "../../mailer.js";
+import { presignDownload, presignUpload } from "../../storage/index.js";
 import type {
   CreateCommunicationInput,
+  PresignAttachmentInput,
+  RegisterAttachmentInput,
   SendTestInput,
   TemplateInput,
 } from "./communications.schema.js";
@@ -311,4 +322,99 @@ export async function markRead(notificationId: string, actorUserId: string): Pro
   if (row.readAt) return;
 
   await row.update({ readAt: new Date() });
+}
+
+// ─── Attachments ─────────────────────────────────────────────────────────────
+
+/**
+ * S3 key for a broadcast attachment. The id is in the path so two uploads of
+ * `map.pdf` cannot collide, and the original filename is kept as the last
+ * segment so a downloaded file arrives with a name that means something.
+ */
+function attachmentKeyFor(attachmentId: string, filename: string): string {
+  return `communications/attachments/${attachmentId}/${filename}`;
+}
+
+/** Hands out a PUT URL. Creates no row — see `registerAttachment`. */
+export async function presignAttachment(
+  input: PresignAttachmentInput,
+): Promise<{ attachmentId: string; uploadUrl: string; storageKey: string }> {
+  const attachmentId = randomUUID();
+  const storageKey = attachmentKeyFor(attachmentId, input.filename);
+
+  const { url: uploadUrl } = await presignUpload({
+    key: storageKey,
+    contentType: input.contentType,
+    expiresInSeconds: 600,
+  });
+
+  return { attachmentId, uploadUrl, storageKey };
+}
+
+/**
+ * Records the attachment once the browser's PUT has succeeded, and returns the
+ * permanent download URL to paste into the body.
+ *
+ * The URL points at this API rather than at S3 directly: a presigned GET expires
+ * in minutes, which is useless in an email someone opens next week, and making
+ * the object public would put it outside the bucket's private policy. The
+ * redirect route mints a fresh short-lived URL on each click instead.
+ */
+export async function registerAttachment(
+  input: RegisterAttachmentInput,
+  actor: { id: string },
+): Promise<{ id: string; filename: string; url: string; sizeBytes: number }> {
+  // Rebuilt rather than trusted, so a caller cannot register a row pointing at
+  // some other prefix in the bucket.
+  const expectedKey = attachmentKeyFor(input.attachmentId, input.filename);
+  if (input.storageKey !== expectedKey) {
+    throw BadRequest("Storage key does not match this upload");
+  }
+
+  const existing = await CommunicationAttachment.findByPk(input.attachmentId);
+  if (existing) throw Conflict("That attachment has already been registered");
+
+  const row = await CommunicationAttachment.create({
+    id: input.attachmentId,
+    filename: input.filename,
+    storageKey: input.storageKey,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    uploadedById: actor.id,
+  });
+
+  return {
+    id: row.id,
+    filename: row.filename,
+    url: attachmentUrl(row.id),
+    sizeBytes: row.sizeBytes,
+  };
+}
+
+/** The public, permanent link that goes in the body. */
+export function attachmentUrl(attachmentId: string): string {
+  return `${env.API_PUBLIC_URL}/communications/attachments/${attachmentId}`;
+}
+
+/**
+ * Resolves an attachment to a short-lived S3 URL for the download redirect.
+ *
+ * Intentionally unauthenticated: recipients drawn from the notify list have no
+ * account, so requiring a session would make the link dead for exactly the
+ * audience most likely to receive a public announcement. The unguessable id is
+ * the capability — the same security model as a presigned URL, without the
+ * expiry. Do not add an enumerable identifier to this route.
+ */
+export async function resolveAttachmentDownload(
+  attachmentId: string,
+): Promise<string> {
+  const row = await CommunicationAttachment.findByPk(attachmentId);
+  if (!row) throw NotFound("Attachment");
+
+  // Best-effort: a failed counter must never block the download.
+  row.increment("downloadCount").catch((err) => {
+    logger.warn({ err, attachmentId }, "failed to bump attachment downloadCount");
+  });
+
+  return presignDownload({ key: row.storageKey, expiresInSeconds: 300 });
 }

@@ -2,18 +2,28 @@
  * Investor-portal RBAC policy — pure and edge-safe.
  * No `next-auth`, no `@kip/db`, no server-only imports.
  */
-import { UserRole } from "@kip/shared";
+import { UserRole, EOI_PREVIEW_ROLES, canPreviewEoi } from "@kip/shared";
 
 export type Role = string;
 
 export const INVESTOR_ONLY = [UserRole.INVESTOR] as const;
 
 /**
- * Where the investor goes after login. Only INVESTOR has a workspace here;
- * everything else falls back to sign-in (staff blocked at authorize level).
+ * Roles that get an investor workspace on this portal: real investors, plus the
+ * preview roles (ADMIN) driving the EOI journey for testing. Every other staff
+ * role is still blocked at the `authorize` level and never reaches a policy.
+ */
+export const PORTAL_WORKSPACE_ROLES: readonly Role[] = [
+  UserRole.INVESTOR,
+  ...EOI_PREVIEW_ROLES,
+];
+
+/**
+ * Where a signed-in user goes after login. INVESTOR and the preview roles have
+ * a workspace here; everything else falls back to sign-in.
  */
 export function homePathForRole(role: Role | undefined | null): string {
-  if (role === UserRole.INVESTOR) return "/dashboard";
+  if (role === UserRole.INVESTOR || canPreviewEoi(role)) return "/dashboard";
   return "/sign-in";
 }
 
@@ -21,7 +31,7 @@ export function homePathForRole(role: Role | undefined | null): string {
 export type RolePolicy = readonly Role[] | "any" | null;
 
 const ROUTE_POLICY: { prefix: string; policy: RolePolicy }[] = [
-  { prefix: "/dashboard",    policy: INVESTOR_ONLY as readonly string[] },
+  { prefix: "/dashboard",    policy: PORTAL_WORKSPACE_ROLES },
   { prefix: "/launch",       policy: "any" },
   { prefix: "/unauthorized", policy: "any" },
 ];

@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CalendarDays, MapPin } from "lucide-react";
+import { canPreviewEoi } from "@kip/shared";
 import { authOptions } from "@/lib/auth";
 import { DashboardTopbar } from "@/components/dashboard-topbar";
 import { Button } from "@/components/ui/button";
@@ -19,9 +20,17 @@ export default async function SiteVisitPage() {
 
   // Bookings stay open through the booking window (admin-managed via the
   // SITE_VISIT_BOOKING timeline milestone — or the legacy SITE_VISIT milestone);
-  // once it closes the form becomes a closed notice.
+  // once it closes the form becomes a closed notice. The published schedule
+  // constrains investors, not a preview actor (ADMIN), who must be able to
+  // exercise the booking form between windows — same rule as the EOI gate.
   const { siteVisit } = await getTimelineData();
-  const bookingOpen = !siteVisit || Date.now() < new Date(siteVisit.bookingClosesAt).getTime();
+  const previewMode = canPreviewEoi(
+    (session.user as { role?: string } | undefined)?.role,
+  );
+  const bookingOpen =
+    previewMode ||
+    !siteVisit ||
+    Date.now() < new Date(siteVisit.bookingClosesAt).getTime();
 
   return (
     <div className="flex min-h-screen flex-col">

@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 2 August 2026. Update this file in the same commit as any architectural change.
+> Last updated: 11 August 2026. Update this file in the same commit as any architectural change.
+> Admin EOI preview added 11 August 2026 — ADMIN can sign into the investor portal and run the EOI with the window gate lifted. See "Admin EOI preview".
 > EOI module rebuilt 2 August 2026 to the UNOC Master Content Specification — see "EOI module".
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
@@ -73,7 +74,7 @@ kip-portal/
 
 | App | NextAuth config | Who can sign in |
 |---|---|---|
-| `apps/portal` (port 4002) | `apps/portal/src/lib/auth.ts` | `INVESTOR` only — staff are blocked at `authorize` level |
+| `apps/portal` (port 4002) | `apps/portal/src/lib/auth.ts` | `INVESTOR`, plus `ADMIN` for EOI preview — other staff blocked at `authorize` level |
 | `apps/web` (port 4000) | `apps/web/src/lib/auth.ts` | All staff roles — `INVESTOR` is blocked at `authorize` level |
 
 Both use Email + Credentials providers, custom `SequelizeAdapter()`, JWT session strategy. Callbacks extend token/session with `id` and `role`.
@@ -100,7 +101,7 @@ API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the Ne
 
 Two layers per portal, each with its own policy file:
 
-**`apps/portal` (investor)** — `apps/portal/src/lib/rbac.ts`:
+**`apps/portal` (investor)** — `apps/portal/src/lib/rbac.ts`. `INVESTOR_ONLY` is still the strict investor list; `PORTAL_WORKSPACE_ROLES` (`INVESTOR` + the EOI preview roles) is what actually gates `/dashboard`:
 1. **Edge** — `apps/portal/src/middleware.ts` checks JWT + role on every matched route.
 2. **Server** — `rbac-server.ts` `requireRole()` in every sensitive layout/page.
 
@@ -112,10 +113,10 @@ Two layers per portal, each with its own policy file:
 
 | App | Area | Path | Allowed roles |
 |---|---|---|---|
-| portal | Investor dashboard | `/dashboard/*` | `INVESTOR` |
-| portal | Site-visit booking | `/dashboard/site-visit` | `INVESTOR` |
-| portal | Account settings | `/dashboard/settings` | `INVESTOR` |
-| portal | Messages inbox | `/dashboard/messages` | `INVESTOR` |
+| portal | Investor dashboard | `/dashboard/*` | `INVESTOR`, `ADMIN` (preview) |
+| portal | Site-visit booking | `/dashboard/site-visit` | `INVESTOR`, `ADMIN` (preview) |
+| portal | Account settings | `/dashboard/settings` | `INVESTOR`, `ADMIN` (preview) |
+| portal | Messages inbox | `/dashboard/messages` | `INVESTOR`, `ADMIN` (preview) |
 | web | Communications | `/console/communications` | `ADMIN` |
 | web | Admin console | `/console/*` (non-TC) | `ADMIN` |
 | web | TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
@@ -214,6 +215,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `ClarificationRequest` | LAC REQUEST_MORE_INFO records |
 | `Notification` | **per-recipient delivery row for one `Communication`** — `userId` (nullable: notify-list recipients have no account), `communicationId`, `email`, `channel`, `subject`, `body` (stored already merge-rendered for *this* recipient, so inbox and email match word for word), `status (DeliveryStatus)`, `error` (SMTP failure reason), `sentAt`, `readAt`. Doubles as the investor Messages inbox when `userId` is set and the channel includes the portal. Was an unused table until 30 July 2026 |
 | `Communication` | one admin-composed broadcast — `subject`, `body` (raw markdown-lite), `channel (CommunicationChannel)`, `audience (CommunicationAudience)`, `audienceSummary` (human-readable, from `describeAudience()`), `filters JSONB` (the selection that produced the list), `status (CommunicationStatus)`, `recipientCount` / `sentCount` / `failedCount`, `templateId`, `createdById`, `sentAt`. Recipients are materialised as `Notification` rows at create time |
+| `CommunicationAttachment` | a file uploaded once and **linked** from a broadcast body — `filename`, `storageKey`, `mimeType`, `sizeBytes`, `downloadCount`, `uploadedById`. Deliberately has **no `communicationId`**: it is uploaded while the message is still being composed and one file can be linked from several broadcasts |
 | `CommunicationTemplate` | reusable subject + body for the composer — `name` (unique), `subject`, `body`, `description`, `createdById`. Bodies may carry `{{company}}`-style merge tokens |
 | `Inquiry` | public contact-form / live-chat messages — `channel (InquiryChannel)`, `status (InquiryStatus)`, `respondedById` → User; tracked in `/console/inquiries` |
 | `NotifySignup` | "notify me" emails from the portal home page — `email` unique |
@@ -282,7 +284,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
 | `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `PATCH /:id` edit + `DELETE /:id` (owner INVESTOR or ADMIN, **only while status = NEW** — delete is a hard delete so the investor can immediately re-book); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `timeline/` | `POST /` create, `PATCH /:id` update, `DELETE /:id` delete timeline milestones (ADMIN only). Position uniqueness + end-after-start guarded in the service; both portals read the table directly with `FALLBACK_MILESTONES` when empty |
-| `communications/` | admin broadcasts. `POST /` compose + send (ADMIN) — writes the `Communication` + one `Notification` per recipient in one transaction, then drains delivery **detached from the request**; `POST /test` send the draft to the acting admin only (deliberately no `to` field, so it can't relay); `POST /:id/retry` re-queue failed *and* stalled-`PENDING` rows; `DELETE /:id` (blocked while `SENDING`); `POST /templates`, `PATCH /templates/:id`, `DELETE /templates/:id`; `POST /inbox/:id/read` (INVESTOR/ADMIN, owner-checked in the service). Literal routes are declared before `/:id`. **The recipient list is resolved in the browser and posted** — see the Communications section below |
+| `communications/` | admin broadcasts. `POST /` compose + send (ADMIN) — writes the `Communication` + one `Notification` per recipient in one transaction, then drains delivery **detached from the request**; `POST /test` send the draft to the acting admin only (deliberately no `to` field, so it can't relay); `POST /:id/retry` re-queue failed *and* stalled-`PENDING` rows; `DELETE /:id` (blocked while `SENDING`); `POST /templates`, `PATCH /templates/:id`, `DELETE /templates/:id`; `POST /inbox/:id/read` (INVESTOR/ADMIN, owner-checked in the service); `POST /attachments/presign` + `POST /attachments` (ADMIN) and **`GET /attachments/:id`** — the one unauthenticated route, declared above `requireAuth`, 302 to a signed S3 URL. Literal routes are declared before `/:id`. **The recipient list is resolved in the browser and posted** — see the Communications section below |
 | `health/` | complete |
 
 ---
@@ -330,6 +332,7 @@ NODE_ENV=development
 DATABASE_URL=postgresql://kip:kip_dev_password@localhost:5433/kip_portal?schema=public
 API_PORT=4001
 WEB_PUBLIC_URL=http://localhost:4000
+API_PUBLIC_URL=http://localhost:4001   # public base for broadcast attachment links (goes into emails)
 LOG_LEVEL=info
 NEXTAUTH_SECRET=          # REQUIRED; must match both portals
 N8N_WEBHOOK_SECRET=       # optional; omit for tests
@@ -406,6 +409,10 @@ Admins compose and send messages to investors or staff from **`/console/communic
 
 **The recipient list is resolved in the browser.** `apps/web/src/lib/communication-audience.ts` (pure, DB-free, unit-tested) turns an `AudienceSelection` into concrete recipients, delegating segment filtering to the existing `filterInvestors()` in `report-filters.ts`. The console posts that explicit array to `POST /communications`. This keeps one filter implementation (a broadcast to "Heavy Industrial · Shortlisted" hits exactly the rows `/console/report/investors` shows) and guarantees the count next to the Send button is the count that gets mailed. It is not a privilege hole — the route is ADMIN-only and admins already read every address — but the API still validates each email, rejects duplicate addresses, and caps the array at `COMMUNICATION_MAX_RECIPIENTS`.
 
+**Attachments are linked, never mailed.** `POST /communications/attachments/presign` → browser PUT → `POST /communications/attachments` (register-after-upload, exactly like the documents module) stores the file once under `communications/attachments/{id}/{filename}` and returns a permanent URL the composer inserts as a `[filename](url)` markdown link. Mailing the file instead would push it through the shared `Support.Kip@unoc.com` mailbox once **per recipient** — a 3 MB PDF to 500 investors is ~1.5 GB against a mailbox capped at ~30 messages/minute and ~25 MB per message, and it is the same mailbox that carries credentials and password resets. So `CommunicationAttachment` has **no `communicationId`**: one upload can be linked from several broadcasts and exists before any `Communication` row does. Limits (25 MB, PDF/image/Office) live in `@kip/shared` `validateCommunicationFile()` and are enforced in the browser *and* at presign.
+
+**The attachment download route is the module's only unauthenticated endpoint, and that is deliberate.** `GET /communications/attachments/:id` is declared **above `communicationsRouter.use(requireAuth)`** and 302s to a freshly signed 5-minute S3 URL. Notify-list recipients have no `User` row, so a link demanding a session would be dead for exactly the audience a public announcement targets; the unguessable UUID is the capability, the same model as a presigned URL minus the expiry. Never move it below `requireAuth`, never give it an enumerable id, and never proxy the bytes through the API. Links are built from **`API_PUBLIC_URL`** — a wrong value produces dead links inside already-sent mail, which cannot be edited.
+
 **Sending is direct nodemailer, paced, and detached.** No queue table and no worker: `createAndSend()` commits the `Communication` plus one `PENDING` `Notification` per recipient in a single transaction, then kicks off `deliver()` with `void … .catch(log)`. `deliver()` loops sequentially, sleeping `EMAIL_SEND_INTERVAL_MS` between SMTP calls, and records each outcome (`SENT` + `sentAt`, or `FAILED` + the SMTP error). Consequences to keep in mind:
 
 - A 500-recipient send takes ~18 minutes. The request returns **202**, not 200 — the caller must poll (the console has a Refresh button), never assume "sent".
@@ -437,9 +444,20 @@ Two guards now make that divergence visible instead of leaving it to be discover
 
 **`POST /applications` is the single entry point, and it is idempotent.** The dashboard's "Start my EOI application" card (`start-eoi-button.tsx`) is the only way an investor gets an `Application` row — one is never created at registration. The service returns an existing non-`WITHDRAWN` application instead of making a second, so a double-click cannot leave the investor with two drafts (only the newest is ever shown, so the other would be invisible but still counted in admin reports). `lotReference` is optional and defaults to `UNASSIGNED_LOT_REFERENCE` — the EOI states the area required (§2.1); a specific plot is assigned at allocation.
 
+**Admin EOI preview — the one thing that lifts the window gate.** An `ADMIN` may sign into the *investor* portal (`apps/portal`) and drive the whole EOI journey with the `ApplicationWindow` gate lifted, so the flow is testable between calls. `packages/shared/src/eoi-preview.ts` is the single source: `EOI_PREVIEW_ROLES` (ADMIN only — TC/LAC/ExCo are reviewers and stay out), `canPreviewEoi()`, and `previewOrgLegalName()`. All three apps read it, so widening preview access is a one-line change in one file.
+
+What preview does and does not change:
+- **Lifted:** every schedule gate. `createApplication()` skips the open-window check entirely; `submitApplication()` skips the date-range check and falls back to the most recent window of any status when none is OPEN; the dashboard journey (`eoiUnlocked`) and the site-visit booking form open regardless of the published timeline. The schedule constrains outside investors, not the admin. The one thing submit still needs is *some* `ApplicationWindow` row — not for permission, but because the reference number is drawn from its year and `sequenceCounter`, and there is nowhere else to get one.
+- **Not lifted:** the payment gate, the section schemas, `submissionBlockers()`, the document checklist, ownership checks. A preview actor runs the *same* service methods as an investor — there is no second code path, which is the only reason preview proves anything.
+- **Sandbox org:** an `Application` needs an `investorOrgId` and staff have none, so `previewOrgFor()` find-or-creates an `InvestorOrg` named `[PREVIEW] <name>`. The admin's own `User.investorOrgId` is deliberately **not** written — investor reports filter on `role = INVESTOR`, so the admin stays out of them. Because the org now lives on the application rather than the user, `getEoiWizardData()` and `getInvestorDashboardData()` resolve it from `Application.investorOrgId` first.
+- **Real, not mocked:** real rows, real Zod validation, real S3 objects. That is the point — a stubbed S3 would not prove the bucket, its CORS policy or its region are right. `AdminPreviewBanner` says so on every dashboard page.
+- **Costs:** the test application is indistinguishable from a real one in admin reports, and submitting one consumes a number from the live window's `sequenceCounter`. Delete it (`DELETE /applications/:id`) when done.
+
 **Section 1 is prefilled from registration but stays editable.** `prefillPreliminaryInfo()` seeds company name, registration number, country, legal form, TIN and contacts from `InvestorOrg`/`User`; the confirmed values are written into the section payload. The submitted EOI is therefore a self-contained record — a committee reading it later sees what was declared at submission, not whatever the org row says by then.
 
 **The seed validates itself.** `upsertSection()` in `packages/db/seed.ts` parses every payload against `sectionSchemas` and throws on failure, which is why `@kip/db` now depends on `@kip/shared`. Demo data that drifts from the schema otherwise fails silently — sections show as complete while submit rejects them.
+
+**The EOI Investor Guide is the investor-facing companion to the spec.** The 13-page UNOC guide (document checklist, the six sections explained, local vs international paths, FAQ) lives in the documents bucket under the **public-read `public/` prefix** — a different access model from EOI attachments under `applications/`, which are only ever reachable through a presigned URL. The URL is defined once in `apps/portal/src/lib/resources.ts` and rendered by `EoiGuideCallout` on the home page, How It Works, Resources and the signed-in dashboard. Two things to keep right: **never commit the PDF to the repo** (same rule as the promo video), and keep `target="_blank"` on the link — browsers ignore the `download` attribute cross-origin, so without it the click navigates the investor off the portal.
 
 ## Analytics — Google Tag Manager
 
@@ -486,8 +504,10 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `TimelineMilestoneStatus`, `computeTimeline()` (active = last started, manual status overrides win), `findMilestoneOfKind()`, `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
-| `packages/shared/src/communications.ts` | Pure broadcast rendering — `MERGE_TOKENS`, `applyMergeTokens()`, `sampleMergeVars()`, `renderBodyHtml()` (escape-then-format; the XSS boundary), `bodyExcerpt()`. Shared by the composer preview, the API's send, and the portal inbox. Tested in `apps/web/src/lib/communications.test.ts` |
+| `packages/shared/src/communications.ts` | Pure broadcast rendering — `MERGE_TOKENS`, `applyMergeTokens()`, `sampleMergeVars()`, `renderBodyHtml()` (escape-then-format; the XSS boundary), `bodyExcerpt()`, plus the broadcast-attachment rules (`COMMUNICATION_ATTACHMENT_MAX_BYTES`, `COMMUNICATION_ATTACHMENT_TYPES`, `validateCommunicationFile()`, `formatFileSize()`). Shared by the composer preview, the API's send, and the portal inbox. Tested in `apps/web/src/lib/communications.test.ts` |
 | `packages/shared/src/schemas/application.ts` | **The EOI, in executable form** — six section schemas transcribed from the Master Content Specification, the `notApplicable` mechanism (`requireUnlessNA`), EOI form enums + label maps, `ugandanEmploymentPercentages()`, `crossSectionIssues()`, `EOI_SECTION_ORDER`/`_LABELS`, `updateSectionSchema` (the `complete` flag), and the status transition table |
+| `packages/shared/src/eoi-preview.ts` | Admin EOI preview policy — `EOI_PREVIEW_ROLES`, `canPreviewEoi()`, `previewOrgLegalName()`, `isPreviewOrgName()`. Pure; read by all three apps |
+| `apps/portal/src/components/admin-preview-banner.tsx` | Banner shown on every investor-portal page while a preview role is signed in — warns that the data is real |
 | `packages/shared/src/eoi-documents.ts` | The attachment checklist — `EOI_DOCUMENT_REQUIREMENTS` (kind, clause, descriptor, required, multiple, applicant category, N/A allowed), `documentRequirementsFor()`, `missingRequiredDocuments()`, `validateEoiFile()`, `EOI_MAX_FILE_BYTES` (5 MB, PDF only). Pure |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
 | `apps/api/src/modules/documents/` | EOI attachments — presign / register-after-upload / list / download / delete, owner-or-ADMIN scoped |
@@ -558,7 +578,9 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/portal/src/app/(public)/terms/page.tsx` | Terms of Service document — public static page |
 | `apps/portal/src/app/(public)/land-map/page.tsx` | Land map page — embeds `/kip-plot-map.pdf` + zone legend + infrastructure specs |
 | `apps/portal/src/app/(public)/about/page.tsx` | Dedicated About page — promo video, story/mandate, stats, zones, connectivity, gallery, partners, timeline. Video is hosted on S3/CloudFront (`PROMO_VIDEO_URL` const, `preload="none"`) — **never commit video files to the repo** |
-| `apps/portal/src/app/(public)/resources/page.tsx` | Downloads page — KIP plot map PDF + coming-soon placeholders |
+| `apps/portal/src/app/(public)/resources/page.tsx` | Downloads page — KIP plot map PDF, the EOI Investor Guide, + coming-soon placeholders |
+| `apps/portal/src/lib/resources.ts` | Published investor documents hosted in the bucket's public `public/` prefix — currently `EOI_INVESTOR_GUIDE`. **Never commit these binaries**, same rule as the promo video |
+| `apps/portal/src/components/eoi-guide-callout.tsx` | "Start here" download callout for the EOI Investor Guide — `light` (public pages) / `dark` (dashboard rail). Rendered on home, how-it-works, resources and the investor dashboard |
 | `apps/web/src/app/not-found.tsx` | Custom 404 page matching site design |
 | `apps/web/src/lib/public-data.ts` | `server-only` — `getActiveApplicationWindow()` queries DB for OPEN window (used on home page) |
 | `apps/web/public/kip-plot-map.pdf` | Official KIP Phase 2 plot allocation map |
@@ -644,6 +666,9 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Ask for H3SE or National Content history as prose — those are the cross-bidder comparison tables and must stay numeric
 - Treat a blank field as Not Applicable — N/A needs a written explanation in the section's `notApplicable` map
 - Expect a `TimelineMilestone` (incl. `EOI_CALL`) to open or close anything — only `ApplicationWindow` gates the EOI
+- Widen EOI preview beyond `ADMIN`, or hardcode the role check — change `EOI_PREVIEW_ROLES` in `@kip/shared`, which all three apps read
+- Give a preview actor a separate code path, mock S3, or skip validation — preview runs the real services or it proves nothing
+- Write `User.investorOrgId` on a staff account — the preview sandbox org hangs off the `Application`, which is what keeps admins out of investor reports
 - Assume an investor has an `Application` — registration creates none; `POST /applications` from the dashboard does
 - Query `@kip/db` from a client component or directly inside a page
 - One-layer route protection — need both middleware policy entry AND `requireRole()`
@@ -659,6 +684,8 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Send a generated password through a webhook from the register route
 - Interpolate user input into email HTML unescaped — use `escapeHtml()` from the app's `mailer.ts`
 - Render a broadcast body any way other than `renderBodyHtml()` from `@kip/shared` — it escapes before formatting, and is what makes the `dangerouslySetInnerHTML` call sites safe
+- Attach a file to a broadcast email instead of linking it — one upload serves the whole audience; mailing it sends the bytes once per recipient through the throttled shared mailbox
+- Move `GET /communications/attachments/:id` below `requireAuth`, or give it an enumerable id — notify-list recipients have no account, and the unguessable UUID is the capability
 - Add a free-form `to` field to `POST /communications/test` — a test send goes to the acting admin's own address, or it becomes an open relay
 - Send a broadcast larger than `COMMUNICATION_MAX_RECIPIENTS` through the shared mailbox — that needs SES/n8n
 - Await `deliver()` inside a request handler — a paced send runs for minutes and would time out the browser

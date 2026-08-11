@@ -2,14 +2,17 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Send, TestTube2 } from "lucide-react";
+import { Eye, Loader2, Paperclip, Send, TestTube2 } from "lucide-react";
 import {
   CommunicationChannel,
+  COMMUNICATION_ATTACHMENT_ACCEPT,
   COMMUNICATION_CHANNEL_LABELS,
   MERGE_TOKENS,
   applyMergeTokens,
+  formatFileSize,
   renderBodyHtml,
   sampleMergeVars,
+  validateCommunicationFile,
 } from "@kip/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +37,21 @@ const CHANNELS = [
   CommunicationChannel.IN_APP,
 ];
 
+/** What `POST /communications/attachments` returns. */
+type UploadedAttachment = {
+  id: string;
+  filename: string;
+  url: string;
+  sizeBytes: number;
+};
+
+async function errorMessage(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => ({}))) as {
+    error?: { message?: string };
+  };
+  return body?.error?.message ?? `Request failed (${res.status})`;
+}
+
 export function ComposeForm({
   view,
   onSent,
@@ -56,6 +74,11 @@ export function ComposeForm({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<UploadedAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
+
   const recipients = useMemo(
     () => resolveRecipients(view.pool, selection),
     [view.pool, selection],
@@ -75,21 +98,89 @@ export function ComposeForm({
 
   const canSend = subject.trim().length >= 3 && body.trim().length > 0 && recipients.length > 0;
 
-  /** Insert a merge token at the cursor rather than appending blindly. */
-  function insertToken(token: string) {
+  /** Insert text at the cursor rather than appending blindly. */
+  function insertAtCursor(text: string) {
     const el = bodyRef.current;
     if (!el) {
-      setBody((b) => b + token);
+      setBody((b) => b + text);
       return;
     }
     const start = el.selectionStart ?? body.length;
     const end = el.selectionEnd ?? body.length;
-    const next = body.slice(0, start) + token + body.slice(end);
-    setBody(next);
+    setBody(body.slice(0, start) + text + body.slice(end));
     requestAnimationFrame(() => {
       el.focus();
-      el.setSelectionRange(start + token.length, start + token.length);
+      el.setSelectionRange(start + text.length, start + text.length);
     });
+  }
+
+  const insertToken = insertAtCursor;
+
+  /**
+   * Upload a file and drop a markdown link to it into the body.
+   *
+   * presign → PUT → register, the same register-after-upload order the EOI
+   * documents module uses: the row is written only once S3 has the bytes, so a
+   * failed transfer can never leave the composer offering a link to nothing.
+   */
+  async function attachFile(file: File) {
+    setAttachError(null);
+
+    // Courtesy check — the presign route enforces the same rules server-side.
+    const invalid = validateCommunicationFile(file);
+    if (invalid) {
+      setAttachError(invalid);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const presignRes = await fetch(`${API_BASE}/communications/attachments/presign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          sizeBytes: file.size,
+        }),
+      });
+      if (!presignRes.ok) throw new Error(await errorMessage(presignRes));
+      const { attachmentId, uploadUrl, storageKey } = await presignRes.json();
+
+      const put = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+      if (!put.ok) {
+        throw new Error(
+          `Upload to storage failed (${put.status}). The file was not saved.`,
+        );
+      }
+
+      const registerRes = await fetch(`${API_BASE}/communications/attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          attachmentId,
+          filename: file.name,
+          storageKey,
+          mimeType: file.type,
+          sizeBytes: file.size,
+        }),
+      });
+      if (!registerRes.ok) throw new Error(await errorMessage(registerRes));
+      const saved: UploadedAttachment = await registerRes.json();
+
+      setAttachments((prev) => [...prev, saved]);
+      insertAtCursor(`[${saved.filename}](${saved.url})`);
+    } catch (e) {
+      setAttachError(e instanceof Error ? e.message : "Could not attach that file.");
+    } finally {
+      setUploading(false);
+    }
   }
 
   function loadTemplate(t: CommunicationTemplateRow) {
@@ -147,6 +238,10 @@ export function ComposeForm({
       setConfirmOpen(false);
       setSubject("");
       setBody("");
+      // Clears the composer's list only. The uploaded objects and their rows
+      // stay put — the links are already in a sent message and must keep working.
+      setAttachments([]);
+      setAttachError(null);
       setSelection(EMPTY_AUDIENCE);
       onSent();
       router.refresh();
@@ -242,7 +337,76 @@ export function ComposeForm({
               placeholder={"Dear {{company}},\n\nThe Kabalega Industrial Park EOI window closes on…"}
               className="font-mono text-xs leading-relaxed"
             />
-            <p className="mt-1 text-[11px] text-ink-400">{body.length} / 20,000 characters</p>
+            <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] text-ink-400">{body.length} / 20,000 characters</p>
+              <div className="flex items-center gap-2">
+                {uploading && (
+                  <span className="flex items-center gap-1.5 text-[11px] text-ink-500">
+                    <Loader2 size={12} className="animate-spin" />
+                    Uploading…
+                  </span>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept={COMMUNICATION_ATTACHMENT_ACCEPT}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void attachFile(f);
+                    e.target.value = "";
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={() => fileRef.current?.click()}
+                  className="flex items-center gap-1.5 rounded-full border border-ink-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-ink-600 transition hover:border-ink-400 hover:text-ink-900 disabled:opacity-50"
+                >
+                  <Paperclip size={12} />
+                  Attach a file
+                </button>
+              </div>
+            </div>
+
+            {/*
+              Files are linked, not attached to the email. One upload serves the
+              whole audience — attaching a 3MB PDF to a 500-recipient send would
+              push 1.5GB through the shared Office 365 mailbox that also carries
+              credentials and password resets, and would hit its size cap.
+            */}
+            {attachments.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {attachments.map((a) => (
+                  <li
+                    key={a.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-ink-200 bg-ink-50 px-2.5 py-1.5"
+                  >
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <Paperclip size={12} className="shrink-0 text-ink-400" />
+                      <span className="truncate text-[11px] font-medium text-ink-700">
+                        {a.filename}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-ink-400">
+                        {formatFileSize(a.sizeBytes)}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => insertAtCursor(`[${a.filename}](${a.url})`)}
+                      className="shrink-0 text-[11px] font-semibold text-ink-600 underline underline-offset-2 hover:text-ink-900"
+                    >
+                      Insert link
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {attachError && (
+              <p role="alert" className="mt-1.5 text-[11px] font-medium text-red-600">
+                {attachError}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-end gap-4">
