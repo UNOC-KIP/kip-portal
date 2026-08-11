@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
+import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { SiteFooter } from "@/components/site-footer";
 import { UserPlus, CreditCard, FileText, Send, ClipboardList, Award, CheckCircle2 } from "lucide-react";
 
@@ -72,6 +73,8 @@ export default function HowItWorksPage() {
 
       <section className="bg-white py-16">
         <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
+          <EoiGuideCallout className="mb-14" />
+
           <div className="mb-14 hidden items-center gap-0 md:flex">
             {STEPS.map((step, i) => (
               <div key={step.number} className="flex flex-1 items-center">

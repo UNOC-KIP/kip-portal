@@ -22,6 +22,7 @@ import { SECRETARIAT_EMAIL, escapeHtml, sendMail } from "@/lib/mailer";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
 import { CountdownTimer } from "@/components/countdown-timer";
+import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { HeroCarousel } from "@/components/hero-carousel";
 import { getActiveApplicationWindow } from "@/lib/public-data";
 import { getTimelineData } from "@/lib/timeline-data";
@@ -380,6 +381,13 @@ export default async function HomePage({
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* EOI Investor Guide — the "read this before you apply" document. */}
+      <section className="bg-white pb-14">
+        <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
+          <EoiGuideCallout />
         </div>
       </section>
 

@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { SiteVisitSummary } from "@/components/site-visit-summary";
+import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { StartEoiButton } from "./start-eoi-button";
 import {
   getInvestorDashboardData,
@@ -928,6 +929,10 @@ export default async function InvestorDashboardPage() {
                 </div>
               )}
             </Card>
+
+            {/* EOI Investor Guide — the reference an applicant needs open while
+                filling the six sections, not just before they start. */}
+            <EoiGuideCallout variant="dark" />
 
             {/* Support */}
             <div className="rounded-xl border-0 bg-gradient-to-br from-black to-ink-800 p-5 text-white shadow-sm">

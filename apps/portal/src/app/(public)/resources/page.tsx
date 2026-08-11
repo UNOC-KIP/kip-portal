@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Download, FileText, BookOpen, ClipboardList, MapPin, Shield, ExternalLink } from "lucide-react";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { EoiGuideCallout } from "@/components/eoi-guide-callout";
+import { EOI_INVESTOR_GUIDE } from "@/lib/resources";
 
 type ResourceItem = {
   icon: React.ElementType;
@@ -26,8 +28,30 @@ const RESOURCES: { category: string; items: ResourceItem[] }[] = [
   {
     category: "Application Guides",
     items: [
-      { icon: BookOpen,    title: "EOI Applicant Guide",       desc: "Step-by-step guide for completing your Expression of Interest, including section-by-section instructions and tips.", meta: "PDF · Coming soon", action: { label: "Coming Soon", comingSoon: true } },
-      { icon: ClipboardList, title: "Pre-Application Checklist", desc: "A checklist of documents and information you should have ready before starting your EOI to avoid delays.",              meta: "PDF · Coming soon", action: { label: "Coming Soon", comingSoon: true } },
+      {
+        icon: BookOpen,
+        title: EOI_INVESTOR_GUIDE.title,
+        desc: EOI_INVESTOR_GUIDE.description,
+        meta: EOI_INVESTOR_GUIDE.meta,
+        action: {
+          label: "Download PDF",
+          href: EOI_INVESTOR_GUIDE.url,
+          download: EOI_INVESTOR_GUIDE.filename,
+        },
+      },
+      // The guide's Section 3 is itself the pre-application checklist, so this
+      // points at the same file rather than promising a second document.
+      {
+        icon: ClipboardList,
+        title: "Pre-Application Document Checklist",
+        desc: "The full list of company, financial, track-record, H3SE and national-content documents to have ready before you start. Included as Section 3 of the Investor Guide.",
+        meta: "Included in the Investor Guide",
+        action: {
+          label: "Download PDF",
+          href: EOI_INVESTOR_GUIDE.url,
+          download: EOI_INVESTOR_GUIDE.filename,
+        },
+      },
     ],
   },
   {
@@ -68,6 +92,8 @@ export default function ResourcesPage() {
 
       <section className="bg-ink-100 py-16">
         <div className="mx-auto max-w-[1343px] px-5 sm:px-10 lg:px-[100px]">
+          <EoiGuideCallout className="mb-12 bg-white" />
+
           <div className="space-y-12">
             {RESOURCES.map(({ category, items }) => (
               <div key={category}>
@@ -91,7 +117,11 @@ export default function ResourcesPage() {
                             {isComingSoon ? (
                               <span className="inline-flex items-center rounded-full bg-ink-100 px-3 py-1 text-[12px] font-semibold text-black/40">Coming Soon</span>
                             ) : isDownload ? (
+                              // target=_blank matters for the S3-hosted files:
+                              // browsers ignore `download` cross-origin, so
+                              // without it the click navigates away from the site.
                               <a href={(action as { href: string; download: string }).href} download={(action as { download: string }).download}
+                                target="_blank" rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 rounded-[4px] bg-kip-red px-4 py-2 text-[13px] font-bold text-white transition hover:brightness-110">
                                 <Download size={13} /> {action.label}
                               </a>

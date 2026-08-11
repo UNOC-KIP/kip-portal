@@ -457,6 +457,8 @@ What preview does and does not change:
 
 **The seed validates itself.** `upsertSection()` in `packages/db/seed.ts` parses every payload against `sectionSchemas` and throws on failure, which is why `@kip/db` now depends on `@kip/shared`. Demo data that drifts from the schema otherwise fails silently — sections show as complete while submit rejects them.
 
+**The EOI Investor Guide is the investor-facing companion to the spec.** The 13-page UNOC guide (document checklist, the six sections explained, local vs international paths, FAQ) lives in the documents bucket under the **public-read `public/` prefix** — a different access model from EOI attachments under `applications/`, which are only ever reachable through a presigned URL. The URL is defined once in `apps/portal/src/lib/resources.ts` and rendered by `EoiGuideCallout` on the home page, How It Works, Resources and the signed-in dashboard. Two things to keep right: **never commit the PDF to the repo** (same rule as the promo video), and keep `target="_blank"` on the link — browsers ignore the `download` attribute cross-origin, so without it the click navigates the investor off the portal.
+
 ## Analytics — Google Tag Manager
 
 Container **`GTM-T23BP8QS`**. **`apps/portal` only, but now across the whole app** — public marketing pages, the signed-in investor dashboard, the auth pages and `/launch`. `apps/web` (admin) still has no GTM at all. Widened from public-pages-only on 30 July 2026.
@@ -576,7 +578,9 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/portal/src/app/(public)/terms/page.tsx` | Terms of Service document — public static page |
 | `apps/portal/src/app/(public)/land-map/page.tsx` | Land map page — embeds `/kip-plot-map.pdf` + zone legend + infrastructure specs |
 | `apps/portal/src/app/(public)/about/page.tsx` | Dedicated About page — promo video, story/mandate, stats, zones, connectivity, gallery, partners, timeline. Video is hosted on S3/CloudFront (`PROMO_VIDEO_URL` const, `preload="none"`) — **never commit video files to the repo** |
-| `apps/portal/src/app/(public)/resources/page.tsx` | Downloads page — KIP plot map PDF + coming-soon placeholders |
+| `apps/portal/src/app/(public)/resources/page.tsx` | Downloads page — KIP plot map PDF, the EOI Investor Guide, + coming-soon placeholders |
+| `apps/portal/src/lib/resources.ts` | Published investor documents hosted in the bucket's public `public/` prefix — currently `EOI_INVESTOR_GUIDE`. **Never commit these binaries**, same rule as the promo video |
+| `apps/portal/src/components/eoi-guide-callout.tsx` | "Start here" download callout for the EOI Investor Guide — `light` (public pages) / `dark` (dashboard rail). Rendered on home, how-it-works, resources and the investor dashboard |
 | `apps/web/src/app/not-found.tsx` | Custom 404 page matching site design |
 | `apps/web/src/lib/public-data.ts` | `server-only` — `getActiveApplicationWindow()` queries DB for OPEN window (used on home page) |
 | `apps/web/public/kip-plot-map.pdf` | Official KIP Phase 2 plot allocation map |
