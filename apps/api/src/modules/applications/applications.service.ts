@@ -5,6 +5,7 @@ import {
   ApplicationSection,
   ApplicationWindow,
   Document,
+  InvestorOrg,
   Payment,
   User,
 } from "@kip/db";
@@ -14,10 +15,12 @@ import {
   EoiSection,
   UserRole,
   UNASSIGNED_LOT_REFERENCE,
+  canPreviewEoi,
   canTransition,
   crossSectionIssues,
   formatReference,
   missingRequiredDocuments,
+  previewOrgLegalName,
   sectionSchemas,
   EOI_SECTION_LABELS,
   type ApplicantCategory,
@@ -118,10 +121,18 @@ export async function createApplication(
   actor: { id: string; role: string },
   input: { lotReference?: string },
 ): Promise<{ application: Application; created: boolean }> {
+  const preview = canPreviewEoi(actor.role);
+
   const user = await User.findByPk(actor.id, {
-    attributes: ["id", "investorOrgId"],
+    attributes: ["id", "name", "email", "investorOrgId"],
   });
-  if (!user?.investorOrgId) {
+  if (!user) throw NotFound("User");
+
+  // A preview actor is staff and has no organisation, so one is provisioned on
+  // first use. Every other account must already have one.
+  const investorOrgId =
+    user.investorOrgId ?? (preview ? (await previewOrgFor(user)).id : null);
+  if (!investorOrgId) {
     throw BadRequest("User has no associated investor organisation");
   }
 
@@ -136,15 +147,19 @@ export async function createApplication(
 
   // The window must be open to start, for the same reason it must be open to
   // submit — an EOI begun outside a call has nothing to be submitted into.
-  const window = await ApplicationWindow.findOne({
-    where: { status: ApplicationWindowStatus.OPEN },
-    order: [["openAt", "DESC"]],
-  });
-  const now = new Date();
-  if (!window || now < window.openAt || now > window.closeAt) {
-    throw Conflict(
-      "The EOI application window is not currently open. You will be notified when the next Call for Expressions of Interest opens.",
-    );
+  // Lifted for preview actors: being able to walk the journey between calls is
+  // the entire point of preview mode.
+  if (!preview) {
+    const window = await ApplicationWindow.findOne({
+      where: { status: ApplicationWindowStatus.OPEN },
+      order: [["openAt", "DESC"]],
+    });
+    const now = new Date();
+    if (!window || now < window.openAt || now > window.closeAt) {
+      throw Conflict(
+        "The EOI application window is not currently open. You will be notified when the next Call for Expressions of Interest opens.",
+      );
+    }
   }
 
   // No reference yet — it is assigned atomically at the SUBMITTED transition
@@ -153,10 +168,31 @@ export async function createApplication(
     lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
     status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
     ownerUserId: actor.id,
-    investorOrgId: user.investorOrgId,
+    investorOrgId,
   });
 
   return { application, created: true };
+}
+
+/**
+ * The sandbox `InvestorOrg` backing a preview actor's application.
+ *
+ * Found-or-created by legal name so a preview admin who deletes their test
+ * application and starts another lands on the same org rather than accumulating
+ * one per attempt. The `[PREVIEW]` prefix is what keeps it legible as a sandbox
+ * in the console — see `previewOrgLegalName` in @kip/shared.
+ */
+async function previewOrgFor(user: User): Promise<InvestorOrg> {
+  const legalName = previewOrgLegalName(user.name || user.email);
+  const [org] = await InvestorOrg.findOrCreate({
+    where: { legalName },
+    defaults: {
+      legalName,
+      countryOfIncorporation: "Uganda",
+      email: user.email,
+    },
+  });
+  return org;
 }
 
 /** A reason the application is not yet submittable, in investor-facing wording. */
@@ -306,13 +342,31 @@ export async function submitApplication(
   }
 
   // Window: there must be an OPEN window and now must be within its bounds.
-  const window = await ApplicationWindow.findOne({
-    where: { status: ApplicationWindowStatus.OPEN },
-    order: [["openAt", "DESC"]],
-  });
-  if (!window) throw Conflict("No open application window");
+  //
+  // A preview actor may submit against a window that is closed or out of range,
+  // but a window row must still exist — the reference number is drawn from its
+  // year and its `sequenceCounter`, and there is nowhere else to get one. Note
+  // that this consumes a real number from that window's sequence.
+  const preview = canPreviewEoi(actor.role);
+  const window =
+    (await ApplicationWindow.findOne({
+      where: { status: ApplicationWindowStatus.OPEN },
+      order: [["openAt", "DESC"]],
+    })) ??
+    (preview
+      ? await ApplicationWindow.findOne({ order: [["openAt", "DESC"]] })
+      : null);
+
+  if (!window) {
+    throw Conflict(
+      preview
+        ? "No application window exists to draw a reference number from. Create one in the admin console to test submission."
+        : "No open application window",
+    );
+  }
+
   const now = new Date();
-  if (now < window.openAt || now > window.closeAt) {
+  if (!preview && (now < window.openAt || now > window.closeAt)) {
     throw Forbidden("The application window is closed");
   }
 

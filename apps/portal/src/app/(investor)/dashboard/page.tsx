@@ -22,6 +22,7 @@ import {
 import {
   DOCUMENT_KIND_LABELS,
   KIP_ZONE_LABELS,
+  canPreviewEoi,
   type DocumentKind,
   type KipZone,
 } from "@kip/shared";
@@ -179,6 +180,15 @@ export default async function InvestorDashboardPage() {
 
   const windowOpen = !!windowCloseAt;
 
+  // A preview actor (ADMIN) reaches the EOI journey with no open window — the
+  // API lifts the same gate, so the dashboard must not present a dead end the
+  // server would have allowed. Only the journey unlocks; the countdown and the
+  // deadline copy still need a real window and stay hidden.
+  const previewMode = canPreviewEoi(
+    (session.user as { role?: string } | undefined)?.role,
+  );
+  const eoiUnlocked = windowOpen || previewMode;
+
   const paymentStatus = app?.paymentStatus ?? null;
   const paymentConfirmed = paymentStatus === "CONFIRMED";
   const paymentProofUploaded = paymentStatus === "PROOF_UPLOADED";
@@ -194,7 +204,7 @@ export default async function InvestorDashboardPage() {
   const progressPct = Math.round((completedCount / totalSections) * 100);
 
   const canSubmit =
-    paymentConfirmed && allSectionsComplete && app?.status === "DRAFT" && !!windowCloseAt;
+    paymentConfirmed && allSectionsComplete && app?.status === "DRAFT" && eoiUnlocked;
 
   const firstIncompleteIdx = sections.findIndex((s) => !s.complete);
   const nextSectionNum = firstIncompleteIdx >= 0 ? firstIncompleteIdx + 1 : 1;
@@ -303,7 +313,7 @@ export default async function InvestorDashboardPage() {
         )}
 
         {/* No application yet, and the call is open — this is the way in. */}
-        {!app && windowOpen && (
+        {!app && eoiUnlocked && (
           <Card>
             <p className="text-base font-bold text-ink-900">
               The Call for Expressions of Interest is open
@@ -435,7 +445,7 @@ export default async function InvestorDashboardPage() {
             )}
 
             {/* ── Window closed notice ─────────────────────────────── */}
-            {isPreSubmission && !windowOpen && (
+            {isPreSubmission && !eoiUnlocked && (
               <Card>
                 <p className="text-sm font-semibold text-ink-900">
                   The EOI application window is not currently open
@@ -448,7 +458,7 @@ export default async function InvestorDashboardPage() {
             )}
 
             {/* ── Pre-submission journey ───────────────────────────── */}
-            {isPreSubmission && windowOpen && (
+            {isPreSubmission && eoiUnlocked && (
               <>
                 {/* 3 steps */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

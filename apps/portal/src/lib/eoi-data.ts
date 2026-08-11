@@ -138,13 +138,18 @@ export async function getEoiWizardData(
   });
   if (!application) return null;
 
+  // The organisation on the application, not the one on the user: they are the
+  // same for an investor, but a preview actor (ADMIN) has no `investorOrgId` of
+  // their own and applies through the sandbox org created with the application.
+  const orgId = application.investorOrgId ?? user.investorOrgId;
+
   const [sections, documents, org] = await Promise.all([
     ApplicationSection.findAll({ where: { applicationId: application.id } }),
     Document.findAll({
       where: { applicationId: application.id },
       order: [["uploadedAt", "ASC"]],
     }),
-    user.investorOrgId ? InvestorOrg.findByPk(user.investorOrgId) : null,
+    orgId ? InvestorOrg.findByPk(orgId) : null,
   ]);
 
   return {

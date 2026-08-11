@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 2 August 2026. Update this file in the same commit as any architectural change.
+> Last updated: 11 August 2026. Update this file in the same commit as any architectural change.
+> Admin EOI preview added 11 August 2026 — ADMIN can sign into the investor portal and run the EOI with the window gate lifted. See "Admin EOI preview".
 > EOI module rebuilt 2 August 2026 to the UNOC Master Content Specification — see "EOI module".
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
 
@@ -73,7 +74,7 @@ kip-portal/
 
 | App | NextAuth config | Who can sign in |
 |---|---|---|
-| `apps/portal` (port 4002) | `apps/portal/src/lib/auth.ts` | `INVESTOR` only — staff are blocked at `authorize` level |
+| `apps/portal` (port 4002) | `apps/portal/src/lib/auth.ts` | `INVESTOR`, plus `ADMIN` for EOI preview — other staff blocked at `authorize` level |
 | `apps/web` (port 4000) | `apps/web/src/lib/auth.ts` | All staff roles — `INVESTOR` is blocked at `authorize` level |
 
 Both use Email + Credentials providers, custom `SequelizeAdapter()`, JWT session strategy. Callbacks extend token/session with `id` and `role`.
@@ -100,7 +101,7 @@ API middleware (`apps/api/src/middleware/auth.ts`): `requireAuth` decodes the Ne
 
 Two layers per portal, each with its own policy file:
 
-**`apps/portal` (investor)** — `apps/portal/src/lib/rbac.ts`:
+**`apps/portal` (investor)** — `apps/portal/src/lib/rbac.ts`. `INVESTOR_ONLY` is still the strict investor list; `PORTAL_WORKSPACE_ROLES` (`INVESTOR` + the EOI preview roles) is what actually gates `/dashboard`:
 1. **Edge** — `apps/portal/src/middleware.ts` checks JWT + role on every matched route.
 2. **Server** — `rbac-server.ts` `requireRole()` in every sensitive layout/page.
 
@@ -112,10 +113,10 @@ Two layers per portal, each with its own policy file:
 
 | App | Area | Path | Allowed roles |
 |---|---|---|---|
-| portal | Investor dashboard | `/dashboard/*` | `INVESTOR` |
-| portal | Site-visit booking | `/dashboard/site-visit` | `INVESTOR` |
-| portal | Account settings | `/dashboard/settings` | `INVESTOR` |
-| portal | Messages inbox | `/dashboard/messages` | `INVESTOR` |
+| portal | Investor dashboard | `/dashboard/*` | `INVESTOR`, `ADMIN` (preview) |
+| portal | Site-visit booking | `/dashboard/site-visit` | `INVESTOR`, `ADMIN` (preview) |
+| portal | Account settings | `/dashboard/settings` | `INVESTOR`, `ADMIN` (preview) |
+| portal | Messages inbox | `/dashboard/messages` | `INVESTOR`, `ADMIN` (preview) |
 | web | Communications | `/console/communications` | `ADMIN` |
 | web | Admin console | `/console/*` (non-TC) | `ADMIN` |
 | web | TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
@@ -443,6 +444,15 @@ Two guards now make that divergence visible instead of leaving it to be discover
 
 **`POST /applications` is the single entry point, and it is idempotent.** The dashboard's "Start my EOI application" card (`start-eoi-button.tsx`) is the only way an investor gets an `Application` row — one is never created at registration. The service returns an existing non-`WITHDRAWN` application instead of making a second, so a double-click cannot leave the investor with two drafts (only the newest is ever shown, so the other would be invisible but still counted in admin reports). `lotReference` is optional and defaults to `UNASSIGNED_LOT_REFERENCE` — the EOI states the area required (§2.1); a specific plot is assigned at allocation.
 
+**Admin EOI preview — the one thing that lifts the window gate.** An `ADMIN` may sign into the *investor* portal (`apps/portal`) and drive the whole EOI journey with the `ApplicationWindow` gate lifted, so the flow is testable between calls. `packages/shared/src/eoi-preview.ts` is the single source: `EOI_PREVIEW_ROLES` (ADMIN only — TC/LAC/ExCo are reviewers and stay out), `canPreviewEoi()`, and `previewOrgLegalName()`. All three apps read it, so widening preview access is a one-line change in one file.
+
+What preview does and does not change:
+- **Lifted:** every schedule gate. `createApplication()` skips the open-window check entirely; `submitApplication()` skips the date-range check and falls back to the most recent window of any status when none is OPEN; the dashboard journey (`eoiUnlocked`) and the site-visit booking form open regardless of the published timeline. The schedule constrains outside investors, not the admin. The one thing submit still needs is *some* `ApplicationWindow` row — not for permission, but because the reference number is drawn from its year and `sequenceCounter`, and there is nowhere else to get one.
+- **Not lifted:** the payment gate, the section schemas, `submissionBlockers()`, the document checklist, ownership checks. A preview actor runs the *same* service methods as an investor — there is no second code path, which is the only reason preview proves anything.
+- **Sandbox org:** an `Application` needs an `investorOrgId` and staff have none, so `previewOrgFor()` find-or-creates an `InvestorOrg` named `[PREVIEW] <name>`. The admin's own `User.investorOrgId` is deliberately **not** written — investor reports filter on `role = INVESTOR`, so the admin stays out of them. Because the org now lives on the application rather than the user, `getEoiWizardData()` and `getInvestorDashboardData()` resolve it from `Application.investorOrgId` first.
+- **Real, not mocked:** real rows, real Zod validation, real S3 objects. That is the point — a stubbed S3 would not prove the bucket, its CORS policy or its region are right. `AdminPreviewBanner` says so on every dashboard page.
+- **Costs:** the test application is indistinguishable from a real one in admin reports, and submitting one consumes a number from the live window's `sequenceCounter`. Delete it (`DELETE /applications/:id`) when done.
+
 **Section 1 is prefilled from registration but stays editable.** `prefillPreliminaryInfo()` seeds company name, registration number, country, legal form, TIN and contacts from `InvestorOrg`/`User`; the confirmed values are written into the section payload. The submitted EOI is therefore a self-contained record — a committee reading it later sees what was declared at submission, not whatever the org row says by then.
 
 **The seed validates itself.** `upsertSection()` in `packages/db/seed.ts` parses every payload against `sectionSchemas` and throws on failure, which is why `@kip/db` now depends on `@kip/shared`. Demo data that drifts from the schema otherwise fails silently — sections show as complete while submit rejects them.
@@ -494,6 +504,8 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
 | `packages/shared/src/communications.ts` | Pure broadcast rendering — `MERGE_TOKENS`, `applyMergeTokens()`, `sampleMergeVars()`, `renderBodyHtml()` (escape-then-format; the XSS boundary), `bodyExcerpt()`, plus the broadcast-attachment rules (`COMMUNICATION_ATTACHMENT_MAX_BYTES`, `COMMUNICATION_ATTACHMENT_TYPES`, `validateCommunicationFile()`, `formatFileSize()`). Shared by the composer preview, the API's send, and the portal inbox. Tested in `apps/web/src/lib/communications.test.ts` |
 | `packages/shared/src/schemas/application.ts` | **The EOI, in executable form** — six section schemas transcribed from the Master Content Specification, the `notApplicable` mechanism (`requireUnlessNA`), EOI form enums + label maps, `ugandanEmploymentPercentages()`, `crossSectionIssues()`, `EOI_SECTION_ORDER`/`_LABELS`, `updateSectionSchema` (the `complete` flag), and the status transition table |
+| `packages/shared/src/eoi-preview.ts` | Admin EOI preview policy — `EOI_PREVIEW_ROLES`, `canPreviewEoi()`, `previewOrgLegalName()`, `isPreviewOrgName()`. Pure; read by all three apps |
+| `apps/portal/src/components/admin-preview-banner.tsx` | Banner shown on every investor-portal page while a preview role is signed in — warns that the data is real |
 | `packages/shared/src/eoi-documents.ts` | The attachment checklist — `EOI_DOCUMENT_REQUIREMENTS` (kind, clause, descriptor, required, multiple, applicant category, N/A allowed), `documentRequirementsFor()`, `missingRequiredDocuments()`, `validateEoiFile()`, `EOI_MAX_FILE_BYTES` (5 MB, PDF only). Pure |
 | `packages/shared/src/schemas/` | Zod schemas for sections, documents, payments |
 | `apps/api/src/modules/documents/` | EOI attachments — presign / register-after-upload / list / download / delete, owner-or-ADMIN scoped |
@@ -650,6 +662,9 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Ask for H3SE or National Content history as prose — those are the cross-bidder comparison tables and must stay numeric
 - Treat a blank field as Not Applicable — N/A needs a written explanation in the section's `notApplicable` map
 - Expect a `TimelineMilestone` (incl. `EOI_CALL`) to open or close anything — only `ApplicationWindow` gates the EOI
+- Widen EOI preview beyond `ADMIN`, or hardcode the role check — change `EOI_PREVIEW_ROLES` in `@kip/shared`, which all three apps read
+- Give a preview actor a separate code path, mock S3, or skip validation — preview runs the real services or it proves nothing
+- Write `User.investorOrgId` on a staff account — the preview sandbox org hangs off the `Application`, which is what keeps admins out of investor reports
 - Assume an investor has an `Application` — registration creates none; `POST /applications` from the dashboard does
 - Query `@kip/db` from a client component or directly inside a page
 - One-layer route protection — need both middleware policy entry AND `requireRole()`
