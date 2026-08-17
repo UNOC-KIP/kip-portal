@@ -334,6 +334,9 @@ describe("toSiteVisitRow", () => {
     companyName: "Nile Industries Ltd",
     contactName: "Jane Mugisha",
     contactEmail: "jane@nile.ug",
+    contactPhone: "+256772000111",
+    companyPhone: "+256414000222",
+    companyEmail: "info@nile.ug",
     zone: "HEAVY_INDUSTRIAL",
     landUse: "Polymers & Plastics",
     description: "Polymer compounding plant with on-site warehousing.",
@@ -384,10 +387,27 @@ describe("toSiteVisitRow", () => {
     expect(row.scheduledAt).not.toBe("—");
   });
 
+  it("carries both the rep's and the company's contact details", () => {
+    const row = toSiteVisitRow(base);
+    expect(row.contactPhone).toBe("+256772000111");
+    expect(row.companyPhone).toBe("+256414000222");
+    expect(row.companyEmail).toBe("info@nile.ug");
+  });
+
   it("falls back to an em dash when the org has been detached", () => {
-    const row = toSiteVisitRow({ ...base, companyName: null, contactName: null });
+    const row = toSiteVisitRow({
+      ...base,
+      companyName: null,
+      contactName: null,
+      contactPhone: null,
+      companyPhone: null,
+      companyEmail: null,
+    });
     expect(row.companyName).toBe("—");
     expect(row.contactName).toBe("—");
+    expect(row.contactPhone).toBe("—");
+    expect(row.companyPhone).toBe("—");
+    expect(row.companyEmail).toBe("—");
   });
 });
 
@@ -497,8 +517,11 @@ describe("toInvestorReportRow", () => {
       id: "u1",
       name: null,
       email: "rep@acme.com",
+      phone: null,
       rawStatus: "ACTIVE",
       orgName: null,
+      orgPhone: null,
+      orgEmail: null,
       country: null,
       businessSector: null,
       companyType: null,
@@ -509,6 +532,9 @@ describe("toInvestorReportRow", () => {
     });
     expect(row.company).toBe("rep@acme.com");
     expect(row.rep).toBe("—");
+    expect(row.repPhone).toBe("—");
+    expect(row.companyPhone).toBe("—");
+    expect(row.companyEmail).toBe("—");
     expect(row.country).toBe("—");
     expect(row.paymentStatus).toBe("Not Paid");
     expect(row.eoiStage).toBe("Not started");
@@ -520,8 +546,11 @@ describe("toInvestorReportRow", () => {
       id: "u2",
       name: "Jane Rep",
       email: "jane@gulf.ae",
+      phone: "+971501234567",
       rawStatus: "ACTIVE",
       orgName: "Gulf Petrochem",
+      orgPhone: "+97145550100",
+      orgEmail: "info@gulf.ae",
       country: "UAE",
       businessSector: "PETROCHEMICALS_REFINING",
       companyType: "LIMITED_LIABILITY_COMPANY",
@@ -531,6 +560,9 @@ describe("toInvestorReportRow", () => {
       createdAt: new Date("2026-02-01T00:00:00Z"),
     });
     expect(row.company).toBe("Gulf Petrochem");
+    expect(row.repPhone).toBe("+971501234567");
+    expect(row.companyPhone).toBe("+97145550100");
+    expect(row.companyEmail).toBe("info@gulf.ae");
     expect(row.accountStatus).toBe("Active");
     expect(row.paymentStatus).toBe("Confirmed");
     expect(row.eoiStage).toBe("LAC review");
