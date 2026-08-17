@@ -106,7 +106,10 @@ export function buildCsv(
 export const INVESTOR_EXPORT_COLUMNS: { header: string; key: string }[] = [
   { header: "Company", key: "company" },
   { header: "Representative", key: "rep" },
-  { header: "Email", key: "email" },
+  { header: "Representative Email", key: "email" },
+  { header: "Representative Phone", key: "repPhone" },
+  { header: "Company Phone", key: "companyPhone" },
+  { header: "Company Email", key: "companyEmail" },
   { header: "Country", key: "country" },
   { header: "Sector", key: "sector" },
   { header: "Company Type", key: "companyType" },
@@ -278,7 +281,10 @@ export function buildOverviewSummary(data: {
 export const SITE_VISIT_EXPORT_COLUMNS: { header: string; key: string }[] = [
   { header: "Company", key: "companyName" },
   { header: "Contact", key: "contactName" },
-  { header: "Email", key: "contactEmail" },
+  { header: "Contact Email", key: "contactEmail" },
+  { header: "Contact Phone", key: "contactPhone" },
+  { header: "Company Phone", key: "companyPhone" },
+  { header: "Company Email", key: "companyEmail" },
   { header: "Country", key: "country" },
   { header: "Zone", key: "zone" },
   { header: "Land Use", key: "landUse" },

@@ -416,6 +416,11 @@ export type SiteVisitRow = {
   companyName: string;
   contactName: string;
   contactEmail: string;
+  /** Authorized representative's phone — the number to call about this visit. */
+  contactPhone: string;
+  /** `InvestorOrg` contact block — the company's own switchboard / inbox. */
+  companyPhone: string;
+  companyEmail: string;
   zone: string;
   /** Raw `KipZone` key — what the site-visit report's zone filter matches on. */
   zoneKey: string;
@@ -446,6 +451,9 @@ export function toSiteVisitRow(b: {
   companyName: string | null;
   contactName: string | null;
   contactEmail: string;
+  contactPhone: string | null;
+  companyPhone: string | null;
+  companyEmail: string | null;
   zone: string;
   landUse: string;
   description: string;
@@ -462,6 +470,9 @@ export function toSiteVisitRow(b: {
     companyName: b.companyName ?? DASH,
     contactName: b.contactName ?? DASH,
     contactEmail: b.contactEmail,
+    contactPhone: b.contactPhone ?? DASH,
+    companyPhone: b.companyPhone ?? DASH,
+    companyEmail: b.companyEmail ?? DASH,
     zone: zoneMeta?.label ?? b.zone,
     zoneKey: b.zone,
     zoneColor: zoneMeta?.color ?? "bg-ink-300",
@@ -586,6 +597,15 @@ export type InvestorReportRow = {
   company: string;
   rep: string;
   email: string;
+  /**
+   * Contact numbers. `repPhone` is the authorized representative's own line
+   * (`User.phone`, the login-holder); `companyPhone` / `companyEmail` are the
+   * `InvestorOrg` contact block — a company switchboard that outlives the rep.
+   * Both are exported, because either can be the only one that reaches them.
+   */
+  repPhone: string;
+  companyPhone: string;
+  companyEmail: string;
   country: string;
   sector: string;
   companyType: string;
@@ -623,8 +643,11 @@ export function toInvestorReportRow(u: {
   id: string;
   name: string | null;
   email: string;
+  phone: string | null;
   rawStatus: string;
   orgName: string | null;
+  orgPhone: string | null;
+  orgEmail: string | null;
   country: string | null;
   businessSector: string | null;
   companyType: string | null;
@@ -647,6 +670,9 @@ export function toInvestorReportRow(u: {
     company: u.orgName ?? u.name ?? u.email,
     rep: u.name ?? DASH,
     email: u.email,
+    repPhone: u.phone ?? DASH,
+    companyPhone: u.orgPhone ?? DASH,
+    companyEmail: u.orgEmail ?? DASH,
     country: u.country ?? DASH,
     sector: businessSectorLabel(u.businessSector),
     companyType: companyTypeLabel(u.companyType),

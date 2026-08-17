@@ -517,7 +517,15 @@ export async function getSiteVisitsView(): Promise<SiteVisitsView> {
       {
         model: InvestorOrg,
         as: "investorOrg",
-        attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType", "registrationNumber"],
+        attributes: [
+          "legalName",
+          "countryOfIncorporation",
+          "businessSector",
+          "companyType",
+          "registrationNumber",
+          "phone",
+          "email",
+        ],
         required: false,
       },
     ],
@@ -557,6 +565,9 @@ export async function getSiteVisitsView(): Promise<SiteVisitsView> {
       companyName: b.investorOrg?.legalName ?? null,
       contactName: b.user?.name ?? null,
       contactEmail: b.user?.email ?? "—",
+      contactPhone: b.user?.phone ?? null,
+      companyPhone: b.investorOrg?.phone ?? null,
+      companyEmail: b.investorOrg?.email ?? null,
       zone: b.zone,
       landUse: b.landUse,
       description: b.description,
@@ -802,12 +813,19 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
     await Promise.all([
       User.findAll({
         where: { role: UserRole.INVESTOR },
-        attributes: ["id", "name", "email", "status", "createdAt"],
+        attributes: ["id", "name", "email", "phone", "status", "createdAt"],
         include: [
           {
             model: InvestorOrg,
             as: "investorOrg",
-            attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType"],
+            attributes: [
+              "legalName",
+              "countryOfIncorporation",
+              "businessSector",
+              "companyType",
+              "phone",
+              "email",
+            ],
           },
           {
             model: Application,
@@ -906,8 +924,11 @@ export async function getReportData(now: Date = new Date()): Promise<ReportData>
       id: u.id,
       name: u.name ?? null,
       email: u.email,
+      phone: u.phone ?? null,
       rawStatus: u.status as string,
       orgName: org?.legalName ?? null,
+      orgPhone: org?.phone ?? null,
+      orgEmail: org?.email ?? null,
       country: org?.countryOfIncorporation ?? null,
       businessSector: org?.businessSector ?? null,
       companyType: org?.companyType ?? null,
@@ -1401,12 +1422,19 @@ export type RecipientPool = {
 async function listInvestorReportRows(limit = 1000): Promise<InvestorReportRow[]> {
   const users = await User.findAll({
     where: { role: UserRole.INVESTOR },
-    attributes: ["id", "name", "email", "status", "createdAt"],
+    attributes: ["id", "name", "email", "phone", "status", "createdAt"],
     include: [
       {
         model: InvestorOrg,
         as: "investorOrg",
-        attributes: ["legalName", "countryOfIncorporation", "businessSector", "companyType"],
+        attributes: [
+          "legalName",
+          "countryOfIncorporation",
+          "businessSector",
+          "companyType",
+          "phone",
+          "email",
+        ],
       },
       {
         model: Application,
@@ -1442,8 +1470,11 @@ async function listInvestorReportRows(limit = 1000): Promise<InvestorReportRow[]
       id: u.id,
       name: u.name ?? null,
       email: u.email,
+      phone: u.phone ?? null,
       rawStatus: u.status as string,
       orgName: org?.legalName ?? null,
+      orgPhone: org?.phone ?? null,
+      orgEmail: org?.email ?? null,
       country: org?.countryOfIncorporation ?? null,
       businessSector: org?.businessSector ?? null,
       companyType: org?.companyType ?? null,
