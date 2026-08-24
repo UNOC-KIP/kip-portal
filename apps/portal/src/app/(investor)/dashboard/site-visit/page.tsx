@@ -27,10 +27,7 @@ export default async function SiteVisitPage() {
   const previewMode = canPreviewEoi(
     (session.user as { role?: string } | undefined)?.role,
   );
-  const bookingOpen =
-    previewMode ||
-    !siteVisit ||
-    Date.now() < new Date(siteVisit.bookingClosesAt).getTime();
+  const bookingOpen = previewMode || !siteVisit || siteVisit.bookingOpen;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -57,7 +54,7 @@ export default async function SiteVisitPage() {
         </div>
 
         {booking ? (
-          <SiteVisitManage booking={booking} />
+          <SiteVisitManage booking={booking} bookingOpen={bookingOpen} />
         ) : bookingOpen ? (
           <div className="space-y-4">
             <div className="flex items-start gap-3 rounded-xl border border-brand-200 bg-brand-50 px-5 py-4">

@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 11 August 2026. Update this file in the same commit as any architectural change.
+> Last updated: 24 August 2026. Update this file in the same commit as any architectural change.
+> Site-visit booking gate enforced end to end 24 August 2026 — one pure gate closes the form, the public CTAs and the API writes together. See "Site-visit booking window".
 > Admin EOI preview added 11 August 2026 — ADMIN can sign into the investor portal and run the EOI with the window gate lifted. See "Admin EOI preview".
 > EOI module rebuilt 2 August 2026 to the UNOC Master Content Specification — see "EOI module".
 > Architecture updated 25 June 2026: split into two Next.js apps — `apps/web` (admin) + `apps/portal` (investor).
@@ -282,7 +283,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `users/` | **Self-service (any authenticated user, declared before `/:id`):** `PATCH /me` (own rep details + own org contact block — never email/role/status/legal identity); `POST /me/password` (verify current → set new, stamps `passwordChangedAt`, best-effort confirmation email). **ADMIN only:** `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject`; `POST /:id/reset-password` (ACTIVE accounts only — generates a new temp password, clears `passwordChangedAt`, emails it to the login address; plaintext never returned to the admin or any webhook) |
 | `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
 | `inquiries/` | `POST /:id/status` — move inquiry NEW/RESPONDED/CLOSED (ADMIN only) |
-| `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `PATCH /:id` edit + `DELETE /:id` (owner INVESTOR or ADMIN, **only while status = NEW** — delete is a hard delete so the investor can immediately re-book); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
+| `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `PATCH /:id` edit + `DELETE /:id` (owner INVESTOR or ADMIN, **only while status = NEW and the booking window is open** — delete is a hard delete so the investor can immediately re-book); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `timeline/` | `POST /` create, `PATCH /:id` update, `DELETE /:id` delete timeline milestones (ADMIN only). Position uniqueness + end-after-start guarded in the service; both portals read the table directly with `FALLBACK_MILESTONES` when empty |
 | `communications/` | admin broadcasts. `POST /` compose + send (ADMIN) — writes the `Communication` + one `Notification` per recipient in one transaction, then drains delivery **detached from the request**; `POST /test` send the draft to the acting admin only (deliberately no `to` field, so it can't relay); `POST /:id/retry` re-queue failed *and* stalled-`PENDING` rows; `DELETE /:id` (blocked while `SENDING`); `POST /templates`, `PATCH /templates/:id`, `DELETE /templates/:id`; `POST /inbox/:id/read` (INVESTOR/ADMIN, owner-checked in the service); `POST /attachments/presign` + `POST /attachments` (ADMIN) and **`GET /attachments/:id`** — the one unauthenticated route, declared above `requireAuth`, 302 to a signed S3 URL. Literal routes are declared before `/:id`. **The recipient list is resolved in the browser and posted** — see the Communications section below |
 | `health/` | complete |
@@ -420,6 +421,19 @@ Admins compose and send messages to investors or staff from **`/console/communic
 - Terminal status is derived, not set: no failures → `SENT`, none delivered → `FAILED`, otherwise `PARTIALLY_SENT`.
 - `CommunicationChannel.IN_APP` skips SMTP entirely; the `Notification` row *is* the message. An `EMAIL`-only send still writes rows (that's the delivery log) but the portal inbox filters them out.
 
+## Site-visit booking window
+
+Whether an investor may request a site visit is decided by **one pure function** — `siteVisitBookingGate()` in `packages/shared/src/timeline.ts`. It reads the timeline: a `SITE_VISIT_BOOKING` milestone closes bookings at its `endsAt` (or `startsAt`); a legacy timeline with only a combined `SITE_VISIT` milestone closes them when the visits begin; a timeline scheduling no visits at all leaves them open (nothing has closed yet). Pure, `now` injected, unit-tested in `apps/portal/src/lib/timeline.test.ts`.
+
+Three consumers read that one gate, which is the point — the button an investor sees and what the API accepts cannot drift:
+- **The booking page** (`/dashboard/site-visit`) — form, or the "bookings have closed" notice. An existing request also **locks** once the window closes: `SiteVisitManage` hides Edit/Delete and points at the secretariat.
+- **The public "Book Site Visit" CTAs** — all of them go through `apps/portal/src/components/site-visit-cta.tsx`, which swaps in a fallback link (or renders nothing) when closed. It is an async server component reading the DB, so **every page rendering it must be `force-dynamic`** — home, about, for-investors, how-it-works, land-map and contact all are. Never hand-write a `<Link href="/dashboard/site-visit">` CTA; it would keep inviting a request the API now refuses.
+- **The API's write guards** — `assertBookingWindowOpen()` in `site-visits.service.ts` fronts create, update *and* delete, reading the timeline through `apps/api/src/timeline.ts`. Delete is gated too, deliberately: it is a hard delete meant to enable an immediate re-book, and re-booking is exactly what a closed window refuses, so allowing it would strand the investor.
+
+**Preview roles (ADMIN) are exempt**, via the same `canPreviewEoi()` used by the EOI gate — the published schedule constrains outside investors, not staff exercising the flow.
+
+**Closing bookings is a data change, not a deploy.** ADMIN edits the `SITE_VISIT_BOOKING` milestone in `/console/settings`; both portals and the API pick it up on the next request.
+
 ## EOI module (investor application)
 
 The six-section EOI is a transcription of the UNOC **"KIP Expression of Interest — Investor Portal Module: Master Content Specification"** (Business Development Unit). When a field's wording, requiredness or unit is in question, that document is the authority; `packages/shared/src/schemas/application.ts` is its executable form and carries the clause numbers in comments.
@@ -502,7 +516,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones, communications, eoi-document-kinds) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent. Section payloads are Zod-validated on write (see EOI module) |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
-| `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `TimelineMilestoneStatus`, `computeTimeline()` (active = last started, manual status overrides win), `findMilestoneOfKind()`, `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
+| `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `TimelineMilestoneStatus`, `computeTimeline()` (active = last started, manual status overrides win), `findMilestoneOfKind()`, `siteVisitBookingGate()` (**the single site-visit booking gate** — see "Site-visit booking window"), `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
 | `packages/shared/src/communications.ts` | Pure broadcast rendering — `MERGE_TOKENS`, `applyMergeTokens()`, `sampleMergeVars()`, `renderBodyHtml()` (escape-then-format; the XSS boundary), `bodyExcerpt()`, plus the broadcast-attachment rules (`COMMUNICATION_ATTACHMENT_MAX_BYTES`, `COMMUNICATION_ATTACHMENT_TYPES`, `validateCommunicationFile()`, `formatFileSize()`). Shared by the composer preview, the API's send, and the portal inbox. Tested in `apps/web/src/lib/communications.test.ts` |
 | `packages/shared/src/schemas/application.ts` | **The EOI, in executable form** — six section schemas transcribed from the Master Content Specification, the `notApplicable` mechanism (`requireUnlessNA`), EOI form enums + label maps, `ugandanEmploymentPercentages()`, `crossSectionIssues()`, `EOI_SECTION_ORDER`/`_LABELS`, `updateSectionSchema` (the `complete` flag), and the status transition table |
@@ -523,7 +537,9 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/api/src/modules/applications/` | Draft, get, section update, submit |
 | `apps/api/src/modules/payments/` | Initiate payment |
 | `apps/api/src/modules/users/` | Approve + reject investor accounts |
-| `apps/api/src/modules/site-visits/` | Create / list / schedule site-visit bookings |
+| `apps/api/src/modules/site-visits/` | Create / list / schedule site-visit bookings — `assertBookingWindowOpen()` gates create/update/delete on the booking window |
+| `apps/api/src/timeline.ts` | Reads `TimelineMilestone` (fallback when empty) and answers `siteVisitBookingsOpen()` — the API's half of the shared booking gate |
+| `apps/portal/src/components/site-visit-cta.tsx` | The only "Book Site Visit" call to action — gated on the booking window, swaps to a fallback link (or nothing) when closed. Async server component: its host page must be `force-dynamic` |
 | `apps/api/src/modules/communications/` | Broadcasts — `createAndSend()` (transaction → detached paced `deliver()`), `retryUnsent()`, `sendTest()`, template CRUD, `markRead()` (owner-checked) |
 | `apps/api/src/mailer.ts` | `sendMail()` + `escapeHtml()` + a private `shell()` (card chrome; the older templates still inline their own copy — left alone deliberately) + `credentialsEmail`, `rejectionEmail`, `siteVisitConfirmationEmail` (request received), `siteVisitScheduledEmail` (admin confirmed the visit), `siteVisitNotificationEmail`, `passwordChangedEmail`, `passwordResetEmail` (admin reset — temp credentials), `announcementEmail` (broadcasts — takes body HTML already rendered by `renderBodyHtml()`, never a raw body) |
 | `apps/portal/src/lib/mailer.ts` | Portal-side `sendMail()` + `escapeHtml()` + `credentialsEmail` (registration). Shared transport for contact form + live chat |
@@ -665,7 +681,9 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Store a self-reported percentage the payload can already derive from its own counts (Ugandan employment); derive it instead
 - Ask for H3SE or National Content history as prose — those are the cross-bidder comparison tables and must stay numeric
 - Treat a blank field as Not Applicable — N/A needs a written explanation in the section's `notApplicable` map
-- Expect a `TimelineMilestone` (incl. `EOI_CALL`) to open or close anything — only `ApplicationWindow` gates the EOI
+- Expect a `TimelineMilestone` (incl. `EOI_CALL`) to open or close the EOI — only `ApplicationWindow` gates that. (Site visits are the exception: `SITE_VISIT_BOOKING` *is* the booking gate)
+- Hardcode a `<Link href="/dashboard/site-visit">` "Book Site Visit" button — render `SiteVisitCta`, or it keeps inviting a request the API refuses once the window closes
+- Re-derive the booking cut-off inline from milestone dates — call `siteVisitBookingGate()`, the one definition the page, the CTAs and the API guards share
 - Widen EOI preview beyond `ADMIN`, or hardcode the role check — change `EOI_PREVIEW_ROLES` in `@kip/shared`, which all three apps read
 - Give a preview actor a separate code path, mock S3, or skip validation — preview runs the real services or it proves nothing
 - Write `User.investorOrgId` on a staff account — the preview sandbox org hangs off the `Application`, which is what keeps admins out of investor reports

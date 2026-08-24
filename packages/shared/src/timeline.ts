@@ -125,6 +125,48 @@ export function findMilestoneOfKind(
   );
 }
 
+/** The resolved site-visit booking gate. */
+export type SiteVisitBookingGate = {
+  /** ISO — the instant bookings stop being accepted. */
+  closesAt: string;
+  /** True while `now` is before `closesAt`. */
+  open: boolean;
+  /** Which milestone decided the gate — a booking window, or the legacy visits row. */
+  source: "BOOKING_WINDOW" | "VISIT_PROGRAMME";
+};
+
+/**
+ * Resolve whether investors may still request a site visit, from the timeline
+ * alone. A dedicated SITE_VISIT_BOOKING milestone is the gate: bookings close
+ * at its `endsAt` (or `startsAt` if it has no end). Legacy timelines carry only
+ * a combined SITE_VISIT milestone — there, bookings close when the visits
+ * themselves begin.
+ *
+ * Returns `null` when the timeline schedules no site visits at all; every
+ * caller treats that as "open", since an unscheduled programme has no closing
+ * date to have passed. Pure: takes `now`.
+ *
+ * This is the single definition of the gate — the portal's booking page, the
+ * public "Book Site Visit" calls to action and the API's write guards all read
+ * it, so the buttons an investor sees and what the API accepts cannot drift.
+ */
+export function siteVisitBookingGate(
+  milestones: TimelineMilestoneData[],
+  now: Date,
+): SiteVisitBookingGate | null {
+  const booking = findMilestoneOfKind(milestones, TimelineMilestoneKind.SITE_VISIT_BOOKING);
+  const visits = findMilestoneOfKind(milestones, TimelineMilestoneKind.SITE_VISIT);
+  const closesAtSource = booking ? booking.endsAt ?? booking.startsAt : visits?.startsAt ?? null;
+  if (!closesAtSource) return null;
+
+  const closesAt = new Date(closesAtSource);
+  return {
+    closesAt: closesAt.toISOString(),
+    open: now.getTime() < closesAt.getTime(),
+    source: booking ? "BOOKING_WINDOW" : "VISIT_PROGRAMME",
+  };
+}
+
 /** "19 August 2026" in the Kampala timezone — deterministic label for a date. */
 export function longDate(value: Date | string): string {
   return new Intl.DateTimeFormat("en-GB", {

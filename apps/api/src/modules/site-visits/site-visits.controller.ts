@@ -15,7 +15,7 @@ import {
 export const handleCreate: RequestHandler = async (req, res, next) => {
   try {
     const input = createBookingSchema.parse(req.body ?? {});
-    const { id } = await createBooking(req.user!.id, input);
+    const { id } = await createBooking(req.user!, input);
     res.status(201).json({ ok: true, id });
   } catch (e) {
     next(e);

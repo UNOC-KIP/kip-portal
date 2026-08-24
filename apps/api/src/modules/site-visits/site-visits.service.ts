@@ -1,6 +1,13 @@
 import { SiteVisitBooking, User, InvestorOrg } from "@kip/db";
-import { KIP_ZONE_LABELS, SiteVisitStatus, UserRole, type KipZone } from "@kip/shared";
+import {
+  KIP_ZONE_LABELS,
+  SiteVisitStatus,
+  UserRole,
+  canPreviewEoi,
+  type KipZone,
+} from "@kip/shared";
 import { Conflict, Forbidden, NotFound } from "../../errors.js";
+import { siteVisitBookingsOpen } from "../../timeline.js";
 import { fireWebhook } from "../../webhooks.js";
 import {
   sendMail,
@@ -13,14 +20,40 @@ import type { CreateBookingInput } from "./site-visits.schema.js";
 const SECRETARIAT_EMAIL = "kipinvestorrelations@unoc.com";
 
 /**
+ * Refuse investor-driven booking writes once the booking window has closed.
+ * The portal hides the form and the calls to action from the same gate; this is
+ * the server-side enforcement, so a stale page or a direct POST cannot slip a
+ * request in after the programme has moved on.
+ *
+ * Preview roles (ADMIN) are exempt — the published schedule constrains outside
+ * investors, not staff exercising the flow, exactly as with the EOI gate.
+ */
+async function assertBookingWindowOpen(role: UserRole): Promise<void> {
+  if (canPreviewEoi(role)) return;
+  const gate = await siteVisitBookingsOpen();
+  if (gate && !gate.open) {
+    throw Conflict(
+      `Site visit bookings closed on ${new Date(gate.closesAt).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "Africa/Kampala",
+      })}. Contact ${SECRETARIAT_EMAIL} to arrange a visit.`,
+    );
+  }
+}
+
+/**
  * Record an investor's request to visit the site. The secretariat follows up
  * out of band with dates and a formal invitation.
  */
 export async function createBooking(
-  userId: string,
+  actor: { id: string; role: UserRole },
   input: CreateBookingInput,
 ): Promise<{ id: string }> {
-  const user = await User.findByPk(userId, {
+  await assertBookingWindowOpen(actor.role);
+
+  const user = await User.findByPk(actor.id, {
     include: [{ model: InvestorOrg, as: "investorOrg" }],
   });
   if (!user) throw NotFound("User");
@@ -151,14 +184,17 @@ export async function listBookings(): Promise<BookingListRow[]> {
 
 /**
  * Edit an existing booking. Only the owner (or an admin) may edit, and only
- * while the request is still NEW — once the secretariat has scheduled it, the
- * details are locked and changes go through them out of band.
+ * while the request is still NEW and the booking window is still open — once
+ * the secretariat has scheduled it, or the window has closed, the details are
+ * locked and changes go through them out of band.
  */
 export async function updateBooking(
   actor: { id: string; role: UserRole },
   bookingId: string,
   input: CreateBookingInput,
 ): Promise<void> {
+  await assertBookingWindowOpen(actor.role);
+
   const booking = await SiteVisitBooking.findByPk(bookingId);
   if (!booking) throw NotFound("Site visit booking");
 
@@ -179,14 +215,18 @@ export async function updateBooking(
 }
 
 /**
- * Delete a booking. Same guard as edit — owner (or admin), NEW only. A hard
- * delete (the table is not paranoid) so the investor can immediately submit a
- * fresh request without tripping the one-active-request rule.
+ * Delete a booking. Same guard as edit — owner (or admin), NEW only, window
+ * still open. A hard delete (the table is not paranoid) so the investor can
+ * immediately submit a fresh request without tripping the one-active-request
+ * rule; that re-booking is exactly what the closed window would refuse, which
+ * is why a closed window blocks the delete rather than stranding them.
  */
 export async function deleteBooking(
   actor: { id: string; role: UserRole },
   bookingId: string,
 ): Promise<void> {
+  await assertBookingWindowOpen(actor.role);
+
   const booking = await SiteVisitBooking.findByPk(bookingId);
   if (!booking) throw NotFound("Site visit booking");
 

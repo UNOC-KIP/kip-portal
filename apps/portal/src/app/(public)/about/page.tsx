@@ -3,6 +3,7 @@ import Image from "next/image";
 import type { Metadata } from "next";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteVisitCta } from "@/components/site-visit-cta";
 import { getTimelineData } from "@/lib/timeline-data";
 import {
   Fuel,
@@ -521,7 +522,8 @@ export default async function AboutPage() {
             before the current window closes.
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <Link href="/dashboard/site-visit" className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110">Book Site Visit</Link>
+            {/* Hidden once bookings close — "Talk to Us" already covers it. */}
+            <SiteVisitCta className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110" closed={null} />
             <Link href="/contact" className="rounded-[4px] border border-white/30 px-7 py-3 text-[14px] font-bold text-white transition hover:border-white hover:bg-white hover:text-black">Talk to Us</Link>
           </div>
         </div>

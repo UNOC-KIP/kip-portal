@@ -21,18 +21,28 @@ type ManageBooking = {
 
 /**
  * Investor-facing view of an existing site-visit booking: the read-only summary
- * plus Edit / Delete controls while the request is still NEW (not yet scheduled).
- * Editing swaps in the pre-filled booking form; deleting clears the request so a
- * fresh one can be made.
+ * plus Edit / Delete controls while the request is still NEW (not yet scheduled)
+ * AND the booking window is still open. Editing swaps in the pre-filled booking
+ * form; deleting clears the request so a fresh one can be made.
+ *
+ * Once the window closes the request locks — the API refuses the same edits, and
+ * deleting would strand the investor with no way to re-book, so changes go
+ * through the secretariat instead.
  */
-export function SiteVisitManage({ booking }: { booking: ManageBooking }) {
+export function SiteVisitManage({
+  booking,
+  bookingOpen,
+}: {
+  booking: ManageBooking;
+  bookingOpen: boolean;
+}) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
-  const editable = booking.status === "NEW";
+  const editable = booking.status === "NEW" && bookingOpen;
 
   async function handleDelete() {
     setDeleting(true);

@@ -1,11 +1,17 @@
 import { redirect } from "next/navigation";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteVisitCta } from "@/components/site-visit-cta";
 import { Mail, Phone, MapPin, Clock, CheckCircle2, AlertCircle } from "lucide-react";
 import { z } from "zod";
 import { Inquiry } from "@kip/db";
 import { InquiryChannel } from "@kip/shared";
 import { escapeHtml, sendMail, SECRETARIAT_EMAIL } from "@/lib/mailer";
+
+// The site-visit CTA is gated on the booking window, read from the DB on every
+// request — static generation would bake in whichever state was true at build
+// time (and CI builds have no database at all).
+export const dynamic = "force-dynamic";
 
 const contactSchema = z.object({
   name:    z.string().min(2, "Name is required"),
@@ -136,9 +142,12 @@ export default function ContactPage({ searchParams }: { searchParams: { sent?: s
                 <p className="mb-5 text-[13px] leading-relaxed text-white/70">
                   The application window is currently open. Start your Expression of Interest today.
                 </p>
-                <a href="/dashboard/site-visit" className="inline-block rounded-[4px] bg-kip-gold px-5 py-2.5 text-[13px] font-bold text-black transition hover:brightness-105">
+                <SiteVisitCta
+                  className="inline-block rounded-[4px] bg-kip-gold px-5 py-2.5 text-[13px] font-bold text-black transition hover:brightness-105"
+                  closed={{ href: "/sign-up", label: "Create Account →" }}
+                >
                   Book Site Visit →
-                </a>
+                </SiteVisitCta>
               </div>
             </div>
 

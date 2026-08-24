@@ -24,6 +24,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { CountdownTimer } from "@/components/countdown-timer";
 import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { HeroCarousel } from "@/components/hero-carousel";
+import { SiteVisitCta } from "@/components/site-visit-cta";
 import { getActiveApplicationWindow } from "@/lib/public-data";
 import { getTimelineData } from "@/lib/timeline-data";
 
@@ -171,12 +172,10 @@ export default async function HomePage({
                 60,000 bpd refinery. Express your interest and submit your EOI securely online.
               </p>
               <div className="mt-8 flex flex-wrap items-center gap-4">
-                <Link
-                  href="/dashboard/site-visit"
+                <SiteVisitCta
                   className="rounded-[4px] bg-kip-red px-7 py-3 text-[14px] font-bold text-white transition hover:brightness-110"
-                >
-                  Book Site Visit
-                </Link>
+                  closed={{ href: "/sign-up", label: "Express Your Interest" }}
+                />
                 <Link
                   href="/land-map"
                   className="rounded-[4px] border-2 border-white/80 px-7 py-3 text-[14px] font-bold text-white transition hover:bg-white/10"
@@ -311,12 +310,10 @@ export default async function HomePage({
             >
               Create Account
             </Link>
-            <Link
-              href="/dashboard/site-visit"
+            <SiteVisitCta
               className="rounded-[4px] border-2 border-black/70 px-7 py-3 text-[14px] font-bold text-black transition hover:bg-black hover:text-white"
-            >
-              Book Site Visit
-            </Link>
+              closed={{ href: "/how-it-works", label: "How It Works" }}
+            />
           </div>
         </div>
       </section>
@@ -483,9 +480,10 @@ export default async function HomePage({
                 ))}
               </ul>
               <div className="mt-7">
-                <Link href="/dashboard/site-visit" className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
-                  Book Site Visit
-                </Link>
+                <SiteVisitCta
+                  className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110"
+                  closed={{ href: "/land-map", label: "View Land Map" }}
+                />
               </div>
             </div>
 
