@@ -2,9 +2,26 @@ import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { SiteFooter } from "@/components/site-footer";
-import { UserPlus, CreditCard, FileText, Send, ClipboardList, Award, CheckCircle2 } from "lucide-react";
+import { SiteVisitCta } from "@/components/site-visit-cta";
+import { UserPlus, CreditCard, FileText, Send, ClipboardList, Award, CheckCircle2, type LucideIcon } from "lucide-react";
 
-const STEPS = [
+// The site-visit CTAs are gated on the booking window, read from the DB on
+// every request — static generation would bake in whichever state was true at
+// build time (and CI builds have no database at all).
+export const dynamic = "force-dynamic";
+
+type Step = {
+  number: string;
+  icon: LucideIcon;
+  title: string;
+  duration: string;
+  description: string;
+  items: string[];
+  /** `siteVisit` routes through the booking-window gate instead of a plain link. */
+  cta?: { label: string; href: string; siteVisit?: boolean };
+};
+
+const STEPS: Step[] = [
   {
     number: "01", icon: UserPlus, title: "Register & Verify Your Account", duration: "~5 minutes",
     description: "Create your investor account using your company email address. Provide your organisation's legal name and basic details. Your account is reviewed by the UNOC team, and once approved you will receive your login credentials by email.",
@@ -36,7 +53,7 @@ const STEPS = [
     number: "06", icon: Award, title: "ExCo Decision & Land Allocation", duration: "~4–8 weeks after TC",
     description: "The Land Allocation Committee makes a recommendation, which the Executive Committee (ExCo) ratifies. Successful investors receive a Letter of Intent (LOI) followed by a formal land lease agreement for their allocated plot.",
     items: ["LAC approves or rejects applications reviewed by TC", "ExCo ratifies final allocation decisions", "Successful applicants receive a Letter of Intent"],
-    cta: { label: "Book Site Visit", href: "/dashboard/site-visit" },
+    cta: { label: "Book Site Visit", href: "/dashboard/site-visit", siteVisit: true },
   },
 ];
 
@@ -117,9 +134,18 @@ export default function HowItWorksPage() {
                       </ul>
                       {step.cta && (
                         <div className="mt-6">
-                          <Link href={step.cta.href} className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
-                            {step.cta.label} →
-                          </Link>
+                          {step.cta.siteVisit ? (
+                            <SiteVisitCta
+                              className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110"
+                              closed={{ href: "/contact", label: "Contact Us →" }}
+                            >
+                              {step.cta.label} →
+                            </SiteVisitCta>
+                          ) : (
+                            <Link href={step.cta.href} className="inline-block rounded-[4px] bg-kip-red px-6 py-2.5 text-[13px] font-bold text-white transition hover:brightness-110">
+                              {step.cta.label} →
+                            </Link>
+                          )}
                         </div>
                       )}
                     </div>
@@ -156,7 +182,8 @@ export default function HowItWorksPage() {
           <h2 className="text-[32px] font-extrabold">Ready to apply?</h2>
           <p className="mx-auto mt-3 max-w-md text-[15px] leading-relaxed text-white/70">Registration is open now. The Call for Expressions of Interest runs 19 August to 2 September 2026.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <Link href="/dashboard/site-visit" className="rounded-[4px] bg-kip-gold px-8 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Book Site Visit</Link>
+            {/* Hidden once bookings close — "Contact Us" already covers it. */}
+            <SiteVisitCta className="rounded-[4px] bg-kip-gold px-8 py-3 text-[14px] font-bold text-black transition hover:brightness-105" closed={null} />
             <Link href="/contact" className="rounded-[4px] border border-white/30 px-8 py-3 text-[14px] font-semibold text-white transition hover:border-white">Contact Us</Link>
           </div>
         </div>

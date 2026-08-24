@@ -3,6 +3,12 @@ import { Download, MapPin, Maximize2 } from "lucide-react";
 import { KIP_ZONES } from "@kip/shared";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteVisitCta } from "@/components/site-visit-cta";
+
+// The site-visit CTAs are gated on the booking window, read from the DB on
+// every request — static generation would bake in whichever state was true at
+// build time (and CI builds have no database at all).
+export const dynamic = "force-dynamic";
 
 const INFRASTRUCTURE = [
   { label: "Location",   value: "Kabaale, Hoima District, Western Uganda — 29.57 km² (7,307 acres)" },
@@ -35,9 +41,10 @@ export default function LandMapPage() {
             <a href="/kip-plot-map.pdf" download="KIP-Plot-Allocation-Map-Phase2.pdf" className="inline-flex items-center gap-2 rounded-[4px] bg-kip-red px-6 py-3 text-[14px] font-bold text-white transition hover:brightness-110">
               <Download size={15} /> Download Map (PDF)
             </a>
-            <Link href="/dashboard/site-visit" className="inline-flex items-center gap-2 rounded-[4px] border-2 border-black/70 px-6 py-3 text-[14px] font-bold text-black transition hover:bg-black/10">
-              Book Site Visit
-            </Link>
+            <SiteVisitCta
+              className="inline-flex items-center gap-2 rounded-[4px] border-2 border-black/70 px-6 py-3 text-[14px] font-bold text-black transition hover:bg-black/10"
+              closed={{ href: "/for-investors", label: "Investor Info" }}
+            />
           </div>
         </div>
       </div>
@@ -120,7 +127,8 @@ export default function LandMapPage() {
               <p className="mt-2 text-[14px] text-white/70">The Call for Expressions of Interest runs 19 August to 2 September 2026 — register now to be ready.</p>
             </div>
             <div className="flex shrink-0 gap-3">
-              <Link href="/dashboard/site-visit" className="rounded-[4px] bg-kip-gold px-7 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Book Site Visit</Link>
+              {/* Hidden once bookings close — "Investor Info" already covers it. */}
+              <SiteVisitCta className="rounded-[4px] bg-kip-gold px-7 py-3 text-[14px] font-bold text-black transition hover:brightness-105" closed={null} />
               <Link href="/for-investors" className="rounded-[4px] border border-white/25 px-7 py-3 text-[14px] font-semibold text-white transition hover:border-white">Investor Info</Link>
             </div>
           </div>

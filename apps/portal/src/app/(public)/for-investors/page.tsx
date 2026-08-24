@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteVisitCta } from "@/components/site-visit-cta";
 import { Zap, Fuel, Shield, Globe, TreePine, Building2, CheckCircle2, ArrowRight, Percent, PackageOpen, BadgeDollarSign, Landmark, Factory, Boxes, Wheat, Store, Home as HomeIcon, Cpu } from "lucide-react";
+
+// The site-visit CTA is gated on the booking window, which is read from the DB
+// on every request — static generation would bake in whichever state was true
+// at build time (and CI builds have no database at all).
+export const dynamic = "force-dynamic";
 
 const WHY_KIP = [
   { icon: Globe,    title: "Strategic Location",     body: "Located at Kabaale, Hoima District in Western Uganda — about 50 km west of Hoima City and 248 km by road from Kampala, alongside the EACOP corridor and Kabalega International Airport." },
@@ -213,7 +219,12 @@ export default function ForInvestorsPage() {
               <h3 className="text-[24px] font-extrabold leading-snug">Call for EOIs opens<br /><span className="text-kip-gold">19 August 2026.</span></h3>
               <p className="mt-4 text-[14px] leading-relaxed text-white/70">Don&apos;t miss Phase 2 of the Kabalega Industrial Park onboarding. Register now and submit your Expression of Interest between 19 August and 2 September 2026.</p>
               <div className="mt-8 space-y-3">
-                <Link href="/dashboard/site-visit" className="flex w-full items-center justify-between rounded-[4px] bg-kip-gold px-6 py-3 text-[14px] font-bold text-black transition hover:brightness-105">Book Site Visit <ArrowRight size={16} /></Link>
+                <SiteVisitCta
+                  className="flex w-full items-center justify-between rounded-[4px] bg-kip-gold px-6 py-3 text-[14px] font-bold text-black transition hover:brightness-105"
+                  closed={{ href: "/sign-up", label: <>Create your account <ArrowRight size={16} /></> }}
+                >
+                  Book Site Visit <ArrowRight size={16} />
+                </SiteVisitCta>
                 <Link href="/how-it-works" className="flex w-full items-center justify-between rounded-[4px] border border-white/20 px-6 py-3 text-[14px] font-semibold text-white transition hover:border-white">Learn how it works <ArrowRight size={16} /></Link>
               </div>
             </div>

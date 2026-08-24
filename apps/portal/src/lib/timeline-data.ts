@@ -6,6 +6,7 @@ import {
   computeTimeline,
   findMilestoneOfKind,
   longDate,
+  siteVisitBookingGate,
   type TimelineItem,
   type TimelineMilestoneData,
 } from "@kip/shared";
@@ -18,9 +19,11 @@ export type EoiCallInfo = {
 };
 
 export type SiteVisitInfo = {
-  /** ISO — bookings close when the visit programme starts. */
+  /** ISO — bookings close at the end of the booking window. */
   bookingClosesAt: string;
   bookingClosesLabel: string;
+  /** False once `bookingClosesAt` has passed — the booking form + CTAs close. */
+  bookingOpen: boolean;
   /** Display range, e.g. "29 Jul – 12 Aug 2026". */
   windowLabel: string;
 };
@@ -58,15 +61,11 @@ export async function getTimelineData(now: Date = new Date()): Promise<TimelineD
   }
 
   const eoi = findMilestoneOfKind(milestones, TimelineMilestoneKind.EOI_CALL);
-  // A dedicated SITE_VISIT_BOOKING milestone gates the booking form: bookings
-  // are open while it is running and close at its `endsAt` (or `startsAt`).
-  // Legacy timelines have only a combined SITE_VISIT milestone — there,
-  // bookings close when the visits themselves begin (`startsAt`).
+  // The booking gate itself is pure and lives in @kip/shared, so the API's
+  // write guards decide it exactly as these pages render it.
+  const gate = siteVisitBookingGate(milestones, now);
   const booking = findMilestoneOfKind(milestones, TimelineMilestoneKind.SITE_VISIT_BOOKING);
   const visits = findMilestoneOfKind(milestones, TimelineMilestoneKind.SITE_VISIT);
-  const closesAtSource = booking
-    ? booking.endsAt ?? booking.startsAt
-    : visits?.startsAt ?? null;
   // Copy that describes when the visits take place — prefer the visits
   // milestone, falling back to the booking window if that's all there is.
   const windowLabel = (visits ?? booking)?.dateLabel ?? "";
@@ -80,10 +79,11 @@ export async function getTimelineData(now: Date = new Date()): Promise<TimelineD
           closesLabel: eoi.endsAt ? longDate(eoi.endsAt) : "",
         }
       : null,
-    siteVisit: closesAtSource
+    siteVisit: gate
       ? {
-          bookingClosesAt: new Date(closesAtSource).toISOString(),
-          bookingClosesLabel: longDate(closesAtSource),
+          bookingClosesAt: gate.closesAt,
+          bookingClosesLabel: longDate(gate.closesAt),
+          bookingOpen: gate.open,
           windowLabel,
         }
       : null,

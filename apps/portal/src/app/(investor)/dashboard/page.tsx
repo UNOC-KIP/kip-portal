@@ -250,8 +250,12 @@ export default async function InvestorDashboardPage() {
     : [];
   const stagesDone = pipelineSteps.filter((s) => s.done).length;
 
-  const { timeline } = await getTimelineData();
+  const { timeline, siteVisit: siteVisitSchedule } = await getTimelineData();
   const activeTimelineIdx = timeline.findIndex((t) => t.active);
+  // Same gate as the booking page and the API: no invitation to book once the
+  // window has closed. Preview roles keep the CTA so staff can still exercise it.
+  const siteVisitBookingOpen =
+    previewMode || !siteVisitSchedule || siteVisitSchedule.bookingOpen;
 
   const firstName = (orgName ?? session.user?.name ?? "there").split(" ")[0];
 
@@ -781,7 +785,7 @@ export default async function InvestorDashboardPage() {
                 CTA for any pre-submission investor. */}
             {siteVisit ? (
               <SiteVisitSummary booking={siteVisit} />
-            ) : isPreSubmission ? (
+            ) : isPreSubmission && siteVisitBookingOpen ? (
               <div className="flex flex-col gap-3 rounded-xl border border-brand-300 bg-brand-50/60 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-100 text-brand-700">

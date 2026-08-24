@@ -5,6 +5,7 @@ import {
   computeTimeline,
   findMilestoneOfKind,
   longDate,
+  siteVisitBookingGate,
 } from "@kip/shared";
 
 describe("computeTimeline", () => {
@@ -40,6 +41,50 @@ describe("findMilestoneOfKind", () => {
     const sv = findMilestoneOfKind(FALLBACK_MILESTONES, TimelineMilestoneKind.SITE_VISIT);
     expect(sv?.startsAt).toBe("2026-08-11T00:00:00+03:00");
     expect(findMilestoneOfKind([], TimelineMilestoneKind.EOI_CALL)).toBeNull();
+  });
+});
+
+describe("siteVisitBookingGate", () => {
+  const at = (iso: string) => siteVisitBookingGate(FALLBACK_MILESTONES, new Date(iso));
+
+  it("is open during the booking window and closed after it ends", () => {
+    expect(at("2026-07-20T00:00:00+03:00")?.open).toBe(true);
+    expect(at("2026-07-28T23:00:00+03:00")?.open).toBe(true);
+    expect(at("2026-07-29T00:00:00+03:00")?.open).toBe(false);
+    // Well after the visits themselves have finished, too.
+    expect(at("2026-08-23T00:00:00+03:00")?.open).toBe(false);
+  });
+
+  it("is open before the window starts — nothing has closed yet", () => {
+    expect(at("2026-07-01T00:00:00+03:00")?.open).toBe(true);
+  });
+
+  it("closes at the booking milestone's end, not the visit programme's start", () => {
+    const gate = at("2026-07-20T00:00:00+03:00");
+    expect(gate?.source).toBe("BOOKING_WINDOW");
+    expect(gate?.closesAt).toBe(new Date("2026-07-28T23:59:59+03:00").toISOString());
+  });
+
+  it("falls back to the visits milestone on a legacy timeline with no booking window", () => {
+    const legacy = FALLBACK_MILESTONES.filter(
+      (m) => m.kind !== TimelineMilestoneKind.SITE_VISIT_BOOKING,
+    );
+    const gate = siteVisitBookingGate(legacy, new Date("2026-07-29T00:00:00+03:00"));
+    expect(gate?.source).toBe("VISIT_PROGRAMME");
+    // Bookings run until the visits begin on 11 Aug.
+    expect(gate?.open).toBe(true);
+    expect(
+      siteVisitBookingGate(legacy, new Date("2026-08-12T00:00:00+03:00"))?.open,
+    ).toBe(false);
+  });
+
+  it("returns null when the timeline schedules no site visits at all", () => {
+    const none = FALLBACK_MILESTONES.filter(
+      (m) =>
+        m.kind !== TimelineMilestoneKind.SITE_VISIT_BOOKING &&
+        m.kind !== TimelineMilestoneKind.SITE_VISIT,
+    );
+    expect(siteVisitBookingGate(none, new Date("2026-08-23T00:00:00+03:00"))).toBeNull();
   });
 });
 
