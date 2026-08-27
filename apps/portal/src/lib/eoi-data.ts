@@ -29,6 +29,7 @@ export type EoiDocument = {
   filename: string;
   sizeBytes: number;
   uploadedAt: string;
+  partnerId: string | null;
 };
 
 export type EoiSectionState = {
@@ -194,6 +195,7 @@ export async function getEoiWizardData(
       filename: d.filename,
       sizeBytes: d.sizeBytes,
       uploadedAt: d.uploadedAt.toISOString(),
+      partnerId: d.partnerId ?? null,
     })),
     partners: partners.map((pt) => ({
       id: pt.id,

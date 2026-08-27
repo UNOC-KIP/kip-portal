@@ -2,13 +2,33 @@
 
 import { useState, type ChangeEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, Loader2, Plus, Trash2 } from "lucide-react";
-import { COMPANY_TYPE_LABELS, BUSINESS_SECTOR_LABELS } from "@kip/shared";
+import { Building2, Check, FileText, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import {
+  COMPANY_TYPE_LABELS,
+  BUSINESS_SECTOR_LABELS,
+  DocumentKind,
+  DOCUMENT_KIND_LABELS,
+  EOI_ACCEPT_ATTRIBUTE,
+  validateEoiFile,
+} from "@kip/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { EoiPartner } from "@/lib/eoi-data";
+import type { EoiDocument, EoiPartner } from "@/lib/eoi-data";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
+
+/** Corporate documents that belong to an individual venture. */
+const PARTNER_DOC_KINDS: string[] = [
+  DocumentKind.CERTIFICATE_OF_INCORPORATION,
+  DocumentKind.MEMORANDUM_AND_ARTICLES,
+  DocumentKind.POWER_OF_ATTORNEY,
+  DocumentKind.SHAREHOLDER_ID,
+  DocumentKind.BENEFICIAL_OWNERSHIP_FORM,
+  DocumentKind.ORGANOGRAM,
+  DocumentKind.TAX_CLEARANCE_CERTIFICATE,
+  DocumentKind.TRADING_LICENCE,
+  DocumentKind.OTHER,
+];
 
 type PartnerForm = {
   id?: string; // existing row id — kept so a saved partner keeps its documents
@@ -63,20 +83,101 @@ function fromPartner(p: EoiPartner): PartnerForm {
   };
 }
 
+function formatSize(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function readError(res: Response, fallback: string): Promise<string> {
+  const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+  return body?.error?.message ?? fallback;
+}
+
+/** presign → PUT → register, tagged to a specific venture partner. */
+async function uploadPartnerDocument(args: {
+  applicationId: string;
+  partnerId: string;
+  kind: string;
+  file: File;
+}): Promise<EoiDocument> {
+  const presignRes = await fetch(`${API_BASE}/documents/presign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      applicationId: args.applicationId,
+      partnerId: args.partnerId,
+      kind: args.kind,
+      filename: args.file.name,
+      contentType: args.file.type,
+      sizeBytes: args.file.size,
+    }),
+  });
+  if (!presignRes.ok) throw new Error(await readError(presignRes, "Could not prepare the upload."));
+  const { documentId, uploadUrl, storageKey } = (await presignRes.json()) as {
+    documentId: string;
+    uploadUrl: string;
+    storageKey: string;
+  };
+
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": args.file.type },
+    body: args.file,
+  });
+  if (!putRes.ok) throw new Error("Upload to storage failed. Please try again.");
+
+  const registerRes = await fetch(`${API_BASE}/documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({
+      applicationId: args.applicationId,
+      partnerId: args.partnerId,
+      documentId,
+      kind: args.kind,
+      filename: args.file.name,
+      storageKey,
+      mimeType: args.file.type,
+      sizeBytes: args.file.size,
+    }),
+  });
+  if (!registerRes.ok) throw new Error(await readError(registerRes, "Could not record the upload."));
+  const doc = (await registerRes.json()) as {
+    id: string;
+    kind: string;
+    filename: string;
+    sizeBytes: number;
+    uploadedAt: string;
+  };
+  return {
+    id: doc.id,
+    kind: doc.kind,
+    filename: doc.filename,
+    sizeBytes: doc.sizeBytes,
+    uploadedAt: doc.uploadedAt,
+    partnerId: args.partnerId,
+  };
+}
+
 /**
  * Captures the other companies in a joint-venture application. The primary
  * applicant company is already collected in Section 1 (Legal Status); this adds
  * each co-venturer with the same business-profile fields, saved as a set to
- * PUT /applications/:id/partners. Only shown when the applicant's legal form is
- * a joint venture.
+ * PUT /applications/:id/partners, plus that venture's own documents.
  */
 export function PartnerCompanies({
   applicationId,
   initial,
+  documents,
+  onDocumentsChange,
   disabled,
 }: {
   applicationId: string;
   initial: EoiPartner[];
+  documents: EoiDocument[];
+  onDocumentsChange: (next: EoiDocument[]) => void;
   disabled?: boolean;
 }) {
   const router = useRouter();
@@ -127,14 +228,8 @@ export function PartnerCompanies({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      if (!res.ok) {
-        const d = (await res.json().catch(() => ({}))) as {
-          error?: { message?: string };
-        };
-        throw new Error(d?.error?.message ?? "Could not save the venture partners");
-      }
+      if (!res.ok) throw new Error(await readError(res, "Could not save the venture partners"));
       const { partners: rows } = (await res.json()) as { partners: EoiPartner[] };
-      // Adopt the server rows so new partners pick up their id for the next save.
       setPartners(rows.length ? rows.map(fromPartner) : [blankPartner()]);
       setSaved(true);
       router.refresh();
@@ -153,8 +248,8 @@ export function PartnerCompanies({
       </div>
       <p className="mb-4 text-xs text-ink-500">
         Your application is a joint venture, so give the details of the other companies in
-        the venture. Enter each company&apos;s business and incorporation details — the same
-        information collected for the primary applicant in Section 1.
+        the venture. Enter each company&apos;s business and incorporation details, then save,
+        and attach that company&apos;s documents.
       </p>
 
       {error && (
@@ -217,6 +312,23 @@ export function PartnerCompanies({
                 </Field>
               </div>
             </div>
+
+            {/* Documents for this venture — only once it has been saved. */}
+            <div className="mt-4 border-t border-ink-100 pt-3">
+              {p.id ? (
+                <PartnerDocuments
+                  applicationId={applicationId}
+                  partnerId={p.id}
+                  documents={documents}
+                  onDocumentsChange={onDocumentsChange}
+                  disabled={disabled}
+                />
+              ) : (
+                <p className="text-xs text-ink-400">
+                  Save the venture partners below to attach this company&apos;s documents.
+                </p>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -242,6 +354,126 @@ export function PartnerCompanies({
               )}
             </Button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PartnerDocuments({
+  applicationId,
+  partnerId,
+  documents,
+  onDocumentsChange,
+  disabled,
+}: {
+  applicationId: string;
+  partnerId: string;
+  documents: EoiDocument[];
+  onDocumentsChange: (next: EoiDocument[]) => void;
+  disabled?: boolean;
+}) {
+  const mine = documents.filter((d) => d.partnerId === partnerId);
+  const [kind, setKind] = useState<string>(PARTNER_DOC_KINDS[0]!);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const invalid = validateEoiFile({ mimeType: file.type, sizeBytes: file.size });
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const doc = await uploadPartnerDocument({ applicationId, partnerId, kind, file });
+      onDocumentsChange([...documents, doc]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not upload the document");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/documents/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error(await readError(res, "Could not remove the document"));
+      onDocumentsChange(documents.filter((d) => d.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove the document");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="mb-2 text-xs font-semibold text-ink-600">Documents for this venture</p>
+
+      {error && (
+        <p className="mb-2 rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+
+      {mine.length > 0 && (
+        <ul className="mb-2 space-y-1">
+          {mine.map((d) => (
+            <li key={d.id} className="flex items-center gap-2 rounded bg-ink-50 px-2 py-1.5">
+              <FileText size={13} className="shrink-0 text-ink-400" />
+              <span className="min-w-0 flex-1 truncate text-xs text-ink-700">
+                <span className="font-semibold">{DOCUMENT_KIND_LABELS[d.kind as DocumentKind] ?? d.kind}</span>
+                {" · "}
+                {d.filename} · {formatSize(d.sizeBytes)}
+              </span>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => remove(d.id)}
+                  disabled={busy}
+                  className="text-ink-400 hover:text-red-600"
+                  aria-label="Remove document"
+                >
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!disabled && (
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={kind}
+            onChange={(e) => setKind(e.target.value)}
+            disabled={busy}
+            className="h-9 rounded-md border border-input bg-background px-2 text-xs disabled:opacity-50"
+          >
+            {PARTNER_DOC_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {DOCUMENT_KIND_LABELS[k as DocumentKind] ?? k}
+              </option>
+            ))}
+          </select>
+          <label
+            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-ink-300 bg-white px-3 py-1.5 text-xs font-semibold text-ink-700 hover:bg-ink-50 ${busy ? "pointer-events-none opacity-50" : ""}`}
+          >
+            {busy ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+            {busy ? "Uploading…" : "Upload PDF"}
+            <input type="file" accept={EOI_ACCEPT_ATTRIBUTE} className="hidden" onChange={onFile} disabled={busy} />
+          </label>
+          <span className="text-[10px] text-ink-400">PDF · max 5&nbsp;MB</span>
         </div>
       )}
     </div>

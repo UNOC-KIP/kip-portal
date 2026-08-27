@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Application, Document } from "@kip/db";
+import { Application, ApplicationPartner, Document } from "@kip/db";
 import {
   ApplicationStatus,
   DocumentKind,
@@ -36,6 +36,20 @@ async function loadApplicationFor(
     throw Forbidden("You can only manage documents on your own application");
   }
   return app;
+}
+
+/** A partnerId, when given, must name a partner of this same application. */
+async function assertPartnerBelongs(
+  applicationId: string,
+  partnerId: string | undefined,
+): Promise<void> {
+  if (!partnerId) return;
+  const partner = await ApplicationPartner.findByPk(partnerId, {
+    attributes: ["id", "applicationId"],
+  });
+  if (!partner || partner.applicationId !== applicationId) {
+    throw BadRequest("Unknown venture partner for this application");
+  }
 }
 
 /**
@@ -75,6 +89,7 @@ export async function presignDocument(
 ): Promise<{ documentId: string; uploadUrl: string; storageKey: string }> {
   const app = await loadApplicationFor(input.applicationId, actor);
   assertMutable(app, actor);
+  await assertPartnerBelongs(input.applicationId, input.partnerId);
 
   if (input.kind === DocumentKind.PAYMENT_PROOF) {
     // Payment proof is owned by the payments module, which also moves the
@@ -102,6 +117,7 @@ export async function registerDocument(
 ): Promise<Document> {
   const app = await loadApplicationFor(input.applicationId, actor);
   assertMutable(app, actor);
+  await assertPartnerBelongs(input.applicationId, input.partnerId);
 
   if (input.kind === DocumentKind.PAYMENT_PROOF) {
     throw BadRequest("Upload proof of payment from the payment page");
@@ -126,13 +142,18 @@ export async function registerDocument(
   // to choose between.
   if (SINGLE_FILE_KINDS.has(input.kind)) {
     await Document.destroy({
-      where: { applicationId: input.applicationId, kind: input.kind },
+      where: {
+        applicationId: input.applicationId,
+        kind: input.kind,
+        partnerId: input.partnerId ?? null,
+      },
     });
   }
 
   return Document.create({
     id: input.documentId,
     applicationId: input.applicationId,
+    partnerId: input.partnerId ?? null,
     kind: input.kind,
     filename: input.filename,
     storageKey: input.storageKey,

@@ -20,6 +20,7 @@ const filename = z
 
 export const presignDocumentSchema = z.object({
   applicationId: z.string().uuid(),
+  partnerId: z.string().uuid().optional(),
   kind: z.nativeEnum(DocumentKind),
   filename,
   contentType: z.literal("application/pdf", {
@@ -44,6 +45,7 @@ export type PresignDocumentInput = z.infer<typeof presignDocumentSchema>;
  */
 export const registerDocumentSchema = z.object({
   applicationId: z.string().uuid(),
+  partnerId: z.string().uuid().optional(),
   documentId: z.string().uuid(),
   kind: z.nativeEnum(DocumentKind),
   filename,

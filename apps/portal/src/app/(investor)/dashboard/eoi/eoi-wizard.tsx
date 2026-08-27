@@ -434,6 +434,8 @@ export function EoiWizard({
                     <PartnerCompanies
                       applicationId={data.application.id}
                       initial={data.partners}
+                      documents={documents}
+                      onDocumentsChange={setDocuments}
                       disabled={disabled}
                     />
                   )}
