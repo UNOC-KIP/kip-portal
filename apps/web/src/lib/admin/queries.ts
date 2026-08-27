@@ -13,6 +13,7 @@
 import "server-only";
 import {
   Application,
+  ApplicationPartner,
   ApplicationSection,
   ApplicationWindow,
   Document,
@@ -730,7 +731,13 @@ export type AdminApplicationDetail = {
     countryOfIncorporation: string | null; tin: string | null; address: string | null;
     phone: string | null; email: string | null;
   } | null;
-  documents: { id: string; kindLabel: string; filename: string; sizeLabel: string; uploadedAt: string }[];
+  partners: {
+    id: string; legalName: string; tradingName: string | null; companyType: string | null;
+    businessSector: string | null; registrationNumber: string | null; ursbRegistrationNumber: string | null;
+    countryOfIncorporation: string | null; tin: string | null; address: string | null;
+    phone: string | null; email: string | null; isLead: boolean;
+  }[];
+  documents: { id: string; kindLabel: string; filename: string; sizeLabel: string; uploadedAt: string; partnerName: string | null }[];
   auditTrail: { time: string; text: string; actor: string }[];
 };
 
@@ -752,6 +759,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
         as: "owner",
         attributes: ["id", "name", "designation", "phone", "email", "role"],
       },
+      { model: ApplicationPartner, as: "partners" },
       { model: ApplicationSection, as: "sections", attributes: ["section", "payload", "completedAt"] },
       {
         model: ReviewAction,
@@ -765,6 +773,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
   const a = app as Application & {
     investorOrg?: InvestorOrg;
     owner?: User;
+    partners?: ApplicationPartner[];
     sections?: ApplicationSection[];
     reviewActions?: (ReviewAction & { actor?: User })[];
   };
@@ -779,6 +788,9 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     where: { applicationId: a.id },
     order: [["uploadedAt", "ASC"]],
   });
+
+  const partners = (a.partners ?? []).slice().sort((x, y) => x.position - y.position);
+  const partnerNameById = new Map(partners.map((pt) => [pt.id, pt.legalName]));
 
   const sectionList = SECTION_ORDER.map((key) => ({
     key,
@@ -860,6 +872,22 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
       filename: d.filename,
       sizeLabel: formatFileSize(d.sizeBytes),
       uploadedAt: formatDateTime(d.uploadedAt),
+      partnerName: d.partnerId ? partnerNameById.get(d.partnerId) ?? null : null,
+    })),
+    partners: partners.map((pt) => ({
+      id: pt.id,
+      legalName: pt.legalName,
+      tradingName: pt.tradingName ?? null,
+      companyType: pt.companyType ?? null,
+      businessSector: pt.businessSector ?? null,
+      registrationNumber: pt.registrationNumber ?? null,
+      ursbRegistrationNumber: pt.ursbRegistrationNumber ?? null,
+      countryOfIncorporation: pt.countryOfIncorporation ?? null,
+      tin: pt.tin ?? null,
+      address: pt.address ?? null,
+      phone: pt.phone ?? null,
+      email: pt.email ?? null,
+      isLead: pt.isLead,
     })),
     auditTrail,
   };

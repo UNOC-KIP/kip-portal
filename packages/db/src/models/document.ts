@@ -13,6 +13,7 @@ export class Document extends Model<
 > {
   declare id: CreationOptional<string>
   declare applicationId: string
+  declare partnerId: CreationOptional<string | null>
   declare kind: string
   declare filename: string
   declare storageKey: string
@@ -25,6 +26,7 @@ export class Document extends Model<
       {
         id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
         applicationId: { type: DataTypes.UUID, allowNull: false },
+        partnerId: { type: DataTypes.UUID, allowNull: true },
         kind: { type: DataTypes.STRING, allowNull: false },
         filename: { type: DataTypes.STRING, allowNull: false },
         storageKey: { type: DataTypes.STRING, allowNull: false },

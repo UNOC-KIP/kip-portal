@@ -12,6 +12,7 @@ export interface AdminDocument {
   filename: string;
   sizeLabel: string;
   uploadedAt: string;
+  partnerName?: string | null;
 }
 
 /**
@@ -137,6 +138,11 @@ export function DocumentList({ documents }: { documents: AdminDocument[] }) {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold text-ink-900">
                   {doc.kindLabel}
+                  {doc.partnerName && (
+                    <span className="ml-2 rounded bg-brand-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-600">
+                      {doc.partnerName}
+                    </span>
+                  )}
                 </p>
                 <p className="truncate text-xs text-ink-500">
                   {doc.filename} · {doc.sizeLabel} · {doc.uploadedAt}

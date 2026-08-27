@@ -1209,3 +1209,31 @@ export const adminOverrideStatusSchema = z.object({
   notes: z.string().trim().max(1000).optional(),
 });
 export type AdminOverrideStatusInput = z.infer<typeof adminOverrideStatusSchema>;
+
+// ─── Joint-venture partners ──────────────────────────────────────────────────
+//
+// A JV application is several companies applying together. Each co-venturer is
+// captured with the same company/business fields as the primary applicant. The
+// list is saved whole (replace-all) via PUT /applications/:id/partners.
+
+export const partnerCompanySchema = z.object({
+  id: z.string().uuid().optional(), // set when editing an existing partner row
+  legalName: z.string().trim().min(1, "Legal name is required"),
+  tradingName: z.string().trim().optional().nullable(),
+  registrationNumber: z.string().trim().optional().nullable(),
+  ursbRegistrationNumber: z.string().trim().optional().nullable(),
+  companyType: z.string().trim().optional().nullable(),
+  businessSector: z.string().trim().optional().nullable(),
+  countryOfIncorporation: z.string().trim().optional().nullable(),
+  tin: z.string().trim().optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+  phone: z.string().trim().optional().nullable(),
+  email: z.string().trim().optional().nullable(),
+  isLead: z.boolean().optional(),
+});
+export type PartnerCompanyInput = z.infer<typeof partnerCompanySchema>;
+
+export const savePartnersSchema = z.object({
+  partners: z.array(partnerCompanySchema).max(10),
+});
+export type SavePartnersInput = z.infer<typeof savePartnersSchema>;

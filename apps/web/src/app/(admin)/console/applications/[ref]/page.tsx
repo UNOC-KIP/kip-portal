@@ -174,6 +174,44 @@ export default async function AdminApplicationDetailPage({
               )}
             </div>
 
+            {/* Joint-venture partners */}
+            {app.partners.length > 0 && (
+              <div className="rounded-xl border border-ink-200 bg-white p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-bold text-ink-700">Joint-Venture Partners</h2>
+                  <span className="text-xs text-ink-500">
+                    {app.partners.length} venture{app.partners.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <div className="space-y-4">
+                  {app.partners.map((pt) => (
+                    <div key={pt.id} className="rounded-lg border border-ink-100 bg-ink-50/40 p-4">
+                      <div className="mb-1.5 flex items-center gap-2">
+                        <span className="text-sm font-bold text-ink-900">{pt.legalName}</span>
+                        {pt.isLead && (
+                          <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand-600">
+                            Lead
+                          </span>
+                        )}
+                      </div>
+                      <div className="divide-y divide-ink-100">
+                        <Row label="Trading name" value={pt.tradingName} />
+                        <Row label="Company type" value={labelFor(COMPANY_TYPE_LABELS as Record<string, string>, pt.companyType)} />
+                        <Row label="Sector" value={labelFor(BUSINESS_SECTOR_LABELS as Record<string, string>, pt.businessSector)} />
+                        <Row label="Registration no." value={pt.registrationNumber} />
+                        <Row label="URSB no." value={pt.ursbRegistrationNumber} />
+                        <Row label="TIN" value={pt.tin} />
+                        <Row label="Country" value={pt.countryOfIncorporation} />
+                        <Row label="Address" value={pt.address} />
+                        <Row label="Phone" value={pt.phone} />
+                        <Row label="Email" value={pt.email} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Payment record */}
             {app.payment ? (
               <div className="rounded-xl border border-green-200 bg-green-50 p-5">

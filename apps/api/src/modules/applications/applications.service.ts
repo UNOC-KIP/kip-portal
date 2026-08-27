@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import {
   sequelize,
   Application,
+  ApplicationPartner,
   ApplicationSection,
   ApplicationWindow,
   Document,
@@ -29,6 +30,7 @@ import {
   REFERENCED_STATUSES,
   type ApplicantCategory,
   type AdminOverrideStatusInput,
+  type SavePartnersInput,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
@@ -465,5 +467,84 @@ export async function overrideApplicationStatus(
       { transaction: t },
     );
     return app;
+  });
+}
+
+
+/**
+ * Replace the joint-venture partner list on an application (owner or ADMIN,
+ * only while the application is still editable). Reconciles by id so a partner
+ * that keeps its id keeps its documents (Document.partnerId); a removed partner
+ * is deleted and its documents' partnerId is SET NULL by the FK. Exactly one
+ * partner is marked lead — an explicit flag if given, otherwise the first.
+ */
+export async function savePartners(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: SavePartnersInput,
+): Promise<ApplicationPartner[]> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId", "status"],
+  });
+  if (!app) throw NotFound("Application");
+  if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
+    throw Forbidden("You can only edit your own application");
+  }
+  const editable: string[] = [
+    ApplicationStatus.DRAFT_PAYMENT_PENDING,
+    ApplicationStatus.DRAFT,
+    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ];
+  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
+    throw Conflict(`This application can no longer be edited (status ${app.status})`);
+  }
+
+  const partners = input.partners;
+  const explicitLead = partners.findIndex((p) => p.isLead);
+  const leadIndex = explicitLead >= 0 ? explicitLead : 0;
+
+  return sequelize.transaction(async (t) => {
+    const existing = await ApplicationPartner.findAll({
+      where: { applicationId },
+      transaction: t,
+    });
+    const incomingIds = new Set(
+      partners.filter((p) => p.id).map((p) => p.id as string),
+    );
+
+    for (const row of existing) {
+      if (!incomingIds.has(row.id)) await row.destroy({ transaction: t });
+    }
+
+    const existingById = new Map(existing.map((r) => [r.id, r]));
+    const saved: ApplicationPartner[] = [];
+    for (let i = 0; i < partners.length; i++) {
+      const p = partners[i]!;
+      const fields = {
+        legalName: p.legalName,
+        tradingName: p.tradingName ?? null,
+        registrationNumber: p.registrationNumber ?? null,
+        ursbRegistrationNumber: p.ursbRegistrationNumber ?? null,
+        companyType: p.companyType ?? null,
+        businessSector: p.businessSector ?? null,
+        countryOfIncorporation: p.countryOfIncorporation ?? null,
+        tin: p.tin ?? null,
+        address: p.address ?? null,
+        phone: p.phone ?? null,
+        email: p.email ?? null,
+        isLead: i === leadIndex,
+        position: i,
+      };
+      const current = p.id ? existingById.get(p.id) : undefined;
+      saved.push(
+        current
+          ? await current.update(fields, { transaction: t })
+          : await ApplicationPartner.create(
+              { applicationId, ...fields },
+              { transaction: t },
+            ),
+      );
+    }
+    return saved;
   });
 }

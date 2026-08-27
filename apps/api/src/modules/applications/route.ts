@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   Application,
+  ApplicationPartner,
   ApplicationSection,
   Document,
   Payment,
@@ -10,6 +11,7 @@ import {
   createApplicationSchema,
   updateSectionSchema,
   adminOverrideStatusSchema,
+  savePartnersSchema,
 } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { BadRequest, Forbidden, NotFound } from "../../errors.js";
@@ -20,6 +22,7 @@ import {
   saveSection,
   submissionBlockers,
   overrideApplicationStatus,
+  savePartners,
 } from "./applications.service.js";
 
 export const applicationsRouter: Router = Router();
@@ -59,6 +62,7 @@ applicationsRouter.get("/:id", async (req, res, next) => {
     const app = await Application.findByPk(id, {
       include: [
         { model: ApplicationSection, as: "sections" },
+        { model: ApplicationPartner, as: "partners" },
         { model: Document, as: "documents" },
         { model: Payment, as: "payments" },
       ],
@@ -94,6 +98,26 @@ applicationsRouter.put(
       const input = updateSectionSchema.parse(req.body);
       const section = await saveSection(id, req.user!, input);
       res.json(section);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * PUT /applications/:id/partners — replace the joint-venture partner list.
+ * Owner or ADMIN; only while the application is still editable.
+ */
+applicationsRouter.put(
+  "/:id/partners",
+  requireRole(UserRole.INVESTOR, UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const input = savePartnersSchema.parse(req.body);
+      const partners = await savePartners(id, req.user!, input);
+      res.json({ partners });
     } catch (e) {
       next(e);
     }
