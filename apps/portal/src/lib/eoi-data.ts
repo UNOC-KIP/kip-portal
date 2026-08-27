@@ -2,6 +2,7 @@ import "server-only";
 
 import {
   Application,
+  ApplicationPartner,
   ApplicationSection,
   Document,
   InvestorOrg,
@@ -36,6 +37,22 @@ export type EoiSectionState = {
   complete: boolean;
 };
 
+export type EoiPartner = {
+  id: string;
+  legalName: string;
+  tradingName: string | null;
+  registrationNumber: string | null;
+  ursbRegistrationNumber: string | null;
+  companyType: string | null;
+  businessSector: string | null;
+  countryOfIncorporation: string | null;
+  tin: string | null;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+  isLead: boolean;
+};
+
 export type EoiWizardData = {
   application: {
     id: string;
@@ -47,6 +64,8 @@ export type EoiWizardData = {
   editable: boolean;
   sections: EoiSectionState[];
   documents: EoiDocument[];
+  /** Joint-venture co-applicants (empty for a single-company application). */
+  partners: EoiPartner[];
   /** Registration data used to prefill Section 1 (see `prefillPreliminaryInfo`). */
   prefill: Record<string, unknown>;
 };
@@ -143,13 +162,17 @@ export async function getEoiWizardData(
   // their own and applies through the sandbox org created with the application.
   const orgId = application.investorOrgId ?? user.investorOrgId;
 
-  const [sections, documents, org] = await Promise.all([
+  const [sections, documents, org, partners] = await Promise.all([
     ApplicationSection.findAll({ where: { applicationId: application.id } }),
     Document.findAll({
       where: { applicationId: application.id },
       order: [["uploadedAt", "ASC"]],
     }),
     orgId ? InvestorOrg.findByPk(orgId) : null,
+    ApplicationPartner.findAll({
+      where: { applicationId: application.id },
+      order: [["position", "ASC"]],
+    }),
   ]);
 
   return {
@@ -171,6 +194,21 @@ export async function getEoiWizardData(
       filename: d.filename,
       sizeBytes: d.sizeBytes,
       uploadedAt: d.uploadedAt.toISOString(),
+    })),
+    partners: partners.map((pt) => ({
+      id: pt.id,
+      legalName: pt.legalName,
+      tradingName: pt.tradingName ?? null,
+      registrationNumber: pt.registrationNumber ?? null,
+      ursbRegistrationNumber: pt.ursbRegistrationNumber ?? null,
+      companyType: pt.companyType ?? null,
+      businessSector: pt.businessSector ?? null,
+      countryOfIncorporation: pt.countryOfIncorporation ?? null,
+      tin: pt.tin ?? null,
+      address: pt.address ?? null,
+      phone: pt.phone ?? null,
+      email: pt.email ?? null,
+      isLead: pt.isLead,
     })),
     prefill: prefillPreliminaryInfo(org, user),
   };

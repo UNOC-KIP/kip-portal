@@ -11,6 +11,7 @@ import {
   EOI_SECTION_LABELS,
   EOI_SECTION_ORDER,
   EoiSection,
+  LegalForm,
   REPORTING_YEARS,
   sectionSchemas,
 } from "@kip/shared";
@@ -19,6 +20,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { DocumentSlots } from "./document-slots";
+import { PartnerCompanies } from "./partner-companies";
 import { EoiFormProvider } from "./eoi-fields";
 import {
   SectionDeclaration,
@@ -427,6 +429,14 @@ export function EoiWizard({
             >
               <div className="space-y-4">
                 {section === EoiSection.PRELIMINARY_INFO && <SectionPreliminaryInfo />}
+                {section === EoiSection.PRELIMINARY_INFO &&
+                  getIn(payload, "legalStatus.legalForm") === LegalForm.JOINT_VENTURE && (
+                    <PartnerCompanies
+                      applicationId={data.application.id}
+                      initial={data.partners}
+                      disabled={disabled}
+                    />
+                  )}
                 {section === EoiSection.LAND_BUSINESS_PROFILE && (
                   <SectionLandBusinessProfile applicantCategory={applicantCategory} />
                 )}

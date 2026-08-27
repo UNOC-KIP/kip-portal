@@ -500,8 +500,9 @@ export async function savePartners(
   }
 
   const partners = input.partners;
-  const explicitLead = partners.findIndex((p) => p.isLead);
-  const leadIndex = explicitLead >= 0 ? explicitLead : 0;
+  // Only an explicitly flagged partner is the lead; the co-venturer list may
+  // have none (the primary applicant company lives on the application itself).
+  const leadIndex = partners.findIndex((p) => p.isLead);
 
   return sequelize.transaction(async (t) => {
     const existing = await ApplicationPartner.findAll({
