@@ -1174,3 +1174,38 @@ export function canTransition(
 ): boolean {
   return validTransitions[from]?.includes(to) ?? false;
 }
+
+/**
+ * Statuses an application can no longer be moved OUT of — the committee's final
+ * outcomes. An admin stage override (PATCH /applications/:id/status) refuses to
+ * touch an application sitting in one of these, so a decision is never silently
+ * undone.
+ */
+export const FINAL_OUTCOME_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.ALLOCATED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.NOT_SHORTLISTED,
+];
+
+/** Statuses that presuppose a submitted application, so a reference must exist. */
+export const REFERENCED_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.SUBMITTED,
+  ApplicationStatus.UNDER_TC_REVIEW,
+  ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ApplicationStatus.SHORTLISTED,
+  ApplicationStatus.NOT_SHORTLISTED,
+  ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_APPROVED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.EXCO_REVIEW,
+  ApplicationStatus.ALLOCATED,
+];
+
+/** Admin stage-override request body. */
+export const adminOverrideStatusSchema = z.object({
+  status: z.enum(
+    Object.values(ApplicationStatus) as [ApplicationStatus, ...ApplicationStatus[]],
+  ),
+  notes: z.string().trim().max(1000).optional(),
+});
+export type AdminOverrideStatusInput = z.infer<typeof adminOverrideStatusSchema>;

@@ -15,6 +15,7 @@ import {
   Application,
   ApplicationSection,
   ApplicationWindow,
+  Document,
   Inquiry,
   InvestorOrg,
   NotifySignup,
@@ -27,6 +28,8 @@ import {
 import {
   ApplicationStatus,
   ApplicationWindowStatus,
+  DOCUMENT_KIND_LABELS,
+  formatFileSize,
   PaymentMethod,
   PaymentStatus,
   ReviewActionType,
@@ -617,6 +620,7 @@ const ACTIVITY_TEXT: Partial<Record<ReviewActionType, string>> = {
   [ReviewActionType.ALLOCATED]:               "land allocated by ExCo",
   [ReviewActionType.REQUESTED_CLARIFICATION]: "clarification requested",
   [ReviewActionType.CLARIFICATION_PROVIDED]:  "clarification provided",
+  [ReviewActionType.ADMIN_STATUS_OVERRIDE]:   "stage overridden by admin",
 };
 
 export async function getAdminDashboard(): Promise<AdminDashboard> {
@@ -716,6 +720,17 @@ export type AdminApplicationDetail = {
   totalSections: number;
   sections: { key: string; label: string; complete: boolean; payload: unknown }[];
   payment: { method: string; amountLabel: string; ref: string; confirmedAt: string } | null;
+  owner: {
+    id: string; name: string; designation: string | null;
+    phone: string | null; email: string; role: string;
+  } | null;
+  org: {
+    legalName: string; tradingName: string | null; registrationNumber: string | null;
+    ursbRegistrationNumber: string | null; companyType: string | null; businessSector: string | null;
+    countryOfIncorporation: string | null; tin: string | null; address: string | null;
+    phone: string | null; email: string | null;
+  } | null;
+  documents: { id: string; kindLabel: string; filename: string; sizeLabel: string; uploadedAt: string }[];
   auditTrail: { time: string; text: string; actor: string }[];
 };
 
@@ -723,7 +738,20 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
   const app = await Application.findOne({
     where: { reference: ref },
     include: [
-      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] },
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: [
+          "legalName", "tradingName", "registrationNumber", "ursbRegistrationNumber",
+          "companyType", "businessSector", "countryOfIncorporation", "tin",
+          "address", "phone", "email",
+        ],
+      },
+      {
+        model: User,
+        as: "owner",
+        attributes: ["id", "name", "designation", "phone", "email", "role"],
+      },
       { model: ApplicationSection, as: "sections", attributes: ["section", "payload", "completedAt"] },
       {
         model: ReviewAction,
@@ -736,6 +764,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
 
   const a = app as Application & {
     investorOrg?: InvestorOrg;
+    owner?: User;
     sections?: ApplicationSection[];
     reviewActions?: (ReviewAction & { actor?: User })[];
   };
@@ -744,6 +773,11 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
   const payment = await Payment.findOne({
     where: { applicationId: a.id },
     order: [["createdAt", "DESC"]],
+  });
+
+  const documents = await Document.findAll({
+    where: { applicationId: a.id },
+    order: [["uploadedAt", "ASC"]],
   });
 
   const sectionList = SECTION_ORDER.map((key) => ({
@@ -794,6 +828,39 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
           confirmedAt: payment.confirmedAt ? formatDateTime(payment.confirmedAt) : "Not confirmed",
         }
       : null,
+    owner: a.owner
+      ? {
+          id: a.owner.id,
+          name: a.owner.name,
+          designation: a.owner.designation ?? null,
+          phone: a.owner.phone ?? null,
+          email: a.owner.email,
+          role: a.owner.role,
+        }
+      : null,
+    org: a.investorOrg
+      ? {
+          legalName: a.investorOrg.legalName,
+          tradingName: a.investorOrg.tradingName ?? null,
+          registrationNumber: a.investorOrg.registrationNumber ?? null,
+          ursbRegistrationNumber: a.investorOrg.ursbRegistrationNumber ?? null,
+          companyType: a.investorOrg.companyType ?? null,
+          businessSector: a.investorOrg.businessSector ?? null,
+          countryOfIncorporation: a.investorOrg.countryOfIncorporation ?? null,
+          tin: a.investorOrg.tin ?? null,
+          address: a.investorOrg.address ?? null,
+          phone: a.investorOrg.phone ?? null,
+          email: a.investorOrg.email ?? null,
+        }
+      : null,
+    documents: documents.map((d) => ({
+      id: d.id,
+      kindLabel:
+        DOCUMENT_KIND_LABELS[d.kind as keyof typeof DOCUMENT_KIND_LABELS] ?? d.kind,
+      filename: d.filename,
+      sizeLabel: formatFileSize(d.sizeBytes),
+      uploadedAt: formatDateTime(d.uploadedAt),
+    })),
     auditTrail,
   };
 }

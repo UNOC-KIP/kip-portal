@@ -9,6 +9,7 @@ import {
   UserRole,
   createApplicationSchema,
   updateSectionSchema,
+  adminOverrideStatusSchema,
 } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { BadRequest, Forbidden, NotFound } from "../../errors.js";
@@ -18,6 +19,7 @@ import {
   createApplication,
   saveSection,
   submissionBlockers,
+  overrideApplicationStatus,
 } from "./applications.service.js";
 
 export const applicationsRouter: Router = Router();
@@ -123,6 +125,28 @@ applicationsRouter.get("/:id/blockers", async (req, res, next) => {
     next(e);
   }
 });
+
+/**
+ * PATCH /applications/:id/status — admin stage override (ADMIN only).
+ *
+ * Moves an application to a chosen stage outside the committee flow. Refuses to
+ * move one that already holds a final outcome; records a ReviewAction for audit.
+ */
+applicationsRouter.patch(
+  "/:id/status",
+  requireRole(UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const input = adminOverrideStatusSchema.parse(req.body);
+      const app = await overrideApplicationStatus(id, req.user!, input);
+      res.json(app);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 /** DELETE /applications/:id — admin soft delete (application + its payments). */
 applicationsRouter.delete(

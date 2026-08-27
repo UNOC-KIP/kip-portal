@@ -7,6 +7,7 @@ import {
   Document,
   InvestorOrg,
   Payment,
+  ReviewAction,
   User,
 } from "@kip/db";
 import {
@@ -23,7 +24,11 @@ import {
   previewOrgLegalName,
   sectionSchemas,
   EOI_SECTION_LABELS,
+  ReviewActionType,
+  FINAL_OUTCOME_STATUSES,
+  REFERENCED_STATUSES,
   type ApplicantCategory,
+  type AdminOverrideStatusInput,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
@@ -383,6 +388,82 @@ export async function submitApplication(
       { transaction: t },
     );
     // TODO(Phase 3): fireWebhook("application-submitted", …) after commit.
+    return app;
+  });
+}
+
+
+/**
+ * Admin stage override — PATCH /applications/:id/status (ADMIN only, enforced at
+ * the route). Deliberately separate from the committee endpoints: the TC/LAC/ExCo
+ * modules own the normal pipeline, this is the escape hatch when an application
+ * is stuck or was moved in error.
+ *
+ * Guard: an application already sitting in a final committee outcome
+ * (ALLOCATED / LAC_REJECTED / NOT_SHORTLISTED) is locked — a decision is never
+ * silently undone. Every override writes a ReviewAction so it is auditable.
+ */
+export async function overrideApplicationStatus(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: AdminOverrideStatusInput,
+): Promise<Application> {
+  const app = await Application.findByPk(applicationId);
+  if (!app) throw NotFound("Application");
+
+  const current = app.status as ApplicationStatus;
+  const target = input.status;
+
+  if (current === target) {
+    throw BadRequest(`This application is already at ${target}`);
+  }
+  if (FINAL_OUTCOME_STATUSES.includes(current)) {
+    throw Conflict(
+      `This application has a final outcome (${current}) and its stage can no longer be overridden.`,
+    );
+  }
+
+  return sequelize.transaction(async (t) => {
+    let reference = app.reference;
+    let submittedAt = app.submittedAt;
+
+    // A submitted-or-later stage assumes a reference number. If the override
+    // jumps an application there without one, mint it from the most recent
+    // window, mirroring submitApplication() (this consumes a sequence number).
+    if (!reference && REFERENCED_STATUSES.includes(target)) {
+      const window = await ApplicationWindow.findOne({
+        order: [["openAt", "DESC"]],
+        transaction: t,
+      });
+      if (!window) {
+        throw Conflict(
+          "No application window exists to draw a reference number from. Create one in the admin console first.",
+        );
+      }
+      await window.increment("sequenceCounter", { by: 1, transaction: t });
+      await window.reload({ transaction: t });
+      reference = formatReference(
+        window.openAt.getUTCFullYear(),
+        window.sequenceCounter,
+      );
+      if (!submittedAt) submittedAt = new Date();
+    }
+
+    await app.update(
+      { status: target, reference, submittedAt },
+      { transaction: t },
+    );
+    await ReviewAction.create(
+      {
+        applicationId: app.id,
+        actorUserId: actor.id,
+        type: ReviewActionType.ADMIN_STATUS_OVERRIDE,
+        fromStatus: current,
+        toStatus: target,
+        notes: input.notes ?? null,
+      },
+      { transaction: t },
+    );
     return app;
   });
 }
