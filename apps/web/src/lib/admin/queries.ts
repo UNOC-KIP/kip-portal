@@ -843,7 +843,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     owner: a.owner
       ? {
           id: a.owner.id,
-          name: a.owner.name,
+          name: a.owner.name ?? "",
           designation: a.owner.designation ?? null,
           phone: a.owner.phone ?? null,
           email: a.owner.email,
