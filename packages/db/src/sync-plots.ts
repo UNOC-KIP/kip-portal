@@ -5,11 +5,24 @@
  *   pnpm --filter @kip/db sync:plots      (or: pnpm db:sync-plots from the root)
  *
  * Auth: generates a short-lived ArcGIS token from GIS_USERNAME/GIS_PASSWORD
- * (or uses GIS_TOKEN directly). The GIS remains the source of truth; this copy
- * is what the portal reads so plot selection does not depend on the GIS being
- * reachable at request time. Idempotent: upserts on the GIS object id (fid).
+ * (or uses GIS_TOKEN directly). The GIS remains the source of truth for the map;
+ * this copy is what the portal reads so plot selection does not depend on the
+ * GIS at request time. Idempotent: upserts on the GIS object id (fid).
+ *
+ * Uses raw `pg` with the same DATABASE_URL fallback as seed.ts, so it runs as a
+ * standalone script without loading the full model layer / env.
+ *
+ * Note: allocation is NOT read from the GIS. Nothing is allocated at this stage;
+ * every plot stays selectable and the "how many have applied" figure is derived
+ * from portal applications (Application.plotId), not the GIS status. The GIS
+ * status/investor are stored for reference only.
  */
-import { sequelize, Plot } from './index'
+import { Pool } from 'pg'
+import { randomUUID } from 'crypto'
+
+const DB_URL =
+  process.env.DATABASE_URL ??
+  'postgresql://kip:kip_dev_password@localhost:5433/kip_portal?schema=public'
 
 const PORTAL_URL = (process.env.GIS_PORTAL_URL ?? 'https://gis.unoc.co.ug/portal').replace(/\/$/, '')
 const FEATURE_URL = (
@@ -42,9 +55,7 @@ async function getToken(): Promise<string> {
   const username = process.env.GIS_USERNAME
   const password = process.env.GIS_PASSWORD
   if (!username || !password) {
-    throw new Error(
-      'Set GIS_USERNAME and GIS_PASSWORD (or GIS_TOKEN) to sync plots from the GIS.',
-    )
+    throw new Error('Set GIS_USERNAME and GIS_PASSWORD (or GIS_TOKEN) to sync plots from the GIS.')
   }
   const body = new URLSearchParams({
     username,
@@ -65,7 +76,10 @@ async function getToken(): Promise<string> {
   return data.token
 }
 
-async function fetchPage(token: string, offset: number): Promise<{ features: { attributes: Attrs }[]; more: boolean }> {
+async function fetchPage(
+  token: string,
+  offset: number,
+): Promise<{ features: { attributes: Attrs }[]; more: boolean }> {
   const params = new URLSearchParams({
     where: '1=1',
     outFields: OUT_FIELDS,
@@ -95,45 +109,44 @@ async function main() {
     all.push(...features.map((f) => f.attributes))
     if (!more || features.length === 0) break
   }
-
   console.log(`Fetched ${all.length} plots from the GIS.`)
 
-  const now = new Date()
-  let created = 0
-  let updated = 0
-  for (const a of all) {
-    const status = clean(a.status)
-    const fields = {
-      plotName: clean(a.plotname) ?? `Plot ${a.fid}`,
-      zone: clean(a.zone),
-      acreage: typeof a.arcreage === 'number' ? a.arcreage : null,
-      areaCategory: clean(a.areacatego),
-      lot: clean(a.lot),
-      usage: clean(a.usage),
-      gisStatus: a.status ?? null,
-      gisInvestor: clean(a.investor),
-      available: (status ?? '').toLowerCase() === 'not taken',
-      lastSyncedAt: now,
+  const pool = new Pool({ connectionString: DB_URL })
+  let upserted = 0
+  try {
+    for (const a of all) {
+      await pool.query(
+        `INSERT INTO "Plot"
+           ("id","gisObjectId","plotName","zone","acreage","areaCategory","lot","usage","gisStatus","gisInvestor","available","lastSyncedAt","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now(),now(),now())
+         ON CONFLICT ("gisObjectId") DO UPDATE SET
+           "plotName"=EXCLUDED."plotName","zone"=EXCLUDED."zone","acreage"=EXCLUDED."acreage",
+           "areaCategory"=EXCLUDED."areaCategory","lot"=EXCLUDED."lot","usage"=EXCLUDED."usage",
+           "gisStatus"=EXCLUDED."gisStatus","gisInvestor"=EXCLUDED."gisInvestor",
+           "available"=EXCLUDED."available","lastSyncedAt"=now(),"updatedAt"=now()`,
+        [
+          randomUUID(),
+          a.fid,
+          clean(a.plotname) ?? `Plot ${a.fid}`,
+          clean(a.zone),
+          typeof a.arcreage === 'number' ? a.arcreage : null,
+          clean(a.areacatego),
+          clean(a.lot),
+          clean(a.usage),
+          a.status ?? null,
+          clean(a.investor),
+          true, // allocation is not tracked in the GIS — every plot stays selectable
+        ],
+      )
+      upserted += 1
     }
-    const [row, wasCreated] = await Plot.findOrCreate({
-      where: { gisObjectId: a.fid },
-      defaults: { gisObjectId: a.fid, ...fields },
-    })
-    if (wasCreated) {
-      created += 1
-    } else {
-      await row.update(fields)
-      updated += 1
-    }
+    console.log(`Synced ${upserted} plots into the Plot table.`)
+  } finally {
+    await pool.end()
   }
-
-  const available = all.filter((a) => (clean(a.status) ?? '').toLowerCase() === 'not taken').length
-  console.log(`Synced: ${created} created, ${updated} updated. ${available} available.`)
-  await sequelize.close()
 }
 
-main().catch(async (err) => {
+main().catch((err) => {
   console.error(err instanceof Error ? err.message : err)
-  await sequelize.close().catch(() => {})
   process.exit(1)
 })
