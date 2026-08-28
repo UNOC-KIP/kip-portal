@@ -749,8 +749,9 @@ export type AdminApplicationDetail = {
 };
 
 export async function getAdminApplicationDetail(ref: string): Promise<AdminApplicationDetail | null> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
   const app = await Application.findOne({
-    where: { reference: ref },
+    where: isUuid ? { id: ref } : { reference: ref },
     include: [
       {
         model: InvestorOrg,

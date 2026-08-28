@@ -155,33 +155,52 @@ export async function createApplication(
   });
   if (existing) return { application: existing, created: false };
 
-  // The window must be open to start, for the same reason it must be open to
-  // submit — an EOI begun outside a call has nothing to be submitted into.
-  // Lifted for preview actors: being able to walk the journey between calls is
-  // the entire point of preview mode.
-  if (!preview) {
-    const window = await ApplicationWindow.findOne({
-      where: { status: ApplicationWindowStatus.OPEN },
-      order: [["openAt", "DESC"]],
-    });
-    const now = new Date();
-    if (!window || now < window.openAt || now > window.closeAt) {
-      throw Conflict(
-        "The EOI application window is not currently open. You will be notified when the next Call for Expressions of Interest opens.",
-      );
-    }
+  // A window is needed both to gate the start and to draw the reference number.
+  // Real investors need an OPEN, in-range window; a preview actor (ADMIN) may
+  // start between calls and falls back to the most recent window of any status.
+  const now = new Date();
+  const openWindow = await ApplicationWindow.findOne({
+    where: { status: ApplicationWindowStatus.OPEN },
+    order: [["openAt", "DESC"]],
+  });
+  const inRange =
+    openWindow != null && now >= openWindow.openAt && now <= openWindow.closeAt;
+  const window = inRange
+    ? openWindow
+    : preview
+      ? await ApplicationWindow.findOne({ order: [["openAt", "DESC"]] })
+      : null;
+  if (!window) {
+    throw Conflict(
+      preview
+        ? "No application window exists to draw a reference number from. Create one in the admin console first."
+        : "The EOI application window is not currently open. You will be notified when the next Call for Expressions of Interest opens.",
+    );
   }
 
-  // No reference yet — it is assigned atomically at the SUBMITTED transition
-  // from the active window's sequence (see submitApplication).
-  const application = await Application.create({
-    lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
-    status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
-    ownerUserId: actor.id,
-    investorOrgId,
+  // The reference is assigned the moment the application is started, drawn
+  // atomically from the window's sequence — so every application (draft or not)
+  // has a KIP-EOI-YYYY-NNNN reference throughout. (This consumes a sequence
+  // number even for drafts that are never submitted.)
+  return sequelize.transaction(async (t) => {
+    await window.increment("sequenceCounter", { by: 1, transaction: t });
+    await window.reload({ transaction: t });
+    const reference = formatReference(
+      window.openAt.getUTCFullYear(),
+      window.sequenceCounter,
+    );
+    const application = await Application.create(
+      {
+        lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
+        reference,
+        status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
+        ownerUserId: actor.id,
+        investorOrgId,
+      },
+      { transaction: t },
+    );
+    return { application, created: true };
   });
-
-  return { application, created: true };
 }
 
 /**
@@ -389,13 +408,18 @@ export async function submitApplication(
   }
 
   return sequelize.transaction(async (t) => {
-    // Atomic counter bump (row-locked UPDATE), then read the value back.
-    await window.increment("sequenceCounter", { by: 1, transaction: t });
-    await window.reload({ transaction: t });
-    const reference = formatReference(
-      window.openAt.getUTCFullYear(),
-      window.sequenceCounter,
-    );
+    // The reference is normally assigned at creation; submission only stamps the
+    // status + timestamp. A pre-existing draft with no reference (created before
+    // this change) gets one minted here as a fallback.
+    let reference = app.reference;
+    if (!reference) {
+      await window.increment("sequenceCounter", { by: 1, transaction: t });
+      await window.reload({ transaction: t });
+      reference = formatReference(
+        window.openAt.getUTCFullYear(),
+        window.sequenceCounter,
+      );
+    }
     await app.update(
       { status: ApplicationStatus.SUBMITTED, submittedAt: now, reference },
       { transaction: t },
