@@ -35,6 +35,10 @@ export class Plot extends Model<
   declare gisInvestor: CreationOptional<string | null>
   /** Derived: true when the plot is free to apply for. */
   declare available: CreationOptional<boolean>
+  /** Plot outline as a GeoJSON geometry string (WGS84 / EPSG:4326). */
+  declare geometry: CreationOptional<string | null>
+  declare centroidLat: CreationOptional<number | null>
+  declare centroidLng: CreationOptional<number | null>
   declare lastSyncedAt: CreationOptional<Date | null>
   declare createdAt: CreationOptional<Date>
   declare updatedAt: CreationOptional<Date>
@@ -53,6 +57,9 @@ export class Plot extends Model<
         gisStatus: { type: DataTypes.STRING, allowNull: true },
         gisInvestor: { type: DataTypes.STRING, allowNull: true },
         available: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+        geometry: { type: DataTypes.TEXT, allowNull: true },
+        centroidLat: { type: DataTypes.DOUBLE, allowNull: true },
+        centroidLng: { type: DataTypes.DOUBLE, allowNull: true },
         lastSyncedAt: { type: DataTypes.DATE, allowNull: true },
         createdAt: DataTypes.DATE,
         updatedAt: DataTypes.DATE,

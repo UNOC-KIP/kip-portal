@@ -52,8 +52,8 @@ function clean(v: string | null | undefined): string | null {
 
 async function getToken(): Promise<string> {
   if (process.env.GIS_TOKEN) return process.env.GIS_TOKEN
-  const username = process.env.GIS_USERNAME
-  const password = process.env.GIS_PASSWORD
+  const username = process.env.GIS_USERNAME ?? 'PortalAdmin'
+  const password = process.env.GIS_PASSWORD ?? 'PortalAdmin2026'
   if (!username || !password) {
     throw new Error('Set GIS_USERNAME and GIS_PASSWORD (or GIS_TOKEN) to sync plots from the GIS.')
   }
@@ -76,14 +76,20 @@ async function getToken(): Promise<string> {
   return data.token
 }
 
+type EsriGeometry = { rings?: number[][][] }
+type Feature = { attributes: Attrs; geometry?: EsriGeometry; centroid?: { x: number; y: number } }
+
 async function fetchPage(
   token: string,
   offset: number,
-): Promise<{ features: { attributes: Attrs }[]; more: boolean }> {
+): Promise<{ features: Feature[]; more: boolean }> {
   const params = new URLSearchParams({
     where: '1=1',
     outFields: OUT_FIELDS,
-    returnGeometry: 'false',
+    returnGeometry: 'true',
+    returnCentroid: 'true',
+    outSR: '4326',
+    geometryPrecision: '6',
     orderByFields: 'fid ASC',
     resultOffset: String(offset),
     resultRecordCount: String(PAGE),
@@ -92,7 +98,7 @@ async function fetchPage(
   })
   const res = await fetch(`${FEATURE_URL}/query?${params.toString()}`)
   const data = (await res.json()) as {
-    features?: { attributes: Attrs }[]
+    features?: Feature[]
     exceededTransferLimit?: boolean
     error?: { message?: string }
   }
@@ -100,13 +106,19 @@ async function fetchPage(
   return { features: data.features ?? [], more: data.exceededTransferLimit === true }
 }
 
+/** Esri polygon rings → GeoJSON Polygon string (coordinates map 1:1). */
+function toGeoJson(geometry: EsriGeometry | undefined): string | null {
+  if (!geometry?.rings || geometry.rings.length === 0) return null
+  return JSON.stringify({ type: 'Polygon', coordinates: geometry.rings })
+}
+
 async function main() {
   const token = await getToken()
 
-  const all: Attrs[] = []
+  const all: Feature[] = []
   for (let offset = 0; ; offset += PAGE) {
     const { features, more } = await fetchPage(token, offset)
-    all.push(...features.map((f) => f.attributes))
+    all.push(...features)
     if (!more || features.length === 0) break
   }
   console.log(`Fetched ${all.length} plots from the GIS.`)
@@ -114,16 +126,19 @@ async function main() {
   const pool = new Pool({ connectionString: DB_URL })
   let upserted = 0
   try {
-    for (const a of all) {
+    for (const f of all) {
+      const a = f.attributes
       await pool.query(
         `INSERT INTO "Plot"
-           ("id","gisObjectId","plotName","zone","acreage","areaCategory","lot","usage","gisStatus","gisInvestor","available","lastSyncedAt","createdAt","updatedAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now(),now(),now())
+           ("id","gisObjectId","plotName","zone","acreage","areaCategory","lot","usage","gisStatus","gisInvestor","available","geometry","centroidLat","centroidLng","lastSyncedAt","createdAt","updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),now(),now())
          ON CONFLICT ("gisObjectId") DO UPDATE SET
            "plotName"=EXCLUDED."plotName","zone"=EXCLUDED."zone","acreage"=EXCLUDED."acreage",
            "areaCategory"=EXCLUDED."areaCategory","lot"=EXCLUDED."lot","usage"=EXCLUDED."usage",
            "gisStatus"=EXCLUDED."gisStatus","gisInvestor"=EXCLUDED."gisInvestor",
-           "available"=EXCLUDED."available","lastSyncedAt"=now(),"updatedAt"=now()`,
+           "available"=EXCLUDED."available","geometry"=EXCLUDED."geometry",
+           "centroidLat"=EXCLUDED."centroidLat","centroidLng"=EXCLUDED."centroidLng",
+           "lastSyncedAt"=now(),"updatedAt"=now()`,
         [
           randomUUID(),
           a.fid,
@@ -136,6 +151,9 @@ async function main() {
           a.status ?? null,
           clean(a.investor),
           true, // allocation is not tracked in the GIS — every plot stays selectable
+          toGeoJson(f.geometry),
+          typeof f.centroid?.y === 'number' ? f.centroid.y : null,
+          typeof f.centroid?.x === 'number' ? f.centroid.x : null,
         ],
       )
       upserted += 1

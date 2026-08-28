@@ -63,6 +63,10 @@ export type EoiPlotOption = {
   areaCategory: string | null;
   /** How many OTHER investors have applied for this plot (transparency). */
   applicantCount: number;
+  /** GeoJSON Polygon string (WGS84) for the map, or null if unavailable. */
+  geometry: string | null;
+  centroidLat: number | null;
+  centroidLng: number | null;
 };
 
 export type EoiWizardData = {
@@ -251,6 +255,9 @@ export async function getEoiWizardData(
       acreage: pt.acreage ?? null,
       areaCategory: pt.areaCategory ?? null,
       applicantCount: plotCounts.get(pt.id) ?? 0,
+      geometry: pt.geometry ?? null,
+      centroidLat: pt.centroidLat ?? null,
+      centroidLng: pt.centroidLng ?? null,
     })),
     prefill: prefillPreliminaryInfo(org, user),
   };

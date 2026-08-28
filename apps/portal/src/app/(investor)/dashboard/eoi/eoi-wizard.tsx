@@ -429,14 +429,6 @@ export function EoiWizard({
               setNa={setNa}
             >
               <div className="space-y-4">
-                {section === EoiSection.PRELIMINARY_INFO && (
-                  <PlotPicker
-                    applicationId={data.application.id}
-                    plots={data.plots}
-                    selectedPlotId={data.application.plotId}
-                    disabled={disabled}
-                  />
-                )}
                 {section === EoiSection.PRELIMINARY_INFO && <SectionPreliminaryInfo />}
                 {section === EoiSection.PRELIMINARY_INFO &&
                   getIn(payload, "legalStatus.legalForm") === LegalForm.JOINT_VENTURE && (
@@ -448,6 +440,14 @@ export function EoiWizard({
                       disabled={disabled}
                     />
                   )}
+                {section === EoiSection.LAND_BUSINESS_PROFILE && (
+                  <PlotPicker
+                    applicationId={data.application.id}
+                    plots={data.plots}
+                    selectedPlotId={data.application.plotId}
+                    disabled={disabled}
+                  />
+                )}
                 {section === EoiSection.LAND_BUSINESS_PROFILE && (
                   <SectionLandBusinessProfile applicantCategory={applicantCategory} />
                 )}
