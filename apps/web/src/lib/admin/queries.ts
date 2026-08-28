@@ -14,6 +14,7 @@ import "server-only";
 import {
   Application,
   ApplicationPartner,
+  ApplicationPlot,
   ApplicationSection,
   ApplicationWindow,
   Document,
@@ -739,10 +740,11 @@ export type AdminApplicationDetail = {
     phone: string | null; email: string | null; isLead: boolean;
   }[];
   documents: { id: string; kindLabel: string; filename: string; sizeLabel: string; uploadedAt: string; partnerName: string | null }[];
-  plot: {
-    plotName: string; zone: string | null; acreage: number | null;
+  plots: {
+    id: string; plotName: string; zone: string | null; acreage: number | null;
     areaCategory: string | null; applicantCount: number;
-  } | null;
+  }[];
+  totalAcres: number;
   auditTrail: { time: string; text: string; actor: string }[];
 };
 
@@ -765,7 +767,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
         attributes: ["id", "name", "designation", "phone", "email", "role"],
       },
       { model: ApplicationPartner, as: "partners" },
-      { model: Plot, as: "plot" },
+      { model: Plot, as: "plots" },
       { model: ApplicationSection, as: "sections", attributes: ["section", "payload", "completedAt"] },
       {
         model: ReviewAction,
@@ -780,7 +782,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     investorOrg?: InvestorOrg;
     owner?: User;
     partners?: ApplicationPartner[];
-    plot?: Plot;
+    plots?: Plot[];
     sections?: ApplicationSection[];
     reviewActions?: (ReviewAction & { actor?: User })[];
   };
@@ -799,13 +801,38 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
   const partners = (a.partners ?? []).slice().sort((x, y) => x.position - y.position);
   const partnerNameById = new Map(partners.map((pt) => [pt.id, pt.legalName]));
 
-  // Transparency: how many OTHER live applications are for the same plot.
-  const plotApps = a.plotId
-    ? await Application.findAll({ attributes: ["id", "status"], where: { plotId: a.plotId } })
-    : [];
-  const plotApplicantCount = plotApps.filter(
-    (x) => x.id !== a.id && x.status !== ApplicationStatus.WITHDRAWN,
-  ).length;
+  // Selected plots (may be several) + transparency counts: how many OTHER live
+  // applications include each plot.
+  const selectedPlots = (a.plots ?? [])
+    .slice()
+    .sort((x, y) => x.plotName.localeCompare(y.plotName));
+  const selPlotIds = selectedPlots.map((pt) => pt.id);
+  const plotCountMap = new Map<string, number>();
+  if (selPlotIds.length) {
+    const links = await ApplicationPlot.findAll({
+      attributes: ["applicationId", "plotId"],
+      where: { plotId: selPlotIds },
+    });
+    const otherAppIds = Array.from(
+      new Set(links.map((l) => l.applicationId).filter((id) => id !== a.id)),
+    );
+    const statusById = new Map(
+      otherAppIds.length
+        ? (
+            await Application.findAll({
+              attributes: ["id", "status"],
+              where: { id: otherAppIds },
+            })
+          ).map((x) => [x.id, x.status])
+        : [],
+    );
+    for (const l of links) {
+      if (l.applicationId === a.id) continue;
+      if (statusById.get(l.applicationId) === ApplicationStatus.WITHDRAWN) continue;
+      plotCountMap.set(l.plotId, (plotCountMap.get(l.plotId) ?? 0) + 1);
+    }
+  }
+  const totalAcres = selectedPlots.reduce((sum, pt) => sum + (pt.acreage ?? 0), 0);
 
   const sectionList = SECTION_ORDER.map((key) => ({
     key,
@@ -904,15 +931,15 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
       email: pt.email ?? null,
       isLead: pt.isLead,
     })),
-    plot: a.plot
-      ? {
-          plotName: a.plot.plotName,
-          zone: a.plot.zone ?? null,
-          acreage: a.plot.acreage ?? null,
-          areaCategory: a.plot.areaCategory ?? null,
-          applicantCount: plotApplicantCount,
-        }
-      : null,
+    plots: selectedPlots.map((pt) => ({
+      id: pt.id,
+      plotName: pt.plotName,
+      zone: pt.zone ?? null,
+      acreage: pt.acreage ?? null,
+      areaCategory: pt.areaCategory ?? null,
+      applicantCount: plotCountMap.get(pt.id) ?? 0,
+    })),
+    totalAcres,
     auditTrail,
   };
 }

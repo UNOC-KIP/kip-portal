@@ -25,13 +25,13 @@ function zoneColor(zone: string | null): string {
  */
 export function PlotMap({
   plots,
-  selectedId,
+  selectedIds,
   zone,
   onSelect,
   disabled,
 }: {
   plots: EoiPlotOption[];
-  selectedId: string | null;
+  selectedIds: string[];
   zone: string;
   onSelect: (plotId: string) => void;
   disabled?: boolean;
@@ -81,7 +81,7 @@ export function PlotMap({
       {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         style: (f: any) => {
-          const sel = f.properties.id === selectedId;
+          const sel = selectedIds.includes(f.properties.id);
           const color = zoneColor(f.properties.zone);
           return {
             color: sel ? "#111827" : color,
@@ -148,7 +148,7 @@ export function PlotMap({
   useEffect(() => {
     draw();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [plots, zone, selectedId]);
+  }, [plots, zone, selectedIds]);
 
   return (
     <div

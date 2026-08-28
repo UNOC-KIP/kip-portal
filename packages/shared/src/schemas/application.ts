@@ -1243,3 +1243,9 @@ export const setApplicationPlotSchema = z.object({
   plotId: z.string().uuid(),
 });
 export type SetApplicationPlotInput = z.infer<typeof setApplicationPlotSchema>;
+
+/** Set the full set of plots an application is for (replace-all). */
+export const setApplicationPlotsSchema = z.object({
+  plotIds: z.array(z.string().uuid()).max(50),
+});
+export type SetApplicationPlotsInput = z.infer<typeof setApplicationPlotsSchema>;

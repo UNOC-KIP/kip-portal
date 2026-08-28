@@ -129,25 +129,36 @@ export default async function AdminApplicationDetailPage({
               />
             </div>
 
-            {/* Plot of interest */}
-            {app.plot && (
+            {/* Plots of interest */}
+            {app.plots.length > 0 && (
               <div className="rounded-xl border border-ink-200 bg-white p-5">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-bold text-ink-700">Plot of Interest</h2>
-                  {app.plot.applicantCount > 0 && (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                      {app.plot.applicantCount} other applicant{app.plot.applicantCount === 1 ? "" : "s"}
-                    </span>
-                  )}
+                  <h2 className="text-sm font-bold text-ink-700">Plots of Interest</h2>
+                  <span className="text-xs font-semibold text-ink-500">
+                    {app.plots.length} plot{app.plots.length === 1 ? "" : "s"} · {app.totalAcres.toFixed(2)} acres
+                  </span>
                 </div>
-                <div className="divide-y divide-ink-100">
-                  <Row label="Plot" value={app.plot.plotName} />
-                  <Row label="Zone" value={app.plot.zone} />
-                  <Row
-                    label="Acreage"
-                    value={app.plot.acreage != null ? `${app.plot.acreage.toFixed(2)} acres` : "—"}
-                  />
-                  <Row label="Size band" value={app.plot.areaCategory} />
+                <div className="space-y-2">
+                  {app.plots.map((pt) => (
+                    <div
+                      key={pt.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-ink-100 bg-ink-50/40 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-ink-900">{pt.plotName}</p>
+                        <p className="text-xs text-ink-500">
+                          {pt.zone ?? "—"} ·{" "}
+                          {pt.acreage != null ? `${pt.acreage.toFixed(2)} acres` : "—"}
+                          {pt.areaCategory ? ` · ${pt.areaCategory}` : ""}
+                        </p>
+                      </div>
+                      {pt.applicantCount > 0 && (
+                        <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          {pt.applicantCount} other{pt.applicantCount === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

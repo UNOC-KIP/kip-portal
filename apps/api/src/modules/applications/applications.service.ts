@@ -7,6 +7,7 @@ import {
   ApplicationWindow,
   Document,
   Plot,
+  ApplicationPlot,
   InvestorOrg,
   Payment,
   ReviewAction,
@@ -32,7 +33,7 @@ import {
   type ApplicantCategory,
   type AdminOverrideStatusInput,
   type SavePartnersInput,
-  type SetApplicationPlotInput,
+  type SetApplicationPlotsInput,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
@@ -554,14 +555,15 @@ export async function savePartners(
 
 
 /**
- * Set the plot an application is for (owner or ADMIN, only while editable). The
- * plot's name is copied into lotReference so existing displays keep working; the
- * authoritative link is plotId.
+ * Set the full set of plots an application is for (owner or ADMIN, only while
+ * editable). Replace-all: the ApplicationPlot join is rebuilt to match plotIds.
+ * The first plot is mirrored into plotId and the plot names into lotReference so
+ * existing single-plot displays keep working.
  */
-export async function setApplicationPlot(
+export async function setApplicationPlots(
   applicationId: string,
   actor: { id: string; role: string },
-  input: SetApplicationPlotInput,
+  input: SetApplicationPlotsInput,
 ): Promise<Application> {
   const app = await Application.findByPk(applicationId, {
     attributes: ["id", "ownerUserId", "status", "lotReference", "plotId"],
@@ -579,9 +581,32 @@ export async function setApplicationPlot(
     throw Conflict(`This application can no longer be edited (status ${app.status})`);
   }
 
-  const plot = await Plot.findByPk(input.plotId, { attributes: ["id", "plotName"] });
-  if (!plot) throw NotFound("Plot");
+  const plotIds = Array.from(new Set(input.plotIds));
+  const plots = plotIds.length
+    ? await Plot.findAll({ where: { id: plotIds }, attributes: ["id", "plotName"] })
+    : [];
+  if (plots.length !== plotIds.length) throw BadRequest("One or more plots are unknown");
 
-  await app.update({ plotId: plot.id, lotReference: plot.plotName });
-  return app;
+  // Keep the incoming order for display (find returns arbitrary order).
+  const byId = new Map(plots.map((p) => [p.id, p]));
+  const ordered = plotIds.map((id) => byId.get(id)!);
+
+  return sequelize.transaction(async (t) => {
+    await ApplicationPlot.destroy({ where: { applicationId: app.id }, transaction: t });
+    if (ordered.length) {
+      await ApplicationPlot.bulkCreate(
+        ordered.map((p) => ({ applicationId: app.id, plotId: p.id })),
+        { transaction: t },
+      );
+    }
+    const names = ordered.map((p) => p.plotName).join(", ");
+    await app.update(
+      {
+        plotId: ordered[0]?.id ?? null,
+        lotReference: names.slice(0, 250) || UNASSIGNED_LOT_REFERENCE,
+      },
+      { transaction: t },
+    );
+    return app;
+  });
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, MapPin, Users } from "lucide-react";
+import { Check, Loader2, MapPin, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { EoiPlotOption } from "@/lib/eoi-data";
@@ -15,33 +15,42 @@ function acres(v: number | null): string {
 }
 
 /**
- * Lets an investor choose the plot their application is for, on the land map or
- * from the list. Plots mirror the GIS register; each shows how many OTHER
- * investors have applied (transparency — just the count). Selecting one calls
- * PATCH /applications/:id/plot.
+ * Lets an investor choose one or more plots on the land map or from the list.
+ * Selecting/deselecting saves the whole set (PUT /applications/:id/plots) and
+ * reports the total acreage so the wizard can auto-fill the required land area.
+ * Each plot shows how many OTHER investors have applied (transparency).
  */
 export function PlotPicker({
   applicationId,
   plots,
-  selectedPlotId,
+  selectedPlotIds,
   disabled,
+  onTotalAcresChange,
 }: {
   applicationId: string;
   plots: EoiPlotOption[];
-  selectedPlotId: string | null;
+  selectedPlotIds: string[];
   disabled?: boolean;
+  onTotalAcresChange?: (totalAcres: number) => void;
 }) {
   const router = useRouter();
-  const [selectedId, setSelectedId] = useState<string | null>(selectedPlotId);
+  const [selectedIds, setSelectedIds] = useState<string[]>(selectedPlotIds);
   const [zone, setZone] = useState("");
   const [size, setSize] = useState("");
   const [query, setQuery] = useState("");
   const [showList, setShowList] = useState(false);
-  const [savingId, setSavingId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selected = plots.find((p) => p.id === selectedId) ?? null;
   const hasMap = useMemo(() => plots.some((p) => p.geometry), [plots]);
+  const selectedPlots = useMemo(
+    () => plots.filter((p) => selectedIds.includes(p.id)),
+    [plots, selectedIds],
+  );
+  const totalAcres = useMemo(
+    () => selectedPlots.reduce((sum, p) => sum + (p.acreage ?? 0), 0),
+    [selectedPlots],
+  );
 
   const zones = useMemo(
     () => Array.from(new Set(plots.map((p) => p.zone).filter(Boolean))).sort() as string[],
@@ -62,26 +71,34 @@ export function PlotPicker({
     );
   }, [plots, zone, size, query]);
 
-  async function choose(plotId: string) {
-    setSavingId(plotId);
+  async function toggle(plotId: string) {
+    if (disabled || saving) return;
+    const next = selectedIds.includes(plotId)
+      ? selectedIds.filter((x) => x !== plotId)
+      : [...selectedIds, plotId];
+    setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/applications/${applicationId}/plot`, {
-        method: "PATCH",
+      const res = await fetch(`${API_BASE}/applications/${applicationId}/plots`, {
+        method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plotId }),
+        body: JSON.stringify({ plotIds: next }),
       });
       if (!res.ok) {
         const d = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-        throw new Error(d?.error?.message ?? "Could not select this plot");
+        throw new Error(d?.error?.message ?? "Could not update your plot selection");
       }
-      setSelectedId(plotId);
+      setSelectedIds(next);
+      const total = plots
+        .filter((p) => next.includes(p.id))
+        .reduce((sum, p) => sum + (p.acreage ?? 0), 0);
+      onTotalAcresChange?.(total);
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not select this plot");
+      setError(e instanceof Error ? e.message : "Could not update your plot selection");
     } finally {
-      setSavingId(null);
+      setSaving(false);
     }
   }
 
@@ -89,11 +106,13 @@ export function PlotPicker({
     <div className="rounded-xl border border-ink-200 bg-white p-5">
       <div className="mb-1 flex items-center gap-2">
         <MapPin size={16} className="text-brand-600" />
-        <h3 className="text-sm font-bold text-ink-900">Plot of Interest</h3>
+        <h3 className="text-sm font-bold text-ink-900">Plots of Interest</h3>
+        {saving && <Loader2 size={13} className="animate-spin text-ink-400" />}
       </div>
       <p className="mb-4 text-xs text-ink-500">
-        Choose the plot you are applying for — click it on the map or pick it from the list.
-        Each plot shows how many other investors have already expressed interest.
+        Choose one or more plots — click them on the map or pick from the list. The total
+        acreage is added up and used as your required land area. Each plot shows how many
+        other investors have already expressed interest.
       </p>
 
       {error && (
@@ -102,26 +121,42 @@ export function PlotPicker({
         </p>
       )}
 
-      {/* Current selection */}
+      {/* Selected plots + total */}
       <div className="mb-3 rounded-lg border border-ink-100 bg-ink-50/50 p-3">
-        {selected ? (
-          <div>
-            <p className="text-sm font-bold text-ink-900">
-              {selected.plotName}
-              {savingId && <Loader2 size={12} className="ml-2 inline animate-spin text-ink-400" />}
-            </p>
-            <p className="text-xs text-ink-500">
-              {selected.zone ?? "—"} · {acres(selected.acreage)}
-              {selected.applicantCount > 0 && (
-                <span className="ml-2 inline-flex items-center gap-1 text-amber-700">
-                  <Users size={11} /> {selected.applicantCount} other
-                  {selected.applicantCount === 1 ? "" : "s"} applied
+        {selectedPlots.length > 0 ? (
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedPlots.map((p) => (
+                <span
+                  key={p.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700"
+                >
+                  {p.plotName}
+                  <span className="text-brand-500">· {acres(p.acreage)}</span>
+                  {!disabled && (
+                    <button
+                      type="button"
+                      onClick={() => toggle(p.id)}
+                      disabled={saving}
+                      aria-label={`Remove ${p.plotName}`}
+                      className="ml-0.5 text-brand-400 hover:text-brand-700"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
                 </span>
-              )}
+              ))}
+            </div>
+            <p className="mt-2 text-sm font-bold text-ink-900">
+              Total: {totalAcres.toFixed(2)} acres
+              <span className="ml-2 text-xs font-normal text-ink-500">
+                across {selectedPlots.length} plot{selectedPlots.length === 1 ? "" : "s"} · fills your
+                required land area
+              </span>
             </p>
-          </div>
+          </>
         ) : (
-          <p className="text-sm text-ink-500">No plot selected yet.</p>
+          <p className="text-sm text-ink-500">No plots selected yet.</p>
         )}
       </div>
 
@@ -144,14 +179,14 @@ export function PlotPicker({
       {hasMap ? (
         <PlotMap
           plots={plots}
-          selectedId={selectedId}
+          selectedIds={selectedIds}
           zone={zone}
-          onSelect={choose}
+          onSelect={toggle}
           disabled={disabled}
         />
       ) : (
         <p className="rounded-lg border border-dashed border-ink-200 p-3 text-xs text-ink-400">
-          The plot map isn&apos;t available yet — pick a plot from the list below.
+          The plot map isn&apos;t available yet — pick plots from the list below.
         </p>
       )}
 
@@ -192,13 +227,13 @@ export function PlotPicker({
 
             <ul className="max-h-80 space-y-1 overflow-y-auto pr-1">
               {filtered.map((p) => {
-                const isSel = p.id === selectedId;
+                const isSel = selectedIds.includes(p.id);
                 return (
                   <li key={p.id}>
                     <button
                       type="button"
-                      onClick={() => choose(p.id)}
-                      disabled={disabled || savingId !== null}
+                      onClick={() => toggle(p.id)}
+                      disabled={disabled || saving}
                       className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left transition ${
                         isSel ? "border-brand-400 bg-brand-50" : "border-ink-200 hover:bg-ink-50"
                       }`}
@@ -218,7 +253,6 @@ export function PlotPicker({
                             <Users size={10} /> {p.applicantCount}
                           </span>
                         )}
-                        {savingId === p.id && <Loader2 size={13} className="animate-spin text-ink-400" />}
                       </span>
                     </button>
                   </li>

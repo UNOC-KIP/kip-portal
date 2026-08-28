@@ -3,6 +3,7 @@ import "server-only";
 import {
   Application,
   ApplicationPartner,
+  ApplicationPlot,
   ApplicationSection,
   Document,
   InvestorOrg,
@@ -75,7 +76,8 @@ export type EoiWizardData = {
     status: string;
     reference: string | null;
     lotReference: string;
-    plotId: string | null;
+    /** Plots this application has selected (may be several). */
+    selectedPlotIds: string[];
   };
   /** True while the investor may still edit — drives read-only mode. */
   editable: boolean;
@@ -194,21 +196,29 @@ export async function getEoiWizardData(
     }),
   ]);
 
-  // Plots for selection, and how many OTHER investors have applied for each
-  // (transparency — just the number). Allocation is not tracked here.
-  const [plots, plotApps] = await Promise.all([
+  // Plots for selection, the plots THIS application has chosen, and how many
+  // OTHER investors have applied for each plot (transparency — just the count).
+  const [plots, appPlots, apps] = await Promise.all([
     Plot.findAll({
       where: { available: true },
       order: [["zone", "ASC"], ["plotName", "ASC"]],
     }),
-    Application.findAll({ attributes: ["id", "plotId", "status", "ownerUserId"] }),
+    ApplicationPlot.findAll({ attributes: ["applicationId", "plotId"] }),
+    Application.findAll({ attributes: ["id", "status", "ownerUserId"] }),
   ]);
+  const appById = new Map(apps.map((x) => [x.id, x]));
+  const selectedPlotIds: string[] = [];
   const plotCounts = new Map<string, number>();
-  for (const pa of plotApps) {
-    if (!pa.plotId) continue;
-    if (pa.status === ApplicationStatus.WITHDRAWN) continue;
-    if (pa.ownerUserId === userId) continue; // "others", not the investor's own
-    plotCounts.set(pa.plotId, (plotCounts.get(pa.plotId) ?? 0) + 1);
+  for (const ap of appPlots) {
+    if (ap.applicationId === application.id) {
+      selectedPlotIds.push(ap.plotId);
+      continue;
+    }
+    const owner = appById.get(ap.applicationId);
+    if (!owner) continue;
+    if (owner.status === ApplicationStatus.WITHDRAWN) continue;
+    if (owner.ownerUserId === userId) continue; // "others", not the investor's own
+    plotCounts.set(ap.plotId, (plotCounts.get(ap.plotId) ?? 0) + 1);
   }
 
   return {
@@ -217,7 +227,7 @@ export async function getEoiWizardData(
       status: application.status,
       reference: application.reference ?? null,
       lotReference: application.lotReference,
-      plotId: application.plotId ?? null,
+      selectedPlotIds,
     },
     editable: EDITABLE_STATUSES.includes(application.status),
     sections: sections.map((s) => ({

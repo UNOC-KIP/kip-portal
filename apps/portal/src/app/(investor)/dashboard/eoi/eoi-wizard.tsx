@@ -142,6 +142,21 @@ export function EoiWizard({
     });
   }, []);
 
+  /**
+   * Plot selection (Section 2) auto-fills the required land area: the total
+   * acreage across the chosen plots, in acres. Only writes when at least one
+   * plot is selected, so it never clobbers a manual figure with zero.
+   */
+  const handlePlotAcres = useCallback(
+    (totalAcres: number) => {
+      if (totalAcres > 0) {
+        set("landArea.size", Math.round(totalAcres * 100) / 100);
+        set("landArea.unit", "ACRES");
+      }
+    },
+    [set],
+  );
+
   const naNotes = (payload.notApplicable ?? {}) as Record<string, string>;
 
   const setNa = useCallback((key: string, note: string | null) => {
@@ -444,8 +459,9 @@ export function EoiWizard({
                   <PlotPicker
                     applicationId={data.application.id}
                     plots={data.plots}
-                    selectedPlotId={data.application.plotId}
+                    selectedPlotIds={data.application.selectedPlotIds}
                     disabled={disabled}
+                    onTotalAcresChange={handlePlotAcres}
                   />
                 )}
                 {section === EoiSection.LAND_BUSINESS_PROFILE && (
