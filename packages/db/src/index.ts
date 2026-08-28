@@ -13,6 +13,7 @@ import { Application } from './models/application'
 import { ApplicationSection } from './models/application-section'
 import { Document } from './models/document'
 import { ApplicationPartner } from './models/application-partner'
+import { Plot } from './models/plot'
 import { Payment } from './models/payment'
 import { ReviewAction } from './models/review-action'
 import { ClarificationRequest } from './models/clarification-request'
@@ -63,6 +64,7 @@ Application.initModel(sequelize)
 ApplicationSection.initModel(sequelize)
 Document.initModel(sequelize)
 ApplicationPartner.initModel(sequelize)
+Plot.initModel(sequelize)
 Payment.initModel(sequelize)
 ReviewAction.initModel(sequelize)
 ClarificationRequest.initModel(sequelize)
@@ -96,6 +98,9 @@ Application.hasMany(ApplicationPartner, { foreignKey: 'applicationId', as: 'part
 ApplicationPartner.belongsTo(Application, { foreignKey: 'applicationId' })
 ApplicationPartner.hasMany(Document, { foreignKey: 'partnerId', as: 'documents' })
 Document.belongsTo(ApplicationPartner, { foreignKey: 'partnerId', as: 'partner' })
+
+Plot.hasMany(Application, { foreignKey: 'plotId', as: 'applications' })
+Application.belongsTo(Plot, { foreignKey: 'plotId', as: 'plot' })
 
 Application.hasMany(Payment, { foreignKey: 'applicationId', as: 'payments' })
 Payment.belongsTo(Application, { foreignKey: 'applicationId' })
@@ -159,6 +164,7 @@ export {
   ApplicationSection,
   Document,
   ApplicationPartner,
+  Plot,
   Payment,
   ReviewAction,
   ClarificationRequest,

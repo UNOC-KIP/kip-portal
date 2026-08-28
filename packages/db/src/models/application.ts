@@ -14,6 +14,7 @@ export class Application extends Model<
   declare id: CreationOptional<string>
   declare reference: CreationOptional<string | null>
   declare lotReference: string
+  declare plotId: CreationOptional<string | null>
   declare status: CreationOptional<string>
   declare ownerUserId: string
   declare investorOrgId: string
@@ -30,6 +31,7 @@ export class Application extends Model<
         id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
         reference: { type: DataTypes.STRING, allowNull: true, unique: true },
         lotReference: { type: DataTypes.STRING, allowNull: false },
+        plotId: { type: DataTypes.UUID, allowNull: true },
         status: {
           type: DataTypes.STRING,
           allowNull: false,
