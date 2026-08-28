@@ -6,6 +6,7 @@ import {
   ApplicationSection,
   ApplicationWindow,
   Document,
+  Plot,
   InvestorOrg,
   Payment,
   ReviewAction,
@@ -31,6 +32,7 @@ import {
   type ApplicantCategory,
   type AdminOverrideStatusInput,
   type SavePartnersInput,
+  type SetApplicationPlotInput,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
@@ -548,4 +550,38 @@ export async function savePartners(
     }
     return saved;
   });
+}
+
+
+/**
+ * Set the plot an application is for (owner or ADMIN, only while editable). The
+ * plot's name is copied into lotReference so existing displays keep working; the
+ * authoritative link is plotId.
+ */
+export async function setApplicationPlot(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: SetApplicationPlotInput,
+): Promise<Application> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId", "status", "lotReference", "plotId"],
+  });
+  if (!app) throw NotFound("Application");
+  if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
+    throw Forbidden("You can only edit your own application");
+  }
+  const editable: string[] = [
+    ApplicationStatus.DRAFT_PAYMENT_PENDING,
+    ApplicationStatus.DRAFT,
+    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ];
+  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
+    throw Conflict(`This application can no longer be edited (status ${app.status})`);
+  }
+
+  const plot = await Plot.findByPk(input.plotId, { attributes: ["id", "plotName"] });
+  if (!plot) throw NotFound("Plot");
+
+  await app.update({ plotId: plot.id, lotReference: plot.plotName });
+  return app;
 }

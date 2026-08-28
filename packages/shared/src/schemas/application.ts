@@ -1237,3 +1237,9 @@ export const savePartnersSchema = z.object({
   partners: z.array(partnerCompanySchema).max(10),
 });
 export type SavePartnersInput = z.infer<typeof savePartnersSchema>;
+
+/** Set the plot an application is for. */
+export const setApplicationPlotSchema = z.object({
+  plotId: z.string().uuid(),
+});
+export type SetApplicationPlotInput = z.infer<typeof setApplicationPlotSchema>;

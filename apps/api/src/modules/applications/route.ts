@@ -12,6 +12,7 @@ import {
   updateSectionSchema,
   adminOverrideStatusSchema,
   savePartnersSchema,
+  setApplicationPlotSchema,
 } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { BadRequest, Forbidden, NotFound } from "../../errors.js";
@@ -23,6 +24,7 @@ import {
   submissionBlockers,
   overrideApplicationStatus,
   savePartners,
+  setApplicationPlot,
 } from "./applications.service.js";
 
 export const applicationsRouter: Router = Router();
@@ -118,6 +120,26 @@ applicationsRouter.put(
       const input = savePartnersSchema.parse(req.body);
       const partners = await savePartners(id, req.user!, input);
       res.json({ partners });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * PATCH /applications/:id/plot — set the plot the application is for.
+ * Owner or ADMIN; only while the application is still editable.
+ */
+applicationsRouter.patch(
+  "/:id/plot",
+  requireRole(UserRole.INVESTOR, UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const input = setApplicationPlotSchema.parse(req.body);
+      const app = await setApplicationPlot(id, req.user!, input);
+      res.json(app);
     } catch (e) {
       next(e);
     }

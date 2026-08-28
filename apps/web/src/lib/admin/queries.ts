@@ -17,6 +17,7 @@ import {
   ApplicationSection,
   ApplicationWindow,
   Document,
+  Plot,
   Inquiry,
   InvestorOrg,
   NotifySignup,
@@ -738,6 +739,10 @@ export type AdminApplicationDetail = {
     phone: string | null; email: string | null; isLead: boolean;
   }[];
   documents: { id: string; kindLabel: string; filename: string; sizeLabel: string; uploadedAt: string; partnerName: string | null }[];
+  plot: {
+    plotName: string; zone: string | null; acreage: number | null;
+    areaCategory: string | null; applicantCount: number;
+  } | null;
   auditTrail: { time: string; text: string; actor: string }[];
 };
 
@@ -760,6 +765,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
         attributes: ["id", "name", "designation", "phone", "email", "role"],
       },
       { model: ApplicationPartner, as: "partners" },
+      { model: Plot, as: "plot" },
       { model: ApplicationSection, as: "sections", attributes: ["section", "payload", "completedAt"] },
       {
         model: ReviewAction,
@@ -774,6 +780,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     investorOrg?: InvestorOrg;
     owner?: User;
     partners?: ApplicationPartner[];
+    plot?: Plot;
     sections?: ApplicationSection[];
     reviewActions?: (ReviewAction & { actor?: User })[];
   };
@@ -791,6 +798,14 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
 
   const partners = (a.partners ?? []).slice().sort((x, y) => x.position - y.position);
   const partnerNameById = new Map(partners.map((pt) => [pt.id, pt.legalName]));
+
+  // Transparency: how many OTHER live applications are for the same plot.
+  const plotApps = a.plotId
+    ? await Application.findAll({ attributes: ["id", "status"], where: { plotId: a.plotId } })
+    : [];
+  const plotApplicantCount = plotApps.filter(
+    (x) => x.id !== a.id && x.status !== ApplicationStatus.WITHDRAWN,
+  ).length;
 
   const sectionList = SECTION_ORDER.map((key) => ({
     key,
@@ -889,6 +904,15 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
       email: pt.email ?? null,
       isLead: pt.isLead,
     })),
+    plot: a.plot
+      ? {
+          plotName: a.plot.plotName,
+          zone: a.plot.zone ?? null,
+          acreage: a.plot.acreage ?? null,
+          areaCategory: a.plot.areaCategory ?? null,
+          applicantCount: plotApplicantCount,
+        }
+      : null,
     auditTrail,
   };
 }

@@ -6,6 +6,7 @@ import {
   ApplicationSection,
   Document,
   InvestorOrg,
+  Plot,
   User,
 } from "@kip/db";
 import {
@@ -54,12 +55,23 @@ export type EoiPartner = {
   isLead: boolean;
 };
 
+export type EoiPlotOption = {
+  id: string;
+  plotName: string;
+  zone: string | null;
+  acreage: number | null;
+  areaCategory: string | null;
+  /** How many OTHER investors have applied for this plot (transparency). */
+  applicantCount: number;
+};
+
 export type EoiWizardData = {
   application: {
     id: string;
     status: string;
     reference: string | null;
     lotReference: string;
+    plotId: string | null;
   };
   /** True while the investor may still edit — drives read-only mode. */
   editable: boolean;
@@ -67,6 +79,8 @@ export type EoiWizardData = {
   documents: EoiDocument[];
   /** Joint-venture co-applicants (empty for a single-company application). */
   partners: EoiPartner[];
+  /** Selectable plots, each with how many other investors have applied. */
+  plots: EoiPlotOption[];
   /** Registration data used to prefill Section 1 (see `prefillPreliminaryInfo`). */
   prefill: Record<string, unknown>;
 };
@@ -176,12 +190,30 @@ export async function getEoiWizardData(
     }),
   ]);
 
+  // Plots for selection, and how many OTHER investors have applied for each
+  // (transparency — just the number). Allocation is not tracked here.
+  const [plots, plotApps] = await Promise.all([
+    Plot.findAll({
+      where: { available: true },
+      order: [["zone", "ASC"], ["plotName", "ASC"]],
+    }),
+    Application.findAll({ attributes: ["id", "plotId", "status", "ownerUserId"] }),
+  ]);
+  const plotCounts = new Map<string, number>();
+  for (const pa of plotApps) {
+    if (!pa.plotId) continue;
+    if (pa.status === ApplicationStatus.WITHDRAWN) continue;
+    if (pa.ownerUserId === userId) continue; // "others", not the investor's own
+    plotCounts.set(pa.plotId, (plotCounts.get(pa.plotId) ?? 0) + 1);
+  }
+
   return {
     application: {
       id: application.id,
       status: application.status,
       reference: application.reference ?? null,
       lotReference: application.lotReference,
+      plotId: application.plotId ?? null,
     },
     editable: EDITABLE_STATUSES.includes(application.status),
     sections: sections.map((s) => ({
@@ -211,6 +243,14 @@ export async function getEoiWizardData(
       phone: pt.phone ?? null,
       email: pt.email ?? null,
       isLead: pt.isLead,
+    })),
+    plots: plots.map((pt) => ({
+      id: pt.id,
+      plotName: pt.plotName,
+      zone: pt.zone ?? null,
+      acreage: pt.acreage ?? null,
+      areaCategory: pt.areaCategory ?? null,
+      applicantCount: plotCounts.get(pt.id) ?? 0,
     })),
     prefill: prefillPreliminaryInfo(org, user),
   };
