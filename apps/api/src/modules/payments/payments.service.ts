@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { sequelize, Application, Document, Payment } from "@kip/db";
+import { sequelize, Application, ApplicationPlot, Document, Payment } from "@kip/db";
 import {
   UserRole,
   ApplicationStatus,
@@ -43,11 +43,19 @@ export async function initiatePayment(
     );
   }
 
-  // Fee is server-configured, not client-supplied.
-  const amount =
+  // Fee is per plot and server-configured, never client-supplied: the total is
+  // the per-plot fee times the number of plots the application is for.
+  const plotCount = await ApplicationPlot.count({ where: { applicationId: app.id } });
+  if (plotCount < 1) {
+    throw BadRequest(
+      "Select at least one plot before paying — the fee is charged per plot.",
+    );
+  }
+  const perPlot =
     input.currency === Currency.UGX
       ? env.EOI_APPLICATION_FEE_UGX
       : env.EOI_APPLICATION_FEE_USD;
+  const amount = perPlot * plotCount;
 
   // Idempotency: re-check inside the transaction with SELECT FOR UPDATE to
   // serialise concurrent requests on an existing PENDING row. A partial unique

@@ -229,12 +229,20 @@ export type SubmissionBlocker = {
 export async function submissionBlockers(
   applicationId: string,
 ): Promise<SubmissionBlocker[]> {
-  const [sections, documents] = await Promise.all([
+  const [sections, documents, plotCount] = await Promise.all([
     ApplicationSection.findAll({ where: { applicationId } }),
     Document.findAll({ where: { applicationId }, attributes: ["kind"] }),
+    ApplicationPlot.count({ where: { applicationId } }),
   ]);
 
   const blockers: SubmissionBlocker[] = [];
+  if (plotCount < 1) {
+    blockers.push({
+      section: EoiSection.LAND_BUSINESS_PROFILE,
+      field: null,
+      message: "Select at least one plot on the land map (Section 2).",
+    });
+  }
   const payloads: Partial<Record<EoiSection, unknown>> = {};
   /** N/A notes gathered across sections, keyed by DocumentKind. */
   const documentNaNotes: Record<string, string> = {};
