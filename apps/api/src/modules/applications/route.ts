@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   Application,
+  ApplicationPartner,
   ApplicationSection,
   Document,
   Payment,
@@ -9,6 +10,9 @@ import {
   UserRole,
   createApplicationSchema,
   updateSectionSchema,
+  adminOverrideStatusSchema,
+  savePartnersSchema,
+  setApplicationPlotsSchema,
 } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { BadRequest, Forbidden, NotFound } from "../../errors.js";
@@ -18,6 +22,9 @@ import {
   createApplication,
   saveSection,
   submissionBlockers,
+  overrideApplicationStatus,
+  savePartners,
+  setApplicationPlots,
 } from "./applications.service.js";
 
 export const applicationsRouter: Router = Router();
@@ -57,6 +64,7 @@ applicationsRouter.get("/:id", async (req, res, next) => {
     const app = await Application.findByPk(id, {
       include: [
         { model: ApplicationSection, as: "sections" },
+        { model: ApplicationPartner, as: "partners" },
         { model: Document, as: "documents" },
         { model: Payment, as: "payments" },
       ],
@@ -99,6 +107,46 @@ applicationsRouter.put(
 );
 
 /**
+ * PUT /applications/:id/partners — replace the joint-venture partner list.
+ * Owner or ADMIN; only while the application is still editable.
+ */
+applicationsRouter.put(
+  "/:id/partners",
+  requireRole(UserRole.INVESTOR, UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const input = savePartnersSchema.parse(req.body);
+      const partners = await savePartners(id, req.user!, input);
+      res.json({ partners });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * PUT /applications/:id/plots — set the full set of plots the application is for.
+ * Owner or ADMIN; only while the application is still editable.
+ */
+applicationsRouter.put(
+  "/:id/plots",
+  requireRole(UserRole.INVESTOR, UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const input = setApplicationPlotsSchema.parse(req.body);
+      const app = await setApplicationPlots(id, req.user!, input);
+      res.json(app);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
  * GET /applications/:id/blockers — dry run of the submit guard.
  *
  * Lets the wizard's review step show exactly what submit would reject, instead
@@ -123,6 +171,28 @@ applicationsRouter.get("/:id/blockers", async (req, res, next) => {
     next(e);
   }
 });
+
+/**
+ * PATCH /applications/:id/status — admin stage override (ADMIN only).
+ *
+ * Moves an application to a chosen stage outside the committee flow. Refuses to
+ * move one that already holds a final outcome; records a ReviewAction for audit.
+ */
+applicationsRouter.patch(
+  "/:id/status",
+  requireRole(UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const input = adminOverrideStatusSchema.parse(req.body);
+      const app = await overrideApplicationStatus(id, req.user!, input);
+      res.json(app);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 /** DELETE /applications/:id — admin soft delete (application + its payments). */
 applicationsRouter.delete(

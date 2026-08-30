@@ -91,6 +91,7 @@ export const ReviewActionType = {
   ALLOCATED:               "ALLOCATED",
   RETURNED_TO_TC:          "RETURNED_TO_TC",
   ESCALATED:               "ESCALATED",
+  ADMIN_STATUS_OVERRIDE:   "ADMIN_STATUS_OVERRIDE",
 } as const;
 export type ReviewActionType = (typeof ReviewActionType)[keyof typeof ReviewActionType];
 

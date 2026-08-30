@@ -100,6 +100,7 @@ async function uploadDocument(args: {
     filename: doc.filename,
     sizeBytes: doc.sizeBytes,
     uploadedAt: doc.uploadedAt,
+    partnerId: null,
   };
 }
 
@@ -120,7 +121,7 @@ function DocumentSlot({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const filed = documents.filter((d) => d.kind === requirement.kind);
+  const filed = documents.filter((d) => d.kind === requirement.kind && d.partnerId === null);
   const note = naNotes[requirement.kind];
   const isNa = typeof note === "string";
   const canAddMore = requirement.multiple || filed.length === 0;
@@ -154,7 +155,12 @@ function DocumentSlot({
         // does not briefly show two files for a slot that holds one.
         next = requirement.multiple
           ? [...next, uploaded]
-          : [...next.filter((d) => d.kind !== requirement.kind), uploaded];
+          : [
+              ...next.filter(
+                (d) => !(d.kind === requirement.kind && d.partnerId === null),
+              ),
+              uploaded,
+            ];
         onChange(next);
       }
     } catch (e) {

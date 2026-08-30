@@ -8,8 +8,7 @@ import {
   Payment,
   ReviewAction,
   SiteVisitBooking,
-  Document,
-} from "@kip/db";
+  Document, ApplicationPlot,} from "@kip/db";
 import {
   ApplicationWindowStatus,
   ReviewActionType,
@@ -150,6 +149,7 @@ export type DashboardData = {
     paymentCurrency: string | null
     paymentAmount: string | null
     paymentConfirmedAt: string | null
+    plotCount: number
   } | null
   recentActivity: ActivityItem[]
   documents: DocumentItem[]
@@ -268,7 +268,7 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
   });
 
   // Payment + documents both hang off the application; fetch them together.
-  const [payment, documents] = app
+  const [payment, documents, plotCount] = app
     ? await Promise.all([
         Payment.findOne({
           where: { applicationId: app.id },
@@ -278,8 +278,9 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
           where: { applicationId: app.id },
           order: [["uploadedAt", "DESC"]],
         }),
+        ApplicationPlot.count({ where: { applicationId: app.id } }),
       ])
-    : [null, [] as Document[]];
+    : [null, [] as Document[], 0];
 
   const org = (user as (User & { investorOrg?: InvestorOrg }) | null)?.investorOrg;
   const appWith = app as (Application & {
@@ -315,6 +316,7 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
           paymentCurrency:    payment?.currency ?? null,
           paymentAmount:      payment ? String(payment.amount) : null,
           paymentConfirmedAt: payment?.confirmedAt?.toISOString() ?? null,
+          plotCount: plotCount ?? 0,
         }
       : null,
     recentActivity,

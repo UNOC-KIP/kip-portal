@@ -1174,3 +1174,78 @@ export function canTransition(
 ): boolean {
   return validTransitions[from]?.includes(to) ?? false;
 }
+
+/**
+ * Statuses an application can no longer be moved OUT of — the committee's final
+ * outcomes. An admin stage override (PATCH /applications/:id/status) refuses to
+ * touch an application sitting in one of these, so a decision is never silently
+ * undone.
+ */
+export const FINAL_OUTCOME_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.ALLOCATED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.NOT_SHORTLISTED,
+];
+
+/** Statuses that presuppose a submitted application, so a reference must exist. */
+export const REFERENCED_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.SUBMITTED,
+  ApplicationStatus.UNDER_TC_REVIEW,
+  ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ApplicationStatus.SHORTLISTED,
+  ApplicationStatus.NOT_SHORTLISTED,
+  ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_APPROVED,
+  ApplicationStatus.LAC_REJECTED,
+  ApplicationStatus.EXCO_REVIEW,
+  ApplicationStatus.ALLOCATED,
+];
+
+/** Admin stage-override request body. */
+export const adminOverrideStatusSchema = z.object({
+  status: z.enum(
+    Object.values(ApplicationStatus) as [ApplicationStatus, ...ApplicationStatus[]],
+  ),
+  notes: z.string().trim().max(1000).optional(),
+});
+export type AdminOverrideStatusInput = z.infer<typeof adminOverrideStatusSchema>;
+
+// ─── Joint-venture partners ──────────────────────────────────────────────────
+//
+// A JV application is several companies applying together. Each co-venturer is
+// captured with the same company/business fields as the primary applicant. The
+// list is saved whole (replace-all) via PUT /applications/:id/partners.
+
+export const partnerCompanySchema = z.object({
+  id: z.string().uuid().optional(), // set when editing an existing partner row
+  legalName: z.string().trim().min(1, "Legal name is required"),
+  tradingName: z.string().trim().optional().nullable(),
+  registrationNumber: z.string().trim().optional().nullable(),
+  ursbRegistrationNumber: z.string().trim().optional().nullable(),
+  companyType: z.string().trim().optional().nullable(),
+  businessSector: z.string().trim().optional().nullable(),
+  countryOfIncorporation: z.string().trim().optional().nullable(),
+  tin: z.string().trim().optional().nullable(),
+  address: z.string().trim().optional().nullable(),
+  phone: z.string().trim().optional().nullable(),
+  email: z.string().trim().optional().nullable(),
+  isLead: z.boolean().optional(),
+});
+export type PartnerCompanyInput = z.infer<typeof partnerCompanySchema>;
+
+export const savePartnersSchema = z.object({
+  partners: z.array(partnerCompanySchema).max(10),
+});
+export type SavePartnersInput = z.infer<typeof savePartnersSchema>;
+
+/** Set the plot an application is for. */
+export const setApplicationPlotSchema = z.object({
+  plotId: z.string().uuid(),
+});
+export type SetApplicationPlotInput = z.infer<typeof setApplicationPlotSchema>;
+
+/** Set the full set of plots an application is for (replace-all). */
+export const setApplicationPlotsSchema = z.object({
+  plotIds: z.array(z.string().uuid()).max(50),
+});
+export type SetApplicationPlotsInput = z.infer<typeof setApplicationPlotsSchema>;

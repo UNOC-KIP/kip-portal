@@ -21,7 +21,7 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
     header: "Reference",
     render: (row) => (
       <Link
-        href={`/console/applications/${row.ref}`}
+        href={`/console/applications/${encodeURIComponent(row.ref === "(draft)" ? String(row.id) : String(row.ref))}`}
         className="font-mono text-xs font-semibold text-brand-600 hover:underline"
       >
         {String(row.ref)}
@@ -74,7 +74,7 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
     render: (row) => (
       <div className="flex items-center gap-2">
         <Link
-          href={`/console/applications/${row.ref}`}
+          href={`/console/applications/${encodeURIComponent(row.ref === "(draft)" ? String(row.id) : String(row.ref))}`}
           className="text-xs font-semibold text-brand-600 hover:underline"
         >
           View →

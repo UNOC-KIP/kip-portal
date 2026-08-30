@@ -2,11 +2,15 @@ import { Op } from "sequelize";
 import {
   sequelize,
   Application,
+  ApplicationPartner,
   ApplicationSection,
   ApplicationWindow,
   Document,
+  Plot,
+  ApplicationPlot,
   InvestorOrg,
   Payment,
+  ReviewAction,
   User,
 } from "@kip/db";
 import {
@@ -23,7 +27,13 @@ import {
   previewOrgLegalName,
   sectionSchemas,
   EOI_SECTION_LABELS,
+  ReviewActionType,
+  FINAL_OUTCOME_STATUSES,
+  REFERENCED_STATUSES,
   type ApplicantCategory,
+  type AdminOverrideStatusInput,
+  type SavePartnersInput,
+  type SetApplicationPlotsInput,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
@@ -145,33 +155,52 @@ export async function createApplication(
   });
   if (existing) return { application: existing, created: false };
 
-  // The window must be open to start, for the same reason it must be open to
-  // submit — an EOI begun outside a call has nothing to be submitted into.
-  // Lifted for preview actors: being able to walk the journey between calls is
-  // the entire point of preview mode.
-  if (!preview) {
-    const window = await ApplicationWindow.findOne({
-      where: { status: ApplicationWindowStatus.OPEN },
-      order: [["openAt", "DESC"]],
-    });
-    const now = new Date();
-    if (!window || now < window.openAt || now > window.closeAt) {
-      throw Conflict(
-        "The EOI application window is not currently open. You will be notified when the next Call for Expressions of Interest opens.",
-      );
-    }
+  // A window is needed both to gate the start and to draw the reference number.
+  // Real investors need an OPEN, in-range window; a preview actor (ADMIN) may
+  // start between calls and falls back to the most recent window of any status.
+  const now = new Date();
+  const openWindow = await ApplicationWindow.findOne({
+    where: { status: ApplicationWindowStatus.OPEN },
+    order: [["openAt", "DESC"]],
+  });
+  const inRange =
+    openWindow != null && now >= openWindow.openAt && now <= openWindow.closeAt;
+  const window = inRange
+    ? openWindow
+    : preview
+      ? await ApplicationWindow.findOne({ order: [["openAt", "DESC"]] })
+      : null;
+  if (!window) {
+    throw Conflict(
+      preview
+        ? "No application window exists to draw a reference number from. Create one in the admin console first."
+        : "The EOI application window is not currently open. You will be notified when the next Call for Expressions of Interest opens.",
+    );
   }
 
-  // No reference yet — it is assigned atomically at the SUBMITTED transition
-  // from the active window's sequence (see submitApplication).
-  const application = await Application.create({
-    lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
-    status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
-    ownerUserId: actor.id,
-    investorOrgId,
+  // The reference is assigned the moment the application is started, drawn
+  // atomically from the window's sequence — so every application (draft or not)
+  // has a KIP-EOI-YYYY-NNNN reference throughout. (This consumes a sequence
+  // number even for drafts that are never submitted.)
+  return sequelize.transaction(async (t) => {
+    await window.increment("sequenceCounter", { by: 1, transaction: t });
+    await window.reload({ transaction: t });
+    const reference = formatReference(
+      window.openAt.getUTCFullYear(),
+      window.sequenceCounter,
+    );
+    const application = await Application.create(
+      {
+        lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
+        reference,
+        status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
+        ownerUserId: actor.id,
+        investorOrgId,
+      },
+      { transaction: t },
+    );
+    return { application, created: true };
   });
-
-  return { application, created: true };
 }
 
 /**
@@ -219,12 +248,20 @@ export type SubmissionBlocker = {
 export async function submissionBlockers(
   applicationId: string,
 ): Promise<SubmissionBlocker[]> {
-  const [sections, documents] = await Promise.all([
+  const [sections, documents, plotCount] = await Promise.all([
     ApplicationSection.findAll({ where: { applicationId } }),
     Document.findAll({ where: { applicationId }, attributes: ["kind"] }),
+    ApplicationPlot.count({ where: { applicationId } }),
   ]);
 
   const blockers: SubmissionBlocker[] = [];
+  if (plotCount < 1) {
+    blockers.push({
+      section: EoiSection.LAND_BUSINESS_PROFILE,
+      field: null,
+      message: "Select at least one plot on the land map (Section 2).",
+    });
+  }
   const payloads: Partial<Record<EoiSection, unknown>> = {};
   /** N/A notes gathered across sections, keyed by DocumentKind. */
   const documentNaNotes: Record<string, string> = {};
@@ -371,18 +408,237 @@ export async function submitApplication(
   }
 
   return sequelize.transaction(async (t) => {
-    // Atomic counter bump (row-locked UPDATE), then read the value back.
-    await window.increment("sequenceCounter", { by: 1, transaction: t });
-    await window.reload({ transaction: t });
-    const reference = formatReference(
-      window.openAt.getUTCFullYear(),
-      window.sequenceCounter,
-    );
+    // The reference is normally assigned at creation; submission only stamps the
+    // status + timestamp. A pre-existing draft with no reference (created before
+    // this change) gets one minted here as a fallback.
+    let reference = app.reference;
+    if (!reference) {
+      await window.increment("sequenceCounter", { by: 1, transaction: t });
+      await window.reload({ transaction: t });
+      reference = formatReference(
+        window.openAt.getUTCFullYear(),
+        window.sequenceCounter,
+      );
+    }
     await app.update(
       { status: ApplicationStatus.SUBMITTED, submittedAt: now, reference },
       { transaction: t },
     );
     // TODO(Phase 3): fireWebhook("application-submitted", …) after commit.
+    return app;
+  });
+}
+
+
+/**
+ * Admin stage override — PATCH /applications/:id/status (ADMIN only, enforced at
+ * the route). Deliberately separate from the committee endpoints: the TC/LAC/ExCo
+ * modules own the normal pipeline, this is the escape hatch when an application
+ * is stuck or was moved in error.
+ *
+ * Guard: an application already sitting in a final committee outcome
+ * (ALLOCATED / LAC_REJECTED / NOT_SHORTLISTED) is locked — a decision is never
+ * silently undone. Every override writes a ReviewAction so it is auditable.
+ */
+export async function overrideApplicationStatus(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: AdminOverrideStatusInput,
+): Promise<Application> {
+  const app = await Application.findByPk(applicationId);
+  if (!app) throw NotFound("Application");
+
+  const current = app.status as ApplicationStatus;
+  const target = input.status;
+
+  if (current === target) {
+    throw BadRequest(`This application is already at ${target}`);
+  }
+  if (FINAL_OUTCOME_STATUSES.includes(current)) {
+    throw Conflict(
+      `This application has a final outcome (${current}) and its stage can no longer be overridden.`,
+    );
+  }
+
+  return sequelize.transaction(async (t) => {
+    let reference = app.reference;
+    let submittedAt = app.submittedAt;
+
+    // A submitted-or-later stage assumes a reference number. If the override
+    // jumps an application there without one, mint it from the most recent
+    // window, mirroring submitApplication() (this consumes a sequence number).
+    if (!reference && REFERENCED_STATUSES.includes(target)) {
+      const window = await ApplicationWindow.findOne({
+        order: [["openAt", "DESC"]],
+        transaction: t,
+      });
+      if (!window) {
+        throw Conflict(
+          "No application window exists to draw a reference number from. Create one in the admin console first.",
+        );
+      }
+      await window.increment("sequenceCounter", { by: 1, transaction: t });
+      await window.reload({ transaction: t });
+      reference = formatReference(
+        window.openAt.getUTCFullYear(),
+        window.sequenceCounter,
+      );
+      if (!submittedAt) submittedAt = new Date();
+    }
+
+    await app.update(
+      { status: target, reference, submittedAt },
+      { transaction: t },
+    );
+    await ReviewAction.create(
+      {
+        applicationId: app.id,
+        actorUserId: actor.id,
+        type: ReviewActionType.ADMIN_STATUS_OVERRIDE,
+        fromStatus: current,
+        toStatus: target,
+        notes: input.notes ?? null,
+      },
+      { transaction: t },
+    );
+    return app;
+  });
+}
+
+
+/**
+ * Replace the joint-venture partner list on an application (owner or ADMIN,
+ * only while the application is still editable). Reconciles by id so a partner
+ * that keeps its id keeps its documents (Document.partnerId); a removed partner
+ * is deleted and its documents' partnerId is SET NULL by the FK. Exactly one
+ * partner is marked lead — an explicit flag if given, otherwise the first.
+ */
+export async function savePartners(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: SavePartnersInput,
+): Promise<ApplicationPartner[]> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId", "status"],
+  });
+  if (!app) throw NotFound("Application");
+  if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
+    throw Forbidden("You can only edit your own application");
+  }
+  const editable: string[] = [
+    ApplicationStatus.DRAFT_PAYMENT_PENDING,
+    ApplicationStatus.DRAFT,
+    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ];
+  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
+    throw Conflict(`This application can no longer be edited (status ${app.status})`);
+  }
+
+  const partners = input.partners;
+  // Only an explicitly flagged partner is the lead; the co-venturer list may
+  // have none (the primary applicant company lives on the application itself).
+  const leadIndex = partners.findIndex((p) => p.isLead);
+
+  return sequelize.transaction(async (t) => {
+    const existing = await ApplicationPartner.findAll({
+      where: { applicationId },
+      transaction: t,
+    });
+    const incomingIds = new Set(
+      partners.filter((p) => p.id).map((p) => p.id as string),
+    );
+
+    for (const row of existing) {
+      if (!incomingIds.has(row.id)) await row.destroy({ transaction: t });
+    }
+
+    const existingById = new Map(existing.map((r) => [r.id, r]));
+    const saved: ApplicationPartner[] = [];
+    for (let i = 0; i < partners.length; i++) {
+      const p = partners[i]!;
+      const fields = {
+        legalName: p.legalName,
+        tradingName: p.tradingName ?? null,
+        registrationNumber: p.registrationNumber ?? null,
+        ursbRegistrationNumber: p.ursbRegistrationNumber ?? null,
+        companyType: p.companyType ?? null,
+        businessSector: p.businessSector ?? null,
+        countryOfIncorporation: p.countryOfIncorporation ?? null,
+        tin: p.tin ?? null,
+        address: p.address ?? null,
+        phone: p.phone ?? null,
+        email: p.email ?? null,
+        isLead: i === leadIndex,
+        position: i,
+      };
+      const current = p.id ? existingById.get(p.id) : undefined;
+      saved.push(
+        current
+          ? await current.update(fields, { transaction: t })
+          : await ApplicationPartner.create(
+              { applicationId, ...fields },
+              { transaction: t },
+            ),
+      );
+    }
+    return saved;
+  });
+}
+
+
+/**
+ * Set the full set of plots an application is for (owner or ADMIN, only while
+ * editable). Replace-all: the ApplicationPlot join is rebuilt to match plotIds.
+ * The first plot is mirrored into plotId and the plot names into lotReference so
+ * existing single-plot displays keep working.
+ */
+export async function setApplicationPlots(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: SetApplicationPlotsInput,
+): Promise<Application> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId", "status", "lotReference", "plotId"],
+  });
+  if (!app) throw NotFound("Application");
+  if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
+    throw Forbidden("You can only edit your own application");
+  }
+  const editable: string[] = [
+    ApplicationStatus.DRAFT_PAYMENT_PENDING,
+    ApplicationStatus.DRAFT,
+    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+  ];
+  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
+    throw Conflict(`This application can no longer be edited (status ${app.status})`);
+  }
+
+  const plotIds = Array.from(new Set(input.plotIds));
+  const plots = plotIds.length
+    ? await Plot.findAll({ where: { id: plotIds }, attributes: ["id", "plotName"] })
+    : [];
+  if (plots.length !== plotIds.length) throw BadRequest("One or more plots are unknown");
+
+  // Keep the incoming order for display (find returns arbitrary order).
+  const byId = new Map(plots.map((p) => [p.id, p]));
+  const ordered = plotIds.map((id) => byId.get(id)!);
+
+  return sequelize.transaction(async (t) => {
+    await ApplicationPlot.destroy({ where: { applicationId: app.id }, transaction: t });
+    if (ordered.length) {
+      await ApplicationPlot.bulkCreate(
+        ordered.map((p) => ({ applicationId: app.id, plotId: p.id })),
+        { transaction: t },
+      );
+    }
+    const names = ordered.map((p) => p.plotName).join(", ");
+    await app.update(
+      {
+        plotId: ordered[0]?.id ?? null,
+        lotReference: names.slice(0, 250) || UNASSIGNED_LOT_REFERENCE,
+      },
+      { transaction: t },
+    );
     return app;
   });
 }

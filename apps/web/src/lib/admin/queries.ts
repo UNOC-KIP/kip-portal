@@ -13,8 +13,12 @@
 import "server-only";
 import {
   Application,
+  ApplicationPartner,
+  ApplicationPlot,
   ApplicationSection,
   ApplicationWindow,
+  Document,
+  Plot,
   Inquiry,
   InvestorOrg,
   NotifySignup,
@@ -27,6 +31,8 @@ import {
 import {
   ApplicationStatus,
   ApplicationWindowStatus,
+  DOCUMENT_KIND_LABELS,
+  formatFileSize,
   PaymentMethod,
   PaymentStatus,
   ReviewActionType,
@@ -617,6 +623,7 @@ const ACTIVITY_TEXT: Partial<Record<ReviewActionType, string>> = {
   [ReviewActionType.ALLOCATED]:               "land allocated by ExCo",
   [ReviewActionType.REQUESTED_CLARIFICATION]: "clarification requested",
   [ReviewActionType.CLARIFICATION_PROVIDED]:  "clarification provided",
+  [ReviewActionType.ADMIN_STATUS_OVERRIDE]:   "stage overridden by admin",
 };
 
 export async function getAdminDashboard(): Promise<AdminDashboard> {
@@ -716,14 +723,52 @@ export type AdminApplicationDetail = {
   totalSections: number;
   sections: { key: string; label: string; complete: boolean; payload: unknown }[];
   payment: { method: string; amountLabel: string; ref: string; confirmedAt: string } | null;
+  owner: {
+    id: string; name: string; designation: string | null;
+    phone: string | null; email: string; role: string;
+  } | null;
+  org: {
+    legalName: string; tradingName: string | null; registrationNumber: string | null;
+    ursbRegistrationNumber: string | null; companyType: string | null; businessSector: string | null;
+    countryOfIncorporation: string | null; tin: string | null; address: string | null;
+    phone: string | null; email: string | null;
+  } | null;
+  partners: {
+    id: string; legalName: string; tradingName: string | null; companyType: string | null;
+    businessSector: string | null; registrationNumber: string | null; ursbRegistrationNumber: string | null;
+    countryOfIncorporation: string | null; tin: string | null; address: string | null;
+    phone: string | null; email: string | null; isLead: boolean;
+  }[];
+  documents: { id: string; kindLabel: string; filename: string; sizeLabel: string; uploadedAt: string; partnerName: string | null }[];
+  plots: {
+    id: string; plotName: string; zone: string | null; acreage: number | null;
+    areaCategory: string | null; applicantCount: number;
+  }[];
+  totalAcres: number;
   auditTrail: { time: string; text: string; actor: string }[];
 };
 
 export async function getAdminApplicationDetail(ref: string): Promise<AdminApplicationDetail | null> {
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
   const app = await Application.findOne({
-    where: { reference: ref },
+    where: isUuid ? { id: ref } : { reference: ref },
     include: [
-      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] },
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: [
+          "legalName", "tradingName", "registrationNumber", "ursbRegistrationNumber",
+          "companyType", "businessSector", "countryOfIncorporation", "tin",
+          "address", "phone", "email",
+        ],
+      },
+      {
+        model: User,
+        as: "owner",
+        attributes: ["id", "name", "designation", "phone", "email", "role"],
+      },
+      { model: ApplicationPartner, as: "partners" },
+      { model: Plot, as: "plots" },
       { model: ApplicationSection, as: "sections", attributes: ["section", "payload", "completedAt"] },
       {
         model: ReviewAction,
@@ -736,6 +781,9 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
 
   const a = app as Application & {
     investorOrg?: InvestorOrg;
+    owner?: User;
+    partners?: ApplicationPartner[];
+    plots?: Plot[];
     sections?: ApplicationSection[];
     reviewActions?: (ReviewAction & { actor?: User })[];
   };
@@ -745,6 +793,47 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     where: { applicationId: a.id },
     order: [["createdAt", "DESC"]],
   });
+
+  const documents = await Document.findAll({
+    where: { applicationId: a.id },
+    order: [["uploadedAt", "ASC"]],
+  });
+
+  const partners = (a.partners ?? []).slice().sort((x, y) => x.position - y.position);
+  const partnerNameById = new Map(partners.map((pt) => [pt.id, pt.legalName]));
+
+  // Selected plots (may be several) + transparency counts: how many OTHER live
+  // applications include each plot.
+  const selectedPlots = (a.plots ?? [])
+    .slice()
+    .sort((x, y) => x.plotName.localeCompare(y.plotName));
+  const selPlotIds = selectedPlots.map((pt) => pt.id);
+  const plotCountMap = new Map<string, number>();
+  if (selPlotIds.length) {
+    const links = await ApplicationPlot.findAll({
+      attributes: ["applicationId", "plotId"],
+      where: { plotId: selPlotIds },
+    });
+    const otherAppIds = Array.from(
+      new Set(links.map((l) => l.applicationId).filter((id) => id !== a.id)),
+    );
+    const statusById = new Map(
+      otherAppIds.length
+        ? (
+            await Application.findAll({
+              attributes: ["id", "status"],
+              where: { id: otherAppIds },
+            })
+          ).map((x) => [x.id, x.status])
+        : [],
+    );
+    for (const l of links) {
+      if (l.applicationId === a.id) continue;
+      if (statusById.get(l.applicationId) === ApplicationStatus.WITHDRAWN) continue;
+      plotCountMap.set(l.plotId, (plotCountMap.get(l.plotId) ?? 0) + 1);
+    }
+  }
+  const totalAcres = selectedPlots.reduce((sum, pt) => sum + (pt.acreage ?? 0), 0);
 
   const sectionList = SECTION_ORDER.map((key) => ({
     key,
@@ -794,6 +883,64 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
           confirmedAt: payment.confirmedAt ? formatDateTime(payment.confirmedAt) : "Not confirmed",
         }
       : null,
+    owner: a.owner
+      ? {
+          id: a.owner.id,
+          name: a.owner.name ?? "",
+          designation: a.owner.designation ?? null,
+          phone: a.owner.phone ?? null,
+          email: a.owner.email,
+          role: a.owner.role,
+        }
+      : null,
+    org: a.investorOrg
+      ? {
+          legalName: a.investorOrg.legalName,
+          tradingName: a.investorOrg.tradingName ?? null,
+          registrationNumber: a.investorOrg.registrationNumber ?? null,
+          ursbRegistrationNumber: a.investorOrg.ursbRegistrationNumber ?? null,
+          companyType: a.investorOrg.companyType ?? null,
+          businessSector: a.investorOrg.businessSector ?? null,
+          countryOfIncorporation: a.investorOrg.countryOfIncorporation ?? null,
+          tin: a.investorOrg.tin ?? null,
+          address: a.investorOrg.address ?? null,
+          phone: a.investorOrg.phone ?? null,
+          email: a.investorOrg.email ?? null,
+        }
+      : null,
+    documents: documents.map((d) => ({
+      id: d.id,
+      kindLabel:
+        DOCUMENT_KIND_LABELS[d.kind as keyof typeof DOCUMENT_KIND_LABELS] ?? d.kind,
+      filename: d.filename,
+      sizeLabel: formatFileSize(d.sizeBytes),
+      uploadedAt: formatDateTime(d.uploadedAt),
+      partnerName: d.partnerId ? partnerNameById.get(d.partnerId) ?? null : null,
+    })),
+    partners: partners.map((pt) => ({
+      id: pt.id,
+      legalName: pt.legalName,
+      tradingName: pt.tradingName ?? null,
+      companyType: pt.companyType ?? null,
+      businessSector: pt.businessSector ?? null,
+      registrationNumber: pt.registrationNumber ?? null,
+      ursbRegistrationNumber: pt.ursbRegistrationNumber ?? null,
+      countryOfIncorporation: pt.countryOfIncorporation ?? null,
+      tin: pt.tin ?? null,
+      address: pt.address ?? null,
+      phone: pt.phone ?? null,
+      email: pt.email ?? null,
+      isLead: pt.isLead,
+    })),
+    plots: selectedPlots.map((pt) => ({
+      id: pt.id,
+      plotName: pt.plotName,
+      zone: pt.zone ?? null,
+      acreage: pt.acreage ?? null,
+      areaCategory: pt.areaCategory ?? null,
+      applicantCount: plotCountMap.get(pt.id) ?? 0,
+    })),
+    totalAcres,
     auditTrail,
   };
 }

@@ -219,8 +219,16 @@ export default async function InvestorDashboardPage() {
 
   const closeDate = windowCloseAt ? shortDateYear(windowCloseAt) : null;
 
-  const payAmount = app?.paymentAmount ? parseFloat(app.paymentAmount).toLocaleString() : "1,000";
+  const plotCount = app?.plotCount ?? 0;
   const payCurrency = app?.paymentCurrency ?? "USD";
+  const feeUsd = plotCount * 1000;
+  // Show the actual payment amount once a payment exists, else the expected fee
+  // from the plots chosen so far (USD 1,000 per plot).
+  const payAmount = app?.paymentAmount
+    ? parseFloat(app.paymentAmount).toLocaleString()
+    : feeUsd > 0
+      ? feeUsd.toLocaleString()
+      : "—";
 
   // Post-submission review pipeline — single source for both the KPI tile and
   // the pipeline card so the "stage N of M" and the timeline never disagree.
@@ -324,10 +332,11 @@ export default async function InvestorDashboardPage() {
               The Call for Expressions of Interest is open
             </p>
             <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
-              Starting creates your EOI application. You&apos;ll pay the USD 1,000
-              non-refundable processing fee first, then complete six sections covering your
-              company, the land and business you propose, utilities, H3SE, and national
-              content. You can save and come back at any point before the window closes.
+              Starting creates your EOI application. Complete six sections covering your
+              company, the land and business you propose (including the plot or plots you want),
+              utilities, H3SE, and national content — then pay the processing fee of USD 1,000
+              per plot at the end, before you submit. You can save and come back at any point
+              before the window closes.
             </p>
             <div className="mt-4">
               <StartEoiButton />
@@ -467,7 +476,43 @@ export default async function InvestorDashboardPage() {
               <>
                 {/* 3 steps */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  {/* Step 1 — Fee */}
+                  {/* Step 1 â Complete EOI */}
+                  <div
+                    className={`rounded-xl border p-4 shadow-sm ${
+                      allSectionsComplete
+                        ? "border-green-200 bg-green-50/40"
+                        : "border-brand-400 bg-white ring-2 ring-brand-400/20"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <span
+                        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                          allSectionsComplete ? "bg-green-100 text-green-700" : "bg-brand-100 text-brand-700"
+                        }`}
+                      >
+                        {allSectionsComplete ? "✓" : "1"}
+                      </span>
+                      {allSectionsComplete && <CheckCircle2 size={18} className="text-green-500" />}
+                    </div>
+                    <h3 className="mt-3 text-sm font-bold">Complete your EOI</h3>
+                    <p className="mt-1 text-xs text-ink-500">
+                      {allSectionsComplete
+                        ? "All 6 sections complete"
+                        : `${remaining} of ${totalSections} remaining${nextSectionLabel ? ` · next: ${nextSectionLabel}` : ""}`}
+                    </p>
+                    <Button
+                      asChild
+                      size="sm"
+                      className="mt-3 w-full"
+                      variant={allSectionsComplete ? "outline" : "default"}
+                    >
+                      <Link href={`/dashboard/eoi/${nextSectionNum}`}>
+                        {allSectionsComplete ? "Review EOI" : `Resume · ${completedCount}/${totalSections} →`}
+                      </Link>
+                    </Button>
+                  </div>
+
+                  {/* Step 2 â Application Fee (per plot, paid at the end) */}
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
                       paymentConfirmed ? "border-green-200 bg-green-50/40" : "border-amber-300 bg-white"
@@ -479,7 +524,7 @@ export default async function InvestorDashboardPage() {
                           paymentConfirmed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
                         }`}
                       >
-                        {paymentConfirmed ? "✓" : "1"}
+                        {paymentConfirmed ? "✓" : "2"}
                       </span>
                       {paymentConfirmed ? (
                         <CheckCircle2 size={18} className="text-green-500" />
@@ -510,59 +555,24 @@ export default async function InvestorDashboardPage() {
                           Check status →
                         </Link>
                       </>
-                    ) : (
+                    ) : plotCount > 0 ? (
                       <>
                         <p className="mt-1 text-xs text-ink-500">
-                          {payCurrency} {payAmount} · Stanbic transfer · non-refundable
+                          {payCurrency} {payAmount} · {plotCount} plot{plotCount === 1 ? "" : "s"} × 1,000 · non-refundable
                         </p>
                         <Button asChild size="sm" className="mt-3 w-full">
                           <Link href="/dashboard/payment">Pay Now →</Link>
                         </Button>
                       </>
+                    ) : (
+                      <p className="mt-1 text-xs text-ink-500">
+                        Select the plot or plots you want in your EOI (Section 2) — the fee is
+                        USD 1,000 per plot, paid here at the end.
+                      </p>
                     )}
                   </div>
 
-                  {/* Step 2 — EOI */}
-                  <div
-                    className={`rounded-xl border p-4 shadow-sm ${
-                      allSectionsComplete
-                        ? "border-green-200 bg-green-50/40"
-                        : "border-brand-400 bg-white ring-2 ring-brand-400/20"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <span
-                        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                          allSectionsComplete ? "bg-green-100 text-green-700" : "bg-brand-100 text-brand-700"
-                        }`}
-                      >
-                        {allSectionsComplete ? "✓" : "2"}
-                      </span>
-                      {allSectionsComplete && <CheckCircle2 size={18} className="text-green-500" />}
-                    </div>
-                    <h3 className="mt-3 text-sm font-bold">Complete your EOI</h3>
-                    <p className="mt-1 text-xs text-ink-500">
-                      {allSectionsComplete
-                        ? "All 6 sections complete"
-                        : `${remaining} of ${totalSections} remaining${nextSectionLabel ? ` · next: ${nextSectionLabel}` : ""}`}
-                    </p>
-                    <Button
-                      asChild
-                      size="sm"
-                      className="mt-3 w-full"
-                      variant={allSectionsComplete ? "outline" : "default"}
-                    >
-                      <Link href={`/dashboard/eoi/${nextSectionNum}`}>
-                        {completedCount === 0
-                          ? "Start EOI →"
-                          : allSectionsComplete
-                            ? "Review EOI"
-                            : "Continue EOI →"}
-                      </Link>
-                    </Button>
-                  </div>
-
-                  {/* Step 3 — Submit */}
+                  {/* Step 3 â Submit */}
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
                       canSubmit ? "border-brand-400 bg-white" : "border-gray-200 bg-white opacity-70"

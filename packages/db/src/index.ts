@@ -12,6 +12,9 @@ import { ApplicationWindow } from './models/application-window'
 import { Application } from './models/application'
 import { ApplicationSection } from './models/application-section'
 import { Document } from './models/document'
+import { ApplicationPartner } from './models/application-partner'
+import { Plot } from './models/plot'
+import { ApplicationPlot } from './models/application-plot'
 import { Payment } from './models/payment'
 import { ReviewAction } from './models/review-action'
 import { ClarificationRequest } from './models/clarification-request'
@@ -61,6 +64,9 @@ ApplicationWindow.initModel(sequelize)
 Application.initModel(sequelize)
 ApplicationSection.initModel(sequelize)
 Document.initModel(sequelize)
+ApplicationPartner.initModel(sequelize)
+Plot.initModel(sequelize)
+ApplicationPlot.initModel(sequelize)
 Payment.initModel(sequelize)
 ReviewAction.initModel(sequelize)
 ClarificationRequest.initModel(sequelize)
@@ -89,6 +95,21 @@ ApplicationSection.belongsTo(Application, { foreignKey: 'applicationId' })
 
 Application.hasMany(Document, { foreignKey: 'applicationId', as: 'documents' })
 Document.belongsTo(Application, { foreignKey: 'applicationId' })
+
+Application.hasMany(ApplicationPartner, { foreignKey: 'applicationId', as: 'partners' })
+ApplicationPartner.belongsTo(Application, { foreignKey: 'applicationId' })
+ApplicationPartner.hasMany(Document, { foreignKey: 'partnerId', as: 'documents' })
+Document.belongsTo(ApplicationPartner, { foreignKey: 'partnerId', as: 'partner' })
+
+Plot.hasMany(Application, { foreignKey: 'plotId', as: 'applications' })
+Application.belongsTo(Plot, { foreignKey: 'plotId', as: 'plot' })
+
+// An application may select several plots (join: ApplicationPlot).
+Application.belongsToMany(Plot, { through: ApplicationPlot, foreignKey: 'applicationId', otherKey: 'plotId', as: 'plots' })
+Plot.belongsToMany(Application, { through: ApplicationPlot, foreignKey: 'plotId', otherKey: 'applicationId', as: 'plotApplications' })
+Application.hasMany(ApplicationPlot, { foreignKey: 'applicationId', as: 'applicationPlots' })
+ApplicationPlot.belongsTo(Application, { foreignKey: 'applicationId' })
+ApplicationPlot.belongsTo(Plot, { foreignKey: 'plotId', as: 'plot' })
 
 Application.hasMany(Payment, { foreignKey: 'applicationId', as: 'payments' })
 Payment.belongsTo(Application, { foreignKey: 'applicationId' })
@@ -151,6 +172,9 @@ export {
   Application,
   ApplicationSection,
   Document,
+  ApplicationPartner,
+  Plot,
+  ApplicationPlot,
   Payment,
   ReviewAction,
   ClarificationRequest,

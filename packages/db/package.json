@@ -15,6 +15,7 @@
     "migrate:fake": "tsx src/migrate.ts fake",
     "migrate:down": "tsx src/migrate.ts down",
     "seed": "tsx seed.ts",
+    "sync:plots": "tsx src/sync-plots.ts",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'lint db'"
   },

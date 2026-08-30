@@ -11,6 +11,7 @@ import {
   EOI_SECTION_LABELS,
   EOI_SECTION_ORDER,
   EoiSection,
+  LegalForm,
   REPORTING_YEARS,
   sectionSchemas,
 } from "@kip/shared";
@@ -19,6 +20,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
 import { DocumentSlots } from "./document-slots";
+import { PartnerCompanies } from "./partner-companies";
+import { PlotPicker } from "./plot-picker";
 import { EoiFormProvider } from "./eoi-fields";
 import {
   SectionDeclaration,
@@ -138,6 +141,21 @@ export function EoiWizard({
       return rest;
     });
   }, []);
+
+  /**
+   * Plot selection (Section 2) auto-fills the required land area: the total
+   * acreage across the chosen plots, in acres. Only writes when at least one
+   * plot is selected, so it never clobbers a manual figure with zero.
+   */
+  const handlePlotAcres = useCallback(
+    (totalAcres: number) => {
+      if (totalAcres > 0) {
+        set("landArea.size", Math.round(totalAcres * 100) / 100);
+        set("landArea.unit", "ACRES");
+      }
+    },
+    [set],
+  );
 
   const naNotes = (payload.notApplicable ?? {}) as Record<string, string>;
 
@@ -427,6 +445,25 @@ export function EoiWizard({
             >
               <div className="space-y-4">
                 {section === EoiSection.PRELIMINARY_INFO && <SectionPreliminaryInfo />}
+                {section === EoiSection.PRELIMINARY_INFO &&
+                  getIn(payload, "legalStatus.legalForm") === LegalForm.JOINT_VENTURE && (
+                    <PartnerCompanies
+                      applicationId={data.application.id}
+                      initial={data.partners}
+                      documents={documents}
+                      onDocumentsChange={setDocuments}
+                      disabled={disabled}
+                    />
+                  )}
+                {section === EoiSection.LAND_BUSINESS_PROFILE && (
+                  <PlotPicker
+                    applicationId={data.application.id}
+                    plots={data.plots}
+                    selectedPlotIds={data.application.selectedPlotIds}
+                    disabled={disabled}
+                    onTotalAcresChange={handlePlotAcres}
+                  />
+                )}
                 {section === EoiSection.LAND_BUSINESS_PROFILE && (
                   <SectionLandBusinessProfile applicantCategory={applicantCategory} />
                 )}
