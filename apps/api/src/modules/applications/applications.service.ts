@@ -190,14 +190,10 @@ export async function createApplication(
     throw BadRequest("User has no associated investor organisation");
   }
 
-  const existing = await Application.findOne({
-    where: {
-      ownerUserId: actor.id,
-      status: { [Op.ne]: ApplicationStatus.WITHDRAWN },
-    },
-    order: [["createdAt", "DESC"]],
-  });
-  if (existing) return { application: existing, created: false };
+  // Investors may run several applications at once (e.g. different plots or
+  // joint-venture compositions), so every Start creates a fresh one — there is
+  // deliberately no "return the existing draft" short-circuit here. Reference
+  // minting below is collision-safe, so concurrent starts are fine.
 
   // A window is needed both to gate the start and to draw the reference number.
   // Real investors need an OPEN, in-range window; a preview actor (ADMIN) may

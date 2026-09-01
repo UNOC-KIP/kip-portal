@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { getEoiWizardData } from "@/lib/eoi-data";
 import { EOI_SECTION_ORDER } from "@kip/shared";
-import { EoiWizard } from "../eoi-wizard";
+import { EoiWizard } from "../../eoi-wizard";
 
 /**
  * EOI wizard shell. One read of the data layer, then the client owns the form.
@@ -14,7 +14,7 @@ import { EoiWizard } from "../eoi-wizard";
 export default async function EoiSectionPage({
   params,
 }: {
-  params: { section: string };
+  params: { appId: string; section: string };
 }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/sign-in");
@@ -25,7 +25,7 @@ export default async function EoiSectionPage({
     : Math.min(Math.max(parsed, 1), EOI_SECTION_ORDER.length);
 
   const userId = (session.user as { id: string }).id;
-  const data = await getEoiWizardData(userId);
+  const data = await getEoiWizardData(userId, params.appId);
 
   // The dashboard owns creating an application and the payment gate, so there
   // is nothing sensible to render here without one.

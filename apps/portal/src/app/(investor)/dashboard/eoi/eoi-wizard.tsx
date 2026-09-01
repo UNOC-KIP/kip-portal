@@ -240,7 +240,7 @@ export function EoiWizard({
     if (!ok) return;
 
     router.refresh();
-    if (step < EOI_SECTION_ORDER.length) router.push(`/dashboard/eoi/${step + 1}`);
+    if (step < EOI_SECTION_ORDER.length) router.push(`/dashboard/eoi/${data.application.id}/${step + 1}`);
     else setBanner("Section complete. Review the checklist below, then submit.");
   }
 
@@ -347,7 +347,7 @@ export function EoiWizard({
                 return (
                   <li key={nav.label}>
                     <Link
-                      href={`/dashboard/eoi/${num}`}
+                      href={`/dashboard/eoi/${data.application.id}/${num}`}
                       className={cn(
                         "flex items-start gap-2 rounded-lg px-3 py-2 transition",
                         isActive ? "bg-black/15" : "hover:bg-black/10",
@@ -490,7 +490,7 @@ export function EoiWizard({
                   disabled={busy !== null}
                   onClick={() =>
                     step > 1
-                      ? router.push(`/dashboard/eoi/${step - 1}`)
+                      ? router.push(`/dashboard/eoi/${data.application.id}/${step - 1}`)
                       : router.push("/dashboard")
                   }
                 >

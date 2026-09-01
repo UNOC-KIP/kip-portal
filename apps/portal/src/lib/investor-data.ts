@@ -1,4 +1,5 @@
 import "server-only";
+import { Op } from "sequelize";
 import {
   User,
   InvestorOrg,
@@ -159,6 +160,20 @@ export type DashboardData = {
   mustChangePassword: boolean
 }
 
+/** Lightweight per-application summary for the dashboard switcher / list. */
+export type ApplicationSummary = {
+  id: string
+  reference: string | null
+  status: string
+  submittedAt: string | null
+  completedCount: number
+  totalSections: number
+  /** 1-based index of the first incomplete section (for the resume link). */
+  nextSectionNum: number
+  plotCount: number
+  paymentStatus: string | null
+}
+
 export type ApplicationDetail = {
   reference: string | null
   status: string
@@ -225,7 +240,10 @@ export async function getSiteVisitBooking(userId: string): Promise<SiteVisitBook
 
 // ─── Dashboard data ───────────────────────────────────────────────────────────
 
-export async function getInvestorDashboardData(userId: string): Promise<DashboardData> {
+export async function getInvestorDashboardData(
+  userId: string,
+  applicationId?: string,
+): Promise<DashboardData> {
   const [user, activeWindow] = await Promise.all([
     User.findByPk(userId, {
       include: [{ model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] }],
@@ -248,7 +266,11 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
     now <= activeWindow.closeAt;
 
   const app = await Application.findOne({
-    where: { ownerUserId: userId },
+    // A specific application when asked for (owner-scoped so a foreign id can't
+    // be selected); otherwise the most recent one.
+    where: applicationId
+      ? { id: applicationId, ownerUserId: userId }
+      : { ownerUserId: userId },
     order: [["createdAt", "DESC"]],
     include: [
       {
@@ -331,6 +353,79 @@ export async function getInvestorDashboardData(userId: string): Promise<Dashboar
     windowName:    windowIsOpen ? activeWindow!.name : null,
     mustChangePassword: user ? user.passwordChangedAt == null : false,
   } satisfies DashboardData;
+}
+
+/**
+ * Every application this investor owns, newest first, as compact summaries for
+ * the dashboard switcher and the "your applications" list. Withdrawn ones are
+ * excluded — they are not resumable.
+ */
+export async function listInvestorApplications(
+  userId: string,
+): Promise<ApplicationSummary[]> {
+  const apps = await Application.findAll({
+    where: { ownerUserId: userId, status: { [Op.ne]: "WITHDRAWN" } },
+    order: [["createdAt", "DESC"]],
+    include: [
+      {
+        model: ApplicationSection,
+        as: "sections",
+        attributes: ["section", "completedAt"],
+      },
+    ],
+  });
+
+  const totalSections = SECTION_ORDER.length;
+
+  const [payments, plotRows] = await Promise.all([
+    Payment.findAll({
+      where: { applicationId: { [Op.in]: apps.map((a) => a.id) } },
+      order: [["createdAt", "DESC"]],
+      attributes: ["applicationId", "status", "createdAt"],
+    }),
+    ApplicationPlot.findAll({
+      where: { applicationId: { [Op.in]: apps.map((a) => a.id) } },
+      attributes: ["applicationId"],
+    }),
+  ]);
+  // Newest payment status per application (rows already sorted newest first).
+  const paymentByApp = new Map<string, string>();
+  for (const pmt of payments) {
+    if (!paymentByApp.has(pmt.applicationId)) {
+      paymentByApp.set(pmt.applicationId, pmt.status);
+    }
+  }
+  const plotCountByApp = new Map<string, number>();
+  for (const row of plotRows) {
+    plotCountByApp.set(
+      row.applicationId,
+      (plotCountByApp.get(row.applicationId) ?? 0) + 1,
+    );
+  }
+
+  return apps.map((app) => {
+    const sections =
+      (app as Application & { sections?: ApplicationSection[] }).sections ?? [];
+    const completedKeys = new Set<string>(
+      sections
+        .filter((sc) => sc.completedAt != null)
+        .map((sc) => String(sc.section)),
+    );
+    const firstIncompleteIdx = SECTION_ORDER.findIndex(
+      (key) => !completedKeys.has(key),
+    );
+    return {
+      id: app.id,
+      reference: app.reference,
+      status: app.status,
+      submittedAt: app.submittedAt?.toISOString() ?? null,
+      completedCount: completedKeys.size,
+      totalSections,
+      nextSectionNum: firstIncompleteIdx >= 0 ? firstIncompleteIdx + 1 : 1,
+      plotCount: plotCountByApp.get(app.id) ?? 0,
+      paymentStatus: paymentByApp.get(app.id) ?? null,
+    } satisfies ApplicationSummary;
+  });
 }
 
 // ─── Application detail ───────────────────────────────────────────────────────

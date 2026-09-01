@@ -35,6 +35,8 @@ import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { StartEoiButton } from "./start-eoi-button";
 import {
   getInvestorDashboardData,
+  listInvestorApplications,
+  type ApplicationSummary,
   getSiteVisitBooking,
   statusBadgeProps,
   type ActivityItem,
@@ -159,13 +161,21 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function InvestorDashboardPage() {
+export default async function InvestorDashboardPage({
+  searchParams,
+}: {
+  searchParams: { app?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/sign-in");
 
   const userId = (session.user as { id: string }).id;
-  const [data, siteVisit, unreadMessages] = await Promise.all([
-    getInvestorDashboardData(userId),
+  // The detailed view below focuses on ONE application — the one named in the
+  // query, else the most recent. `applications` drives the switcher so the
+  // investor can move between several and start more.
+  const [data, applications, siteVisit, unreadMessages] = await Promise.all([
+    getInvestorDashboardData(userId, searchParams.app),
+    listInvestorApplications(userId),
     getSiteVisitBooking(userId),
     getUnreadCount(userId),
   ]);
@@ -287,6 +297,59 @@ export default async function InvestorDashboardPage() {
           )}
         </div>
 
+        {/* ── Your applications — switch between them, or start another.
+            Investors may run several EOIs at once (different plots or joint-
+            venture compositions); the detailed view below tracks the selected
+            one (?app=<id>, default newest). ───────────────────────────────── */}
+        {applications.length > 0 && (
+          <div className="mb-4">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                {applications.length === 1
+                  ? "Your application"
+                  : `Your applications · ${applications.length}`}
+              </p>
+              {eoiUnlocked && (
+                <StartEoiButton
+                  label="Start another application"
+                  variant="outline"
+                />
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {applications.map((a: ApplicationSummary) => {
+                const selected = a.id === app?.id;
+                const badge = statusBadgeProps(a.status);
+                return (
+                  <Link
+                    key={a.id}
+                    href={`/dashboard?app=${a.id}`}
+                    aria-current={selected ? "page" : undefined}
+                    className={`flex min-w-[190px] flex-col gap-1.5 rounded-xl border px-4 py-3 transition ${
+                      selected
+                        ? "border-brand-400 bg-white ring-2 ring-brand-400/20"
+                        : "border-ink-200 bg-white hover:border-brand-300 hover:bg-brand-50/40"
+                    }`}
+                  >
+                    <span className="text-sm font-bold tracking-tight text-ink-900">
+                      {a.reference ?? "Draft application"}
+                    </span>
+                    <span className="flex items-center gap-2 text-xs text-ink-500">
+                      <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
+                      <span>
+                        {a.completedCount}/{a.totalSections} sections
+                        {a.plotCount > 0
+                          ? ` · ${a.plotCount} plot${a.plotCount === 1 ? "" : "s"}`
+                          : ""}
+                      </span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Unread secretariat announcements. */}
         {unreadMessages > 0 && (
           <Link
@@ -359,7 +422,7 @@ export default async function InvestorDashboardPage() {
                 </p>
                 <div className="mt-4">
                   <Button asChild className="h-11 px-6 text-base">
-                    <Link href={`/dashboard/eoi/${nextSectionNum}`}>
+                    <Link href={`/dashboard/eoi/${app.id}/${nextSectionNum}`}>
                       {allSectionsComplete
                         ? "Review EOI →"
                         : `Resume application · ${completedCount}/${totalSections} →`}
@@ -499,7 +562,7 @@ export default async function InvestorDashboardPage() {
             )}
 
             {/* ── Pre-submission journey ───────────────────────────── */}
-            {isPreSubmission && eoiUnlocked && (
+            {app && isPreSubmission && eoiUnlocked && (
               <>
                 {/* 3 steps */}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -533,7 +596,7 @@ export default async function InvestorDashboardPage() {
                       className="mt-3 w-full"
                       variant={allSectionsComplete ? "outline" : "default"}
                     >
-                      <Link href={`/dashboard/eoi/${nextSectionNum}`}>
+                      <Link href={`/dashboard/eoi/${app.id}/${nextSectionNum}`}>
                         {allSectionsComplete ? "Review EOI" : `Resume · ${completedCount}/${totalSections} →`}
                       </Link>
                     </Button>
@@ -566,7 +629,7 @@ export default async function InvestorDashboardPage() {
                           {payCurrency} {payAmount} · confirmed
                         </p>
                         <Link
-                          href="/dashboard/payment"
+                          href={`/dashboard/payment/bank?app=${app.id}`}
                           className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
                         >
                           View receipt →
@@ -576,7 +639,7 @@ export default async function InvestorDashboardPage() {
                       <>
                         <p className="mt-1 text-xs text-amber-700">Proof submitted — awaiting confirmation</p>
                         <Link
-                          href="/dashboard/payment"
+                          href={`/dashboard/payment/bank?app=${app.id}`}
                           className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
                         >
                           Check status →
@@ -588,7 +651,7 @@ export default async function InvestorDashboardPage() {
                           {payCurrency} {payAmount} · {plotCount} plot{plotCount === 1 ? "" : "s"} × 1,000 · non-refundable
                         </p>
                         <Button asChild size="sm" className="mt-3 w-full">
-                          <Link href="/dashboard/payment">Pay Now →</Link>
+                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>Pay Now →</Link>
                         </Button>
                       </>
                     ) : (
@@ -625,7 +688,7 @@ export default async function InvestorDashboardPage() {
                     </p>
                     {canSubmit ? (
                       <Button asChild size="sm" className="mt-3 w-full bg-green-600 hover:bg-green-700">
-                        <Link href="/dashboard/eoi/6">Submit EOI →</Link>
+                        <Link href={`/dashboard/eoi/${app.id}/6`}>Submit EOI →</Link>
                       </Button>
                     ) : (
                       <Button size="sm" disabled className="mt-3 w-full bg-green-600 hover:bg-green-700">
@@ -659,7 +722,7 @@ export default async function InvestorDashboardPage() {
                         return (
                           <Link
                             key={s.key}
-                            href={`/dashboard/eoi/${sectionNum}`}
+                            href={`/dashboard/eoi/${app.id}/${sectionNum}`}
                             className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-ink-100/60"
                           >
                             <span
@@ -706,7 +769,7 @@ export default async function InvestorDashboardPage() {
                           </p>
                         </div>
                         <Button asChild className="shrink-0">
-                          <Link href="/dashboard/payment">Pay Application Fee →</Link>
+                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>Pay Application Fee →</Link>
                         </Button>
                       </div>
                     )}
@@ -722,7 +785,7 @@ export default async function InvestorDashboardPage() {
                           )}
                         </div>
                         <Button asChild className="shrink-0 bg-green-600 hover:bg-green-700">
-                          <Link href="/dashboard/eoi/6">Submit EOI →</Link>
+                          <Link href={`/dashboard/eoi/${app.id}/6`}>Submit EOI →</Link>
                         </Button>
                       </div>
                     )}
