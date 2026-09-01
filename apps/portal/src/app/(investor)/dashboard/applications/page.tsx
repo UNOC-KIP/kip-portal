@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { StartEoiButton } from "../start-eoi-button";
+import { DeleteApplicationButton } from "../delete-application-button";
 import {
   listInvestorApplications,
   statusBadgeProps,
@@ -19,6 +20,9 @@ const EDITABLE_STATUSES = new Set([
   "DRAFT",
   "TC_CLARIFICATION_REQUESTED",
 ]);
+
+/** Investors may delete only their own pre-submission drafts. */
+const DELETABLE_STATUSES = new Set(["DRAFT_PAYMENT_PENDING", "DRAFT"]);
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString("en-UG", {
@@ -130,10 +134,15 @@ export default async function ApplicationsPage() {
                         {a.completedCount}/{a.totalSections} sections
                       </td>
                       <td className="px-4 py-3 text-ink-600">{a.plotCount}</td>
-                      <td className="px-4 py-3 text-right">
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={dest.href}>{dest.label} →</Link>
-                        </Button>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={dest.href}>{dest.label} →</Link>
+                          </Button>
+                          {DELETABLE_STATUSES.has(a.status) && (
+                            <DeleteApplicationButton applicationId={a.id} />
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

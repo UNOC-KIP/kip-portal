@@ -57,6 +57,42 @@ export async function deleteApplication(applicationId: string): Promise<void> {
   });
 }
 
+/** Statuses an investor may delete their own application in — pre-submission
+ * only. Once submitted it belongs to the review pipeline and is the
+ * secretariat's to withdraw. */
+const OWNER_DELETABLE_STATUSES: string[] = [
+  ApplicationStatus.DRAFT_PAYMENT_PENDING,
+  ApplicationStatus.DRAFT,
+];
+
+/**
+ * Investor-facing delete: an investor removes one of their OWN draft
+ * applications. Ownership and the draft-only rule are enforced here (not just
+ * at the route) so the guarantee holds wherever this is called. Same paranoid
+ * soft-delete as the admin path — recoverable in SQL.
+ */
+export async function deleteOwnApplication(
+  applicationId: string,
+  actor: { id: string; role: string },
+): Promise<void> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId", "status"],
+  });
+  // Not found and not-yours look the same to the caller — no existence oracle.
+  if (!app || app.ownerUserId !== actor.id) throw NotFound("Application");
+
+  if (!OWNER_DELETABLE_STATUSES.includes(app.status)) {
+    throw Conflict(
+      "This application has already been submitted and can no longer be deleted. Contact the secretariat if it needs to be withdrawn.",
+    );
+  }
+
+  await sequelize.transaction(async (t) => {
+    await Payment.destroy({ where: { applicationId: app.id }, transaction: t });
+    await app.destroy({ transaction: t });
+  });
+}
+
 /**
  * Save one section.
  *
