@@ -304,11 +304,19 @@ export default async function InvestorDashboardPage({
         {applications.length > 0 && (
           <div className="mb-4">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
-                {applications.length === 1
-                  ? "Your application"
-                  : `Your applications · ${applications.length}`}
-              </p>
+              <div className="flex items-baseline gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                  {applications.length === 1
+                    ? "Your application"
+                    : `Your applications · ${applications.length}`}
+                </p>
+                <Link
+                  href="/dashboard/applications"
+                  className="text-xs font-medium text-brand-600 underline-offset-2 hover:underline"
+                >
+                  View all →
+                </Link>
+              </div>
               {eoiUnlocked && (
                 <StartEoiButton
                   label="Start another application"
@@ -317,24 +325,39 @@ export default async function InvestorDashboardPage({
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              {applications.map((a: ApplicationSummary) => {
+              {applications.map((a: ApplicationSummary, i: number) => {
                 const selected = a.id === app?.id;
                 const badge = statusBadgeProps(a.status);
+                // List is newest-first, so the oldest application is #1.
+                const ordinal = applications.length - i;
                 return (
                   <Link
                     key={a.id}
                     href={`/dashboard?app=${a.id}`}
                     aria-current={selected ? "page" : undefined}
-                    className={`flex min-w-[190px] flex-col gap-1.5 rounded-xl border px-4 py-3 transition ${
+                    className={`flex min-w-[200px] flex-col gap-1 rounded-xl border px-4 py-3 transition ${
                       selected
                         ? "border-brand-400 bg-white ring-2 ring-brand-400/20"
                         : "border-ink-200 bg-white hover:border-brand-300 hover:bg-brand-50/40"
                     }`}
                   >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-ink-400">
+                        Application {ordinal}
+                      </span>
+                      {selected && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-600">
+                          Viewing
+                        </span>
+                      )}
+                    </span>
                     <span className="text-sm font-bold tracking-tight text-ink-900">
                       {a.reference ?? "Draft application"}
                     </span>
-                    <span className="flex items-center gap-2 text-xs text-ink-500">
+                    <span className="text-xs text-ink-500">
+                      Created {shortDateYear(a.createdAt)}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-500">
                       <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
                       <span>
                         {a.completedCount}/{a.totalSections} sections

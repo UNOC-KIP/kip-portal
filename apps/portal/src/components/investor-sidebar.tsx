@@ -4,6 +4,7 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  Files,
   FolderOpen,
   LayoutDashboard,
   LogOut,
@@ -29,6 +30,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 const INVESTOR_NAV = [
   { icon: LayoutDashboard, href: "/dashboard",            label: "Overview" },
+  { icon: Files,           href: "/dashboard/applications", label: "Applications" },
   { icon: Mail,            href: "/dashboard/messages",   label: "Messages" },
   { icon: CalendarDays,    href: "/dashboard/site-visit", label: "Site Visit" },
   { icon: FolderOpen,      href: "/dashboard/documents",  label: "Documents" },

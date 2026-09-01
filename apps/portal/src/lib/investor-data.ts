@@ -164,6 +164,7 @@ export type DashboardData = {
 export type ApplicationSummary = {
   id: string
   reference: string | null
+  createdAt: string
   status: string
   submittedAt: string | null
   completedCount: number
@@ -418,6 +419,7 @@ export async function listInvestorApplications(
       id: app.id,
       reference: app.reference,
       status: app.status,
+      createdAt: app.createdAt.toISOString(),
       submittedAt: app.submittedAt?.toISOString() ?? null,
       completedCount: completedKeys.size,
       totalSections,
