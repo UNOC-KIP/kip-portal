@@ -140,7 +140,10 @@ export default async function ApplicationsPage() {
                             <Link href={dest.href}>{dest.label} →</Link>
                           </Button>
                           {DELETABLE_STATUSES.has(a.status) && (
-                            <DeleteApplicationButton applicationId={a.id} />
+                            <DeleteApplicationButton
+                              applicationId={a.id}
+                              reference={a.reference}
+                            />
                           )}
                         </div>
                       </td>
