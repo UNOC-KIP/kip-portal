@@ -325,22 +325,49 @@ export default async function InvestorDashboardPage() {
           </Link>
         )}
 
-        {/* No application yet, and the call is open — this is the way in. */}
-        {!app && eoiUnlocked && (
+        {/* Prominent EOI call-to-action — stays visible right through drafting,
+            whether or not the application has been started yet. */}
+        {eoiUnlocked && isPreSubmission && (
           <Card>
-            <p className="text-base font-bold text-ink-900">
-              The Call for Expressions of Interest is open
-            </p>
-            <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
-              Starting creates your EOI application. Complete six sections covering your
-              company, the land and business you propose (including the plot or plots you want),
-              utilities, H3SE, and national content — then pay the processing fee of USD 1,000
-              per plot at the end, before you submit. You can save and come back at any point
-              before the window closes.
-            </p>
-            <div className="mt-4">
-              <StartEoiButton />
-            </div>
+            {!app ? (
+              <>
+                <p className="text-lg font-bold text-ink-900">
+                  The Call for Expressions of Interest is open
+                </p>
+                <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
+                  Starting creates your EOI application. Complete six sections covering your
+                  company, the land and business you propose (including the plot or plots you want),
+                  utilities, H3SE, and national content — then pay the processing fee of USD 1,000
+                  per plot at the end, before you submit. You can save and come back at any point
+                  before the window closes.
+                </p>
+                <div className="mt-4">
+                  <StartEoiButton />
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-bold text-ink-900">
+                  {allSectionsComplete
+                    ? "Your EOI is ready to review"
+                    : "Continue your EOI application"}
+                </p>
+                <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
+                  {allSectionsComplete
+                    ? "All six sections are complete. Review everything, pay the fee, and submit before the window closes."
+                    : `You've completed ${completedCount} of ${totalSections} sections${nextSectionLabel ? ` — next up: ${nextSectionLabel}` : ""}. Your progress is saved; pick up right where you left off.`}
+                </p>
+                <div className="mt-4">
+                  <Button asChild className="h-11 px-6 text-base">
+                    <Link href={`/dashboard/eoi/${nextSectionNum}`}>
+                      {allSectionsComplete
+                        ? "Review EOI →"
+                        : `Resume application · ${completedCount}/${totalSections} →`}
+                    </Link>
+                  </Button>
+                </div>
+              </>
+            )}
           </Card>
         )}
 
