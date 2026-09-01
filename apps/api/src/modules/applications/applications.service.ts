@@ -1,4 +1,4 @@
-import { Op } from "sequelize";
+import { Op, type Transaction } from "sequelize";
 import {
   sequelize,
   Application,
@@ -23,6 +23,8 @@ import {
   canTransition,
   crossSectionIssues,
   formatReference,
+  parseReference,
+  REFERENCE_PREFIX,
   missingRequiredDocuments,
   previewOrgLegalName,
   sectionSchemas,
@@ -127,6 +129,48 @@ export async function saveSection(
  * and `getInvestorDashboardData()` only ever shows the most recent, so the
  * other would become invisible but still countable in admin reports.
  */
+/**
+ * Draw the next application reference for a window, collision-safe.
+ *
+ * The window's own `sequenceCounter` is the primary source, but a freshly
+ * created window starts at 0 while references like KIP-EOI-2026-0001 may
+ * already exist (an earlier window, seed data, or a window re-created in a new
+ * environment). Minting straight from the counter would then collide on the
+ * unique `reference` index and surface as a 500. So the counter is first
+ * advanced past the highest sequence already used for that calendar year, then
+ * the next value is taken. Runs inside the caller's transaction; soft-deleted
+ * rows are included because they still occupy the unique index.
+ */
+async function mintNextReference(
+  window: ApplicationWindow,
+  t: Transaction,
+): Promise<string> {
+  const year = window.openAt.getUTCFullYear();
+  const used = await Application.findAll({
+    where: { reference: { [Op.like]: `${REFERENCE_PREFIX}-${year}-%` } },
+    attributes: ["reference"],
+    transaction: t,
+    paranoid: false,
+  });
+  let maxSeq = window.sequenceCounter;
+  for (const row of used) {
+    const parsed = row.reference ? parseReference(row.reference) : null;
+    if (parsed && parsed.year === year && parsed.seq > maxSeq) maxSeq = parsed.seq;
+  }
+  const next = maxSeq + 1;
+  await window.update({ sequenceCounter: next }, { transaction: t });
+  return formatReference(year, next);
+}
+
+/** True for a DB unique-constraint violation, however Sequelize names it. */
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    (err.name === "SequelizeUniqueConstraintError" ||
+      err.name === "UniqueConstraintError")
+  );
+}
+
 export async function createApplication(
   actor: { id: string; role: string },
   input: { lotReference?: string },
@@ -178,29 +222,33 @@ export async function createApplication(
     );
   }
 
-  // The reference is assigned the moment the application is started, drawn
-  // atomically from the window's sequence — so every application (draft or not)
-  // has a KIP-EOI-YYYY-NNNN reference throughout. (This consumes a sequence
-  // number even for drafts that are never submitted.)
-  return sequelize.transaction(async (t) => {
-    await window.increment("sequenceCounter", { by: 1, transaction: t });
-    await window.reload({ transaction: t });
-    const reference = formatReference(
-      window.openAt.getUTCFullYear(),
-      window.sequenceCounter,
-    );
-    const application = await Application.create(
-      {
-        lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
-        reference,
-        status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
-        ownerUserId: actor.id,
-        investorOrgId,
-      },
-      { transaction: t },
-    );
-    return { application, created: true };
-  });
+  // The reference is assigned the moment the application is started so every
+  // application (draft or not) carries a KIP-EOI-YYYY-NNNN reference throughout.
+  // mintNextReference() advances the window sequence past any references that
+  // already exist for the year; the retry loop covers the rare case where two
+  // starts race for the same number and one loses the unique-index insert.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await sequelize.transaction(async (t) => {
+        await window.reload({ transaction: t });
+        const reference = await mintNextReference(window, t);
+        const application = await Application.create(
+          {
+            lotReference: input.lotReference ?? UNASSIGNED_LOT_REFERENCE,
+            reference,
+            status: ApplicationStatus.DRAFT_PAYMENT_PENDING,
+            ownerUserId: actor.id,
+            investorOrgId,
+          },
+          { transaction: t },
+        );
+        return { application, created: true };
+      });
+    } catch (err) {
+      if (isUniqueViolation(err) && attempt < 5) continue;
+      throw err;
+    }
+  }
 }
 
 /**
@@ -413,12 +461,8 @@ export async function submitApplication(
     // this change) gets one minted here as a fallback.
     let reference = app.reference;
     if (!reference) {
-      await window.increment("sequenceCounter", { by: 1, transaction: t });
       await window.reload({ transaction: t });
-      reference = formatReference(
-        window.openAt.getUTCFullYear(),
-        window.sequenceCounter,
-      );
+      reference = await mintNextReference(window, t);
     }
     await app.update(
       { status: ApplicationStatus.SUBMITTED, submittedAt: now, reference },
@@ -477,12 +521,8 @@ export async function overrideApplicationStatus(
           "No application window exists to draw a reference number from. Create one in the admin console first.",
         );
       }
-      await window.increment("sequenceCounter", { by: 1, transaction: t });
       await window.reload({ transaction: t });
-      reference = formatReference(
-        window.openAt.getUTCFullYear(),
-        window.sequenceCounter,
-      );
+      reference = await mintNextReference(window, t);
       if (!submittedAt) submittedAt = new Date();
     }
 
