@@ -12,6 +12,7 @@ import {
   EOI_SECTION_ORDER,
   EoiSection,
   LegalForm,
+  PLOT_SELECTION_ENABLED,
   REPORTING_YEARS,
   sectionSchemas,
 } from "@kip/shared";
@@ -455,15 +456,16 @@ export function EoiWizard({
                       disabled={disabled}
                     />
                   )}
-                {section === EoiSection.LAND_BUSINESS_PROFILE && (
-                  <PlotPicker
-                    applicationId={data.application.id}
-                    plots={data.plots}
-                    selectedPlotIds={data.application.selectedPlotIds}
-                    disabled={disabled}
-                    onTotalAcresChange={handlePlotAcres}
-                  />
-                )}
+                {section === EoiSection.LAND_BUSINESS_PROFILE &&
+                  PLOT_SELECTION_ENABLED && (
+                    <PlotPicker
+                      applicationId={data.application.id}
+                      plots={data.plots}
+                      selectedPlotIds={data.application.selectedPlotIds}
+                      disabled={disabled}
+                      onTotalAcresChange={handlePlotAcres}
+                    />
+                  )}
                 {section === EoiSection.LAND_BUSINESS_PROFILE && (
                   <SectionLandBusinessProfile applicantCategory={applicantCategory} />
                 )}

@@ -7,11 +7,13 @@ import {
   DECLARATION_TEXT,
   HolderType,
   IdentificationType,
+  INVESTABLE_ZONES,
   LandAreaUnit,
   LEGAL_FORM_LABELS,
   LOCAL_PRESENCE_TYPE_LABELS,
   LocalPresenceType,
   NOTARIZATION_TYPE_LABELS,
+  PLOT_SELECTION_ENABLED,
   ReportingEntity,
   SUPPLY_CONFIGURATION_LABELS,
   TARGET_MARKET_LABELS,
@@ -536,6 +538,25 @@ export function SectionLandBusinessProfile({
         title="Land Area Required"
         intro="Establishes what you propose to build and how much land it requires."
       >
+        {!PLOT_SELECTION_ENABLED && (
+          <>
+            <div className="rounded-lg border border-brand-200 bg-brand-50/60 px-3.5 py-3 text-sm text-ink-700">
+              Choosing plots on the interactive map is temporarily unavailable
+              while we update it. For now, select your preferred zone and enter
+              the land size you require — our team will confirm specific plots
+              with you, and we&apos;ll let you know when the map is back.
+            </div>
+            <SelectField
+              path="landArea.preferredZone"
+              label="Preferred zone"
+              required
+              options={INVESTABLE_ZONES.map((z) => ({
+                value: z.key,
+                label: z.label,
+              }))}
+            />
+          </>
+        )}
         <FieldRow>
           <NumberField
             path="landArea.size"

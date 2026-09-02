@@ -23,6 +23,8 @@ import {
   DOCUMENT_KIND_LABELS,
   KIP_ZONE_LABELS,
   canPreviewEoi,
+  APPLICATION_FEE_ENABLED,
+  PLOT_SELECTION_ENABLED,
   type DocumentKind,
   type KipZone,
 } from "@kip/shared";
@@ -215,7 +217,10 @@ export default async function InvestorDashboardPage({
   const progressPct = Math.round((completedCount / totalSections) * 100);
 
   const canSubmit =
-    paymentConfirmed && allSectionsComplete && app?.status === "DRAFT" && eoiUnlocked;
+    (APPLICATION_FEE_ENABLED ? paymentConfirmed : true) &&
+    allSectionsComplete &&
+    app?.status === "DRAFT" &&
+    eoiUnlocked;
 
   const firstIncompleteIdx = sections.findIndex((s) => !s.complete);
   const nextSectionNum = firstIncompleteIdx >= 0 ? firstIncompleteIdx + 1 : 1;
@@ -421,11 +426,17 @@ export default async function InvestorDashboardPage({
                   The Call for Expressions of Interest is open
                 </p>
                 <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
-                  Starting creates your EOI application. Complete six sections covering your
-                  company, the land and business you propose (including the plot or plots you want),
-                  utilities, H3SE, and national content — then pay the processing fee of USD 1,000
-                  per plot at the end, before you submit. You can save and come back at any point
-                  before the window closes.
+                  Starting creates your EOI application. Complete six sections
+                  covering your company, the land and business you propose
+                  {PLOT_SELECTION_ENABLED
+                    ? " (including the plot or plots you want)"
+                    : ""}
+                  , utilities, H3SE, and national content
+                  {APPLICATION_FEE_ENABLED
+                    ? ", then pay the processing fee of USD 1,000 per plot at the end, before you submit."
+                    : ", then submit."}{" "}
+                  You can save and come back at any point before the window
+                  closes.
                 </p>
                 <div className="mt-4">
                   <StartEoiButton />
@@ -503,14 +514,16 @@ export default async function InvestorDashboardPage({
                   label="EOI sections complete"
                   pct={progressPct}
                 />
-                <StatTile
-                  icon={paymentConfirmed ? CheckCircle2 : Wallet}
-                  tone={paymentConfirmed ? "green" : "amber"}
-                  value={paymentConfirmed ? "Paid" : paymentProofUploaded ? "Pending" : "Due"}
-                  numeric={false}
-                  label={`Fee · ${payCurrency} ${payAmount}`}
-                  pct={paymentConfirmed ? 100 : paymentProofUploaded ? 66 : 0}
-                />
+                {APPLICATION_FEE_ENABLED && (
+                  <StatTile
+                    icon={paymentConfirmed ? CheckCircle2 : Wallet}
+                    tone={paymentConfirmed ? "green" : "amber"}
+                    value={paymentConfirmed ? "Paid" : paymentProofUploaded ? "Pending" : "Due"}
+                    numeric={false}
+                    label={`Fee · ${payCurrency} ${payAmount}`}
+                    pct={paymentConfirmed ? 100 : paymentProofUploaded ? 66 : 0}
+                  />
+                )}
                 <StatTile
                   icon={Clock}
                   tone={urgentDeadline ? "amber" : windowOpen ? "blue" : "ink"}
@@ -588,7 +601,11 @@ export default async function InvestorDashboardPage({
             {app && isPreSubmission && eoiUnlocked && (
               <>
                 {/* 3 steps */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div
+                  className={`grid grid-cols-1 gap-3 ${
+                    APPLICATION_FEE_ENABLED ? "sm:grid-cols-3" : "sm:grid-cols-2"
+                  }`}
+                >
                   {/* Step 1 â Complete EOI */}
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
@@ -626,6 +643,7 @@ export default async function InvestorDashboardPage({
                   </div>
 
                   {/* Step 2 â Application Fee (per plot, paid at the end) */}
+                  {APPLICATION_FEE_ENABLED && (
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
                       paymentConfirmed ? "border-green-200 bg-green-50/40" : "border-amber-300 bg-white"
@@ -684,6 +702,7 @@ export default async function InvestorDashboardPage({
                       </p>
                     )}
                   </div>
+                  )}
 
                   {/* Step 3 â Submit */}
                   <div
@@ -697,7 +716,7 @@ export default async function InvestorDashboardPage({
                           canSubmit ? "bg-brand-100 text-brand-700" : "bg-ink-100 text-ink-500"
                         }`}
                       >
-                        3
+                        {APPLICATION_FEE_ENABLED ? "3" : "2"}
                       </span>
                       {!canSubmit && <Lock size={14} className="text-ink-500" />}
                     </div>
@@ -705,7 +724,7 @@ export default async function InvestorDashboardPage({
                     <p className="mt-1 text-xs text-ink-500">
                       {!allSectionsComplete
                         ? `${remaining} section${remaining !== 1 ? "s" : ""} remaining`
-                        : !paymentConfirmed
+                        : APPLICATION_FEE_ENABLED && !paymentConfirmed
                           ? "Pay the fee to submit"
                           : "Ready to submit!"}
                     </p>
@@ -781,7 +800,7 @@ export default async function InvestorDashboardPage({
                       })}
                     </div>
 
-                    {allSectionsComplete && !paymentConfirmed && (
+                    {APPLICATION_FEE_ENABLED && allSectionsComplete && !paymentConfirmed && (
                       <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-amber-800">

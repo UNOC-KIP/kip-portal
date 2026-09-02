@@ -32,6 +32,7 @@ import {
   ReviewActionType,
   FINAL_OUTCOME_STATUSES,
   REFERENCED_STATUSES,
+  PLOT_SELECTION_ENABLED,
   type ApplicantCategory,
   type AdminOverrideStatusInput,
   type SavePartnersInput,
@@ -335,7 +336,10 @@ export async function submissionBlockers(
   ]);
 
   const blockers: SubmissionBlocker[] = [];
-  if (plotCount < 1) {
+  // Plot selection (the land map) is temporarily hidden — see PLOT_SELECTION_
+  // ENABLED. While it is off, an investor picks a preferred zone and enters the
+  // acreage instead, so a chosen plot is not required to submit.
+  if (PLOT_SELECTION_ENABLED && plotCount < 1) {
     blockers.push({
       section: EoiSection.LAND_BUSINESS_PROFILE,
       field: null,
@@ -376,6 +380,23 @@ export async function submissionBlockers(
     const notes = (row.payload as { notApplicable?: Record<string, string> })
       ?.notApplicable;
     if (notes) Object.assign(documentNaNotes, notes);
+  }
+
+  // Interim: while plot selection is hidden, a preferred zone stands in for a
+  // chosen plot, so it is required to submit. (Acreage — landArea.size — is
+  // already required by the section schema.) Only checked when the section
+  // itself parsed; otherwise the section-level blocker above already applies.
+  if (!PLOT_SELECTION_ENABLED) {
+    const land = payloads[EoiSection.LAND_BUSINESS_PROFILE] as
+      | { landArea?: { preferredZone?: string } }
+      | undefined;
+    if (land && !land.landArea?.preferredZone) {
+      blockers.push({
+        section: EoiSection.LAND_BUSINESS_PROFILE,
+        field: "landArea.preferredZone",
+        message: "Land & Business Profile: select your preferred zone (Section 2).",
+      });
+    }
   }
 
   // Attachments. The applicant category decides which slots apply, so a payload
