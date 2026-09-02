@@ -184,17 +184,16 @@ export async function listBookings(): Promise<BookingListRow[]> {
 
 /**
  * Edit an existing booking. Only the owner (or an admin) may edit, and only
- * while the request is still NEW and the booking window is still open — once
- * the secretariat has scheduled it, or the window has closed, the details are
- * locked and changes go through them out of band.
+ * while the secretariat has not yet acted on it — a SCHEDULED or COMPLETED visit
+ * is locked and changes go through them out of band. NEW and CANCELLED requests
+ * stay editable, and (unlike creating or deleting) editing is NOT gated by the
+ * booking window, so a pending request can still be corrected after it closes.
  */
 export async function updateBooking(
   actor: { id: string; role: UserRole },
   bookingId: string,
   input: CreateBookingInput,
 ): Promise<void> {
-  await assertBookingWindowOpen(actor.role);
-
   const booking = await SiteVisitBooking.findByPk(bookingId);
   if (!booking) throw NotFound("Site visit booking");
 
@@ -202,8 +201,13 @@ export async function updateBooking(
   if (!isAdmin && booking.userId !== actor.id) {
     throw Forbidden("You can only edit your own site visit request.");
   }
-  if (booking.status !== SiteVisitStatus.NEW) {
-    throw Conflict("This request can no longer be edited — it has already been scheduled.");
+  if (
+    booking.status === SiteVisitStatus.SCHEDULED ||
+    booking.status === SiteVisitStatus.COMPLETED
+  ) {
+    throw Conflict(
+      "This request can no longer be edited — it has already been scheduled or completed.",
+    );
   }
 
   await booking.update({
