@@ -21,13 +21,13 @@ type ManageBooking = {
 
 /**
  * Investor-facing view of an existing site-visit booking: the read-only summary
- * plus Edit / Delete controls while the request is still NEW (not yet scheduled)
- * AND the booking window is still open. Editing swaps in the pre-filled booking
- * form; deleting clears the request so a fresh one can be made.
- *
- * Once the window closes the request locks — the API refuses the same edits, and
- * deleting would strand the investor with no way to re-book, so changes go
- * through the secretariat instead.
+ * plus Edit / Delete controls. A request can be EDITED until the secretariat has
+ * acted on it — anything not yet Scheduled or Completed (New or Cancelled) is
+ * editable, regardless of whether the booking window is still open. It can be
+ * DELETED only while it is New and the window is still open, because deleting is
+ * meant to let the investor re-book, which a closed window would refuse. Once a
+ * visit is Scheduled or Completed the request locks and changes go through the
+ * secretariat.
  */
 export function SiteVisitManage({
   booking,
@@ -42,7 +42,11 @@ export function SiteVisitManage({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
 
-  const editable = booking.status === "NEW" && bookingOpen;
+  // Editable until the secretariat acts on it (not Scheduled/Completed), window
+  // or no window. Delete stays New-only and window-gated (it exists to re-book).
+  const canEdit =
+    booking.status !== "SCHEDULED" && booking.status !== "COMPLETED";
+  const canDelete = booking.status === "NEW" && bookingOpen;
 
   async function handleDelete() {
     setDeleting(true);
@@ -94,7 +98,7 @@ export function SiteVisitManage({
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}
 
-      {editable ? (
+      {canEdit || canDelete ? (
         confirmingDelete ? (
           <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4">
             <p className="text-sm font-semibold text-red-800">
@@ -125,22 +129,26 @@ export function SiteVisitManage({
           </div>
         ) : (
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEditing(true)}
-              className="w-full sm:w-auto"
-            >
-              <Pencil size={14} className="mr-1.5" /> Edit request
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmingDelete(true)}
-              className="w-full border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 sm:w-auto"
-            >
-              <Trash2 size={14} className="mr-1.5" /> Delete request
-            </Button>
+            {canEdit && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditing(true)}
+                className="w-full sm:w-auto"
+              >
+                <Pencil size={14} className="mr-1.5" /> Edit request
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmingDelete(true)}
+                className="w-full border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 sm:w-auto"
+              >
+                <Trash2 size={14} className="mr-1.5" /> Delete request
+              </Button>
+            )}
           </div>
         )
       ) : (
