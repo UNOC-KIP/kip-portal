@@ -32,6 +32,7 @@ import {
   ReviewActionType,
   FINAL_OUTCOME_STATUSES,
   REFERENCED_STATUSES,
+  PLOT_SELECTION_ENABLED,
   type ApplicantCategory,
   type AdminOverrideStatusInput,
   type SavePartnersInput,
@@ -50,6 +51,42 @@ const ALL_SECTIONS = Object.values(EoiSection);
 export async function deleteApplication(applicationId: string): Promise<void> {
   const app = await Application.findByPk(applicationId, { attributes: ["id"] });
   if (!app) throw NotFound("Application");
+
+  await sequelize.transaction(async (t) => {
+    await Payment.destroy({ where: { applicationId: app.id }, transaction: t });
+    await app.destroy({ transaction: t });
+  });
+}
+
+/** Statuses an investor may delete their own application in — pre-submission
+ * only. Once submitted it belongs to the review pipeline and is the
+ * secretariat's to withdraw. */
+const OWNER_DELETABLE_STATUSES: string[] = [
+  ApplicationStatus.DRAFT_PAYMENT_PENDING,
+  ApplicationStatus.DRAFT,
+];
+
+/**
+ * Investor-facing delete: an investor removes one of their OWN draft
+ * applications. Ownership and the draft-only rule are enforced here (not just
+ * at the route) so the guarantee holds wherever this is called. Same paranoid
+ * soft-delete as the admin path — recoverable in SQL.
+ */
+export async function deleteOwnApplication(
+  applicationId: string,
+  actor: { id: string; role: string },
+): Promise<void> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId", "status"],
+  });
+  // Not found and not-yours look the same to the caller — no existence oracle.
+  if (!app || app.ownerUserId !== actor.id) throw NotFound("Application");
+
+  if (!OWNER_DELETABLE_STATUSES.includes(app.status)) {
+    throw Conflict(
+      "This application has already been submitted and can no longer be deleted. Contact the secretariat if it needs to be withdrawn.",
+    );
+  }
 
   await sequelize.transaction(async (t) => {
     await Payment.destroy({ where: { applicationId: app.id }, transaction: t });
@@ -190,14 +227,10 @@ export async function createApplication(
     throw BadRequest("User has no associated investor organisation");
   }
 
-  const existing = await Application.findOne({
-    where: {
-      ownerUserId: actor.id,
-      status: { [Op.ne]: ApplicationStatus.WITHDRAWN },
-    },
-    order: [["createdAt", "DESC"]],
-  });
-  if (existing) return { application: existing, created: false };
+  // Investors may run several applications at once (e.g. different plots or
+  // joint-venture compositions), so every Start creates a fresh one — there is
+  // deliberately no "return the existing draft" short-circuit here. Reference
+  // minting below is collision-safe, so concurrent starts are fine.
 
   // A window is needed both to gate the start and to draw the reference number.
   // Real investors need an OPEN, in-range window; a preview actor (ADMIN) may
@@ -303,7 +336,10 @@ export async function submissionBlockers(
   ]);
 
   const blockers: SubmissionBlocker[] = [];
-  if (plotCount < 1) {
+  // Plot selection (the land map) is temporarily hidden — see PLOT_SELECTION_
+  // ENABLED. While it is off, an investor picks a preferred zone and enters the
+  // acreage instead, so a chosen plot is not required to submit.
+  if (PLOT_SELECTION_ENABLED && plotCount < 1) {
     blockers.push({
       section: EoiSection.LAND_BUSINESS_PROFILE,
       field: null,
@@ -344,6 +380,23 @@ export async function submissionBlockers(
     const notes = (row.payload as { notApplicable?: Record<string, string> })
       ?.notApplicable;
     if (notes) Object.assign(documentNaNotes, notes);
+  }
+
+  // Interim: while plot selection is hidden, a preferred zone stands in for a
+  // chosen plot, so it is required to submit. (Acreage — landArea.size — is
+  // already required by the section schema.) Only checked when the section
+  // itself parsed; otherwise the section-level blocker above already applies.
+  if (!PLOT_SELECTION_ENABLED) {
+    const land = payloads[EoiSection.LAND_BUSINESS_PROFILE] as
+      | { landArea?: { preferredZone?: string } }
+      | undefined;
+    if (land && !land.landArea?.preferredZone) {
+      blockers.push({
+        section: EoiSection.LAND_BUSINESS_PROFILE,
+        field: "landArea.preferredZone",
+        message: "Land & Business Profile: select your preferred zone (Section 2).",
+      });
+    }
   }
 
   // Attachments. The applicant category decides which slots apply, so a payload

@@ -1,5 +1,6 @@
 export * from "./enums";
 export * from "./zones";
+export * from "./features";
 export * from "./timeline";
 export * from "./communications";
 export * from "./eoi-preview";

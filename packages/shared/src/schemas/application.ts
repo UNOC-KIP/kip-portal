@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApplicationStatus, EoiSection } from "../enums";
+import { KipZone } from "../zones";
 
 /**
  * Per-section payload. Each section is stored as JSON in the DB so we can
@@ -546,6 +547,13 @@ export const landBusinessProfileSchema = z
     landArea: z.object({
       size: z.number().positive("Land area must be greater than zero"),
       unit: z.nativeEnum(LandAreaUnit),
+      /**
+       * Interim (while the plot map is hidden): the investor's preferred zone.
+       * Optional at the schema level so drafts saved with the map enabled stay
+       * valid; the portal marks it required and submissionBlockers enforces it
+       * while PLOT_SELECTION_ENABLED is false.
+       */
+      preferredZone: z.nativeEnum(KipZone).optional(),
       /** Spec §2.1: footprint reasoning, incl. buffer zones and future phases. */
       basisOfEstimate: nonEmpty(
         30,

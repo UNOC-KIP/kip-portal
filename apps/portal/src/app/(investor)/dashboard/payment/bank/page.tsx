@@ -14,12 +14,18 @@ function getBankDetails() {
   ];
 }
 
-export default async function BankTransferPage() {
+export default async function BankTransferPage({
+  searchParams,
+}: {
+  searchParams: { app?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/sign-in");
 
   const userId = (session.user as { id: string }).id;
-  const data = await getInvestorDashboardData(userId);
+  // Pay for the application named in the query (owner-scoped in the data
+  // layer); with none, the most recent one.
+  const data = await getInvestorDashboardData(userId, searchParams.app);
   const app = data.application;
 
   if (!app) redirect("/dashboard");

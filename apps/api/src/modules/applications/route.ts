@@ -19,6 +19,7 @@ import { BadRequest, Forbidden, NotFound } from "../../errors.js";
 import {
   submitApplication,
   deleteApplication,
+  deleteOwnApplication,
   createApplication,
   saveSection,
   submissionBlockers,
@@ -194,15 +195,25 @@ applicationsRouter.patch(
   },
 );
 
-/** DELETE /applications/:id — admin soft delete (application + its payments). */
+/**
+ * DELETE /applications/:id — soft delete (application + its payments).
+ *
+ * An admin may delete any application; an investor may delete only their OWN
+ * application, and only while it is still a draft (enforced in
+ * deleteOwnApplication).
+ */
 applicationsRouter.delete(
   "/:id",
-  requireRole(UserRole.ADMIN),
+  requireRole(UserRole.INVESTOR, UserRole.ADMIN),
   async (req, res, next) => {
     try {
       const { id } = req.params;
       if (!id) throw BadRequest("id required");
-      await deleteApplication(id);
+      if (req.user!.role === UserRole.ADMIN) {
+        await deleteApplication(id);
+      } else {
+        await deleteOwnApplication(id, req.user!);
+      }
       res.json({ ok: true });
     } catch (e) {
       next(e);

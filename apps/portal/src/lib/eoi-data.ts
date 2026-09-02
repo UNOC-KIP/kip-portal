@@ -168,14 +168,22 @@ const EDITABLE_STATUSES: string[] = [
  */
 export async function getEoiWizardData(
   userId: string,
+  applicationId?: string,
 ): Promise<EoiWizardData | null> {
   const user = await User.findByPk(userId);
   if (!user) return null;
 
-  const application = await Application.findOne({
-    where: { ownerUserId: userId },
-    order: [["createdAt", "DESC"]],
-  });
+  // Load the requested application (scoped to this owner) or, with no id, the
+  // most recent one. The owner scope means a stray/foreign id simply yields no
+  // application and the caller redirects to the dashboard.
+  const application = applicationId
+    ? await Application.findOne({
+        where: { id: applicationId, ownerUserId: userId },
+      })
+    : await Application.findOne({
+        where: { ownerUserId: userId },
+        order: [["createdAt", "DESC"]],
+      });
   if (!application) return null;
 
   // The organisation on the application, not the one on the user: they are the

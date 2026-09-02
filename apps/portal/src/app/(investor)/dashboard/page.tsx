@@ -23,6 +23,8 @@ import {
   DOCUMENT_KIND_LABELS,
   KIP_ZONE_LABELS,
   canPreviewEoi,
+  APPLICATION_FEE_ENABLED,
+  PLOT_SELECTION_ENABLED,
   type DocumentKind,
   type KipZone,
 } from "@kip/shared";
@@ -35,6 +37,8 @@ import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { StartEoiButton } from "./start-eoi-button";
 import {
   getInvestorDashboardData,
+  listInvestorApplications,
+  type ApplicationSummary,
   getSiteVisitBooking,
   statusBadgeProps,
   type ActivityItem,
@@ -159,13 +163,21 @@ function ActivityFeed({ items }: { items: ActivityItem[] }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function InvestorDashboardPage() {
+export default async function InvestorDashboardPage({
+  searchParams,
+}: {
+  searchParams: { app?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/sign-in");
 
   const userId = (session.user as { id: string }).id;
-  const [data, siteVisit, unreadMessages] = await Promise.all([
-    getInvestorDashboardData(userId),
+  // The detailed view below focuses on ONE application — the one named in the
+  // query, else the most recent. `applications` drives the switcher so the
+  // investor can move between several and start more.
+  const [data, applications, siteVisit, unreadMessages] = await Promise.all([
+    getInvestorDashboardData(userId, searchParams.app),
+    listInvestorApplications(userId),
     getSiteVisitBooking(userId),
     getUnreadCount(userId),
   ]);
@@ -205,7 +217,10 @@ export default async function InvestorDashboardPage() {
   const progressPct = Math.round((completedCount / totalSections) * 100);
 
   const canSubmit =
-    paymentConfirmed && allSectionsComplete && app?.status === "DRAFT" && eoiUnlocked;
+    (APPLICATION_FEE_ENABLED ? paymentConfirmed : true) &&
+    allSectionsComplete &&
+    app?.status === "DRAFT" &&
+    eoiUnlocked;
 
   const firstIncompleteIdx = sections.findIndex((s) => !s.complete);
   const nextSectionNum = firstIncompleteIdx >= 0 ? firstIncompleteIdx + 1 : 1;
@@ -287,6 +302,82 @@ export default async function InvestorDashboardPage() {
           )}
         </div>
 
+        {/* ── Your applications — switch between them, or start another.
+            Investors may run several EOIs at once (different plots or joint-
+            venture compositions); the detailed view below tracks the selected
+            one (?app=<id>, default newest). ───────────────────────────────── */}
+        {applications.length > 0 && (
+          <div className="mb-4">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-baseline gap-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                  {applications.length === 1
+                    ? "Your application"
+                    : `Your applications · ${applications.length}`}
+                </p>
+                <Link
+                  href="/dashboard/applications"
+                  className="text-xs font-medium text-brand-600 underline-offset-2 hover:underline"
+                >
+                  View all →
+                </Link>
+              </div>
+              {eoiUnlocked && (
+                <StartEoiButton
+                  label="Start another application"
+                  variant="outline"
+                />
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {applications.map((a: ApplicationSummary, i: number) => {
+                const selected = a.id === app?.id;
+                const badge = statusBadgeProps(a.status);
+                // List is newest-first, so the oldest application is #1.
+                const ordinal = applications.length - i;
+                return (
+                  <Link
+                    key={a.id}
+                    href={`/dashboard?app=${a.id}`}
+                    aria-current={selected ? "page" : undefined}
+                    className={`flex min-w-[200px] flex-col gap-1 rounded-xl border px-4 py-3 transition ${
+                      selected
+                        ? "border-brand-400 bg-white ring-2 ring-brand-400/20"
+                        : "border-ink-200 bg-white hover:border-brand-300 hover:bg-brand-50/40"
+                    }`}
+                  >
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-ink-400">
+                        Application {ordinal}
+                      </span>
+                      {selected && (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-600">
+                          Viewing
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-sm font-bold tracking-tight text-ink-900">
+                      {a.reference ?? "Draft application"}
+                    </span>
+                    <span className="text-xs text-ink-500">
+                      Created {shortDateYear(a.createdAt)}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-2 text-xs text-ink-500">
+                      <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
+                      <span>
+                        {a.completedCount}/{a.totalSections} sections
+                        {a.plotCount > 0
+                          ? ` · ${a.plotCount} plot${a.plotCount === 1 ? "" : "s"}`
+                          : ""}
+                      </span>
+                    </span>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Unread secretariat announcements. */}
         {unreadMessages > 0 && (
           <Link
@@ -335,11 +426,17 @@ export default async function InvestorDashboardPage() {
                   The Call for Expressions of Interest is open
                 </p>
                 <p className="mt-1.5 max-w-2xl text-sm text-ink-600">
-                  Starting creates your EOI application. Complete six sections covering your
-                  company, the land and business you propose (including the plot or plots you want),
-                  utilities, H3SE, and national content — then pay the processing fee of USD 1,000
-                  per plot at the end, before you submit. You can save and come back at any point
-                  before the window closes.
+                  Starting creates your EOI application. Complete six sections
+                  covering your company, the land and business you propose
+                  {PLOT_SELECTION_ENABLED
+                    ? " (including the plot or plots you want)"
+                    : ""}
+                  , utilities, H3SE, and national content
+                  {APPLICATION_FEE_ENABLED
+                    ? ", then pay the processing fee of USD 1,000 per plot at the end, before you submit."
+                    : ", then submit."}{" "}
+                  You can save and come back at any point before the window
+                  closes.
                 </p>
                 <div className="mt-4">
                   <StartEoiButton />
@@ -359,7 +456,7 @@ export default async function InvestorDashboardPage() {
                 </p>
                 <div className="mt-4">
                   <Button asChild className="h-11 px-6 text-base">
-                    <Link href={`/dashboard/eoi/${nextSectionNum}`}>
+                    <Link href={`/dashboard/eoi/${app.id}/${nextSectionNum}`}>
                       {allSectionsComplete
                         ? "Review EOI →"
                         : `Resume application · ${completedCount}/${totalSections} →`}
@@ -417,14 +514,16 @@ export default async function InvestorDashboardPage() {
                   label="EOI sections complete"
                   pct={progressPct}
                 />
-                <StatTile
-                  icon={paymentConfirmed ? CheckCircle2 : Wallet}
-                  tone={paymentConfirmed ? "green" : "amber"}
-                  value={paymentConfirmed ? "Paid" : paymentProofUploaded ? "Pending" : "Due"}
-                  numeric={false}
-                  label={`Fee · ${payCurrency} ${payAmount}`}
-                  pct={paymentConfirmed ? 100 : paymentProofUploaded ? 66 : 0}
-                />
+                {APPLICATION_FEE_ENABLED && (
+                  <StatTile
+                    icon={paymentConfirmed ? CheckCircle2 : Wallet}
+                    tone={paymentConfirmed ? "green" : "amber"}
+                    value={paymentConfirmed ? "Paid" : paymentProofUploaded ? "Pending" : "Due"}
+                    numeric={false}
+                    label={`Fee · ${payCurrency} ${payAmount}`}
+                    pct={paymentConfirmed ? 100 : paymentProofUploaded ? 66 : 0}
+                  />
+                )}
                 <StatTile
                   icon={Clock}
                   tone={urgentDeadline ? "amber" : windowOpen ? "blue" : "ink"}
@@ -499,10 +598,14 @@ export default async function InvestorDashboardPage() {
             )}
 
             {/* ── Pre-submission journey ───────────────────────────── */}
-            {isPreSubmission && eoiUnlocked && (
+            {app && isPreSubmission && eoiUnlocked && (
               <>
                 {/* 3 steps */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div
+                  className={`grid grid-cols-1 gap-3 ${
+                    APPLICATION_FEE_ENABLED ? "sm:grid-cols-3" : "sm:grid-cols-2"
+                  }`}
+                >
                   {/* Step 1 â Complete EOI */}
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
@@ -533,13 +636,14 @@ export default async function InvestorDashboardPage() {
                       className="mt-3 w-full"
                       variant={allSectionsComplete ? "outline" : "default"}
                     >
-                      <Link href={`/dashboard/eoi/${nextSectionNum}`}>
+                      <Link href={`/dashboard/eoi/${app.id}/${nextSectionNum}`}>
                         {allSectionsComplete ? "Review EOI" : `Resume · ${completedCount}/${totalSections} →`}
                       </Link>
                     </Button>
                   </div>
 
                   {/* Step 2 â Application Fee (per plot, paid at the end) */}
+                  {APPLICATION_FEE_ENABLED && (
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
                       paymentConfirmed ? "border-green-200 bg-green-50/40" : "border-amber-300 bg-white"
@@ -566,7 +670,7 @@ export default async function InvestorDashboardPage() {
                           {payCurrency} {payAmount} · confirmed
                         </p>
                         <Link
-                          href="/dashboard/payment"
+                          href={`/dashboard/payment/bank?app=${app.id}`}
                           className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
                         >
                           View receipt →
@@ -576,7 +680,7 @@ export default async function InvestorDashboardPage() {
                       <>
                         <p className="mt-1 text-xs text-amber-700">Proof submitted — awaiting confirmation</p>
                         <Link
-                          href="/dashboard/payment"
+                          href={`/dashboard/payment/bank?app=${app.id}`}
                           className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
                         >
                           Check status →
@@ -588,7 +692,7 @@ export default async function InvestorDashboardPage() {
                           {payCurrency} {payAmount} · {plotCount} plot{plotCount === 1 ? "" : "s"} × 1,000 · non-refundable
                         </p>
                         <Button asChild size="sm" className="mt-3 w-full">
-                          <Link href="/dashboard/payment">Pay Now →</Link>
+                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>Pay Now →</Link>
                         </Button>
                       </>
                     ) : (
@@ -598,6 +702,7 @@ export default async function InvestorDashboardPage() {
                       </p>
                     )}
                   </div>
+                  )}
 
                   {/* Step 3 â Submit */}
                   <div
@@ -611,7 +716,7 @@ export default async function InvestorDashboardPage() {
                           canSubmit ? "bg-brand-100 text-brand-700" : "bg-ink-100 text-ink-500"
                         }`}
                       >
-                        3
+                        {APPLICATION_FEE_ENABLED ? "3" : "2"}
                       </span>
                       {!canSubmit && <Lock size={14} className="text-ink-500" />}
                     </div>
@@ -619,13 +724,13 @@ export default async function InvestorDashboardPage() {
                     <p className="mt-1 text-xs text-ink-500">
                       {!allSectionsComplete
                         ? `${remaining} section${remaining !== 1 ? "s" : ""} remaining`
-                        : !paymentConfirmed
+                        : APPLICATION_FEE_ENABLED && !paymentConfirmed
                           ? "Pay the fee to submit"
                           : "Ready to submit!"}
                     </p>
                     {canSubmit ? (
                       <Button asChild size="sm" className="mt-3 w-full bg-green-600 hover:bg-green-700">
-                        <Link href="/dashboard/eoi/6">Submit EOI →</Link>
+                        <Link href={`/dashboard/eoi/${app.id}/6`}>Submit EOI →</Link>
                       </Button>
                     ) : (
                       <Button size="sm" disabled className="mt-3 w-full bg-green-600 hover:bg-green-700">
@@ -659,7 +764,7 @@ export default async function InvestorDashboardPage() {
                         return (
                           <Link
                             key={s.key}
-                            href={`/dashboard/eoi/${sectionNum}`}
+                            href={`/dashboard/eoi/${app.id}/${sectionNum}`}
                             className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-ink-100/60"
                           >
                             <span
@@ -695,7 +800,7 @@ export default async function InvestorDashboardPage() {
                       })}
                     </div>
 
-                    {allSectionsComplete && !paymentConfirmed && (
+                    {APPLICATION_FEE_ENABLED && allSectionsComplete && !paymentConfirmed && (
                       <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <p className="text-sm font-semibold text-amber-800">
@@ -706,7 +811,7 @@ export default async function InvestorDashboardPage() {
                           </p>
                         </div>
                         <Button asChild className="shrink-0">
-                          <Link href="/dashboard/payment">Pay Application Fee →</Link>
+                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>Pay Application Fee →</Link>
                         </Button>
                       </div>
                     )}
@@ -722,7 +827,7 @@ export default async function InvestorDashboardPage() {
                           )}
                         </div>
                         <Button asChild className="shrink-0 bg-green-600 hover:bg-green-700">
-                          <Link href="/dashboard/eoi/6">Submit EOI →</Link>
+                          <Link href={`/dashboard/eoi/${app.id}/6`}>Submit EOI →</Link>
                         </Button>
                       </div>
                     )}

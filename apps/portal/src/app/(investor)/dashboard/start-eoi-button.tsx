@@ -10,16 +10,22 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 /**
  * Creates the investor's `Application` row and drops them into the EOI journey.
  *
- * This is the only entry point into the EOI — before it existed, an investor
- * with no application row saw a dead end telling them to email the secretariat.
- * `POST /applications` is idempotent (it returns an existing live application
- * rather than making a second), so a double-click is harmless.
+ * This is an entry point into the EOI. Each click creates a NEW application —
+ * investors may run several at once — and drops the user straight into that
+ * application's wizard at section 1. The button disables while the request is
+ * in flight so a double-click can't create two.
  *
  * The new application starts at DRAFT_PAYMENT_PENDING, so the dashboard's
  * three-step journey takes over and asks for the fee first — the spec gates
  * Sections 1–6 behind it.
  */
-export function StartEoiButton() {
+export function StartEoiButton({
+  label = "Start my EOI application",
+  variant,
+}: {
+  label?: string;
+  variant?: "default" | "outline" | "secondary";
+} = {}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +48,12 @@ export function StartEoiButton() {
           body?.error?.message ?? "Could not start your application. Please try again.",
         );
       }
-      router.refresh();
+      const application = (await res.json().catch(() => ({}))) as { id?: string };
+      if (application?.id) {
+        router.push(`/dashboard/eoi/${application.id}/1`);
+      } else {
+        router.refresh();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       setBusy(false);
@@ -51,7 +62,12 @@ export function StartEoiButton() {
 
   return (
     <div>
-      <Button onClick={handleStart} disabled={busy} className="w-full sm:w-auto">
+      <Button
+        onClick={handleStart}
+        disabled={busy}
+        variant={variant}
+        className="w-full sm:w-auto"
+      >
         {busy ? (
           <>
             <Loader2 size={15} className="mr-2 animate-spin" />
@@ -59,7 +75,7 @@ export function StartEoiButton() {
           </>
         ) : (
           <>
-            Start my EOI application
+            {label}
             <ArrowRight size={15} className="ml-2" />
           </>
         )}
