@@ -1,5 +1,4 @@
 import "server-only";
-import { Op } from "sequelize";
 import {
   User,
   InvestorOrg,
@@ -364,8 +363,11 @@ export async function getInvestorDashboardData(
 export async function listInvestorApplications(
   userId: string,
 ): Promise<ApplicationSummary[]> {
-  const apps = await Application.findAll({
-    where: { ownerUserId: userId, status: { [Op.ne]: "WITHDRAWN" } },
+  // Withdrawn applications aren't resumable, so they're filtered out. (Done in
+  // JS rather than a Sequelize `ne` operator to avoid importing sequelize's `Op`
+  // into the portal, which doesn't depend on sequelize directly.)
+  const allApps = await Application.findAll({
+    where: { ownerUserId: userId },
     order: [["createdAt", "DESC"]],
     include: [
       {
@@ -375,17 +377,18 @@ export async function listInvestorApplications(
       },
     ],
   });
+  const apps = allApps.filter((a) => a.status !== "WITHDRAWN");
 
   const totalSections = SECTION_ORDER.length;
 
   const [payments, plotRows] = await Promise.all([
     Payment.findAll({
-      where: { applicationId: { [Op.in]: apps.map((a) => a.id) } },
+      where: { applicationId: apps.map((a) => a.id) },
       order: [["createdAt", "DESC"]],
       attributes: ["applicationId", "status", "createdAt"],
     }),
     ApplicationPlot.findAll({
-      where: { applicationId: { [Op.in]: apps.map((a) => a.id) } },
+      where: { applicationId: apps.map((a) => a.id) },
       attributes: ["applicationId"],
     }),
   ]);
