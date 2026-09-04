@@ -236,22 +236,19 @@ export function SectionPreliminaryInfo() {
         <FieldRow>
           <SelectField
             path="powerOfAttorney.notarizationType"
-            label="Notarization / legalization"
-            hint="International applicants from countries outside the Hague Apostille Convention must also have the document legalized by the Ugandan Embassy or Ministry of Foreign Affairs."
-            required
+            label="Notarization / legalization (optional)"
+            hint="Optional for all applicants. If your document is notarized (and, for some countries, apostilled or legalized), record it here."
             options={optionsFrom(NOTARIZATION_TYPE_LABELS)}
           />
           <DateField
             path="powerOfAttorney.notarizedOn"
-            label="Date notarized"
-            required
+            label="Date notarized (optional)"
           />
         </FieldRow>
         <TextField
           path="powerOfAttorney.notarizedBy"
-          label="Notarized by"
-          hint="Name of the Commissioner for Oaths or Notary Public."
-          required
+          label="Notarized by (optional)"
+          hint="Name of the Commissioner for Oaths or Notary Public, if notarized."
         />
         <CheckboxField
           path="powerOfAttorney.companySealAffixed"
