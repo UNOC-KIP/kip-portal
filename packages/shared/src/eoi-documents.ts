@@ -82,7 +82,7 @@ export const EOI_DOCUMENT_REQUIREMENTS: readonly EoiDocumentRequirement[] = [
     clause: "1.2",
     label: "Power of Attorney / Board Resolution",
     description:
-      "Notarized (and legalized where applicable), naming the specific individual authorized to sign. A signed letter on its own is not sufficient.",
+      "Naming the specific individual authorized to sign. Notarization (and legalization where applicable) is accepted but not required. A signed letter on its own is not sufficient.",
     required: true,
     multiple: false,
     allowNotApplicable: false,

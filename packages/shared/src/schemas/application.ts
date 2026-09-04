@@ -141,9 +141,10 @@ export const ActingMode = {
 export type ActingMode = (typeof ActingMode)[keyof typeof ActingMode];
 
 /**
- * Notarization path (spec §1.2). International applicants from countries
- * outside the Hague Apostille Convention need consular legalization on top of
- * notarization — the committee checks for it, so it is its own value.
+ * Notarization path (spec §1.2). Notarization is optional for all applicants;
+ * when supplied, this records which path was used. For countries outside the
+ * Hague Apostille Convention, consular legalization sits on top of notarization,
+ * so it is its own value.
  */
 export const NotarizationType = {
   NOTARIZED: "NOTARIZED",
@@ -345,9 +346,12 @@ export const preliminaryInfoSchema = z
       signedByName: nonEmpty(2, "Name of the granting official is required"),
       signedByTitle: nonEmpty(2, "Title of the granting official is required"),
       companySealAffixed: z.boolean(),
-      notarizationType: z.nativeEnum(NotarizationType),
-      notarizedBy: nonEmpty(2, "Name of the notary / Commissioner for Oaths"),
-      notarizedOn: dateString,
+      // Notarization is optional for all applicants (Ugandan and international):
+      // the fields stay available but are never required. Empty string and
+      // absent both pass; a supplied date is still format-checked.
+      notarizationType: z.nativeEnum(NotarizationType).or(z.literal("")).optional(),
+      notarizedBy: z.string().trim().optional(),
+      notarizedOn: dateString.or(z.literal("")).optional(),
     }),
 
     /** 1.3 Shareholder / Ownership Information. */
