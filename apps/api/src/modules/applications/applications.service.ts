@@ -708,7 +708,7 @@ export async function setApplicationPlots(
 
   const plotIds = Array.from(new Set(input.plotIds));
   const plots = plotIds.length
-    ? await Plot.findAll({ where: { id: plotIds }, attributes: ["id", "plotName"] })
+    ? await Plot.findAll({ where: { id: plotIds }, attributes: ["id", "plotName", "street"] })
     : [];
   if (plots.length !== plotIds.length) throw BadRequest("One or more plots are unknown");
 
@@ -720,7 +720,12 @@ export async function setApplicationPlots(
     await ApplicationPlot.destroy({ where: { applicationId: app.id }, transaction: t });
     if (ordered.length) {
       await ApplicationPlot.bulkCreate(
-        ordered.map((p) => ({ applicationId: app.id, plotId: p.id })),
+        ordered.map((p) => ({
+          applicationId: app.id,
+          plotId: p.id,
+          // Snapshot the road so reviewers see it without a plot lookup.
+          road: p.street ?? null,
+        })),
         { transaction: t },
       );
     }

@@ -27,6 +27,8 @@ export class Plot extends Model<
   declare zone: CreationOptional<string | null>
   declare acreage: CreationOptional<number | null>
   declare areaCategory: CreationOptional<string | null>
+  /** Road/street the plot fronts (from the plot register). */
+  declare street: CreationOptional<string | null>
   declare lot: CreationOptional<string | null>
   declare usage: CreationOptional<string | null>
   /** Raw GIS status string: " " | "Not taken" | "Taken". */
@@ -52,6 +54,7 @@ export class Plot extends Model<
         zone: { type: DataTypes.STRING, allowNull: true },
         acreage: { type: DataTypes.DOUBLE, allowNull: true },
         areaCategory: { type: DataTypes.STRING, allowNull: true },
+        street: { type: DataTypes.STRING, allowNull: true },
         lot: { type: DataTypes.STRING, allowNull: true },
         usage: { type: DataTypes.STRING, allowNull: true },
         gisStatus: { type: DataTypes.STRING, allowNull: true },

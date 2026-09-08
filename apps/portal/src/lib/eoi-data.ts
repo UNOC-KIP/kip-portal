@@ -62,6 +62,8 @@ export type EoiPlotOption = {
   zone: string | null;
   acreage: number | null;
   areaCategory: string | null;
+  /** Road/street the plot fronts. */
+  road: string | null;
   /** How many OTHER investors have applied for this plot (transparency). */
   applicantCount: number;
   /** GeoJSON Polygon string (WGS84) for the map, or null if unavailable. */
@@ -272,6 +274,7 @@ export async function getEoiWizardData(
       zone: pt.zone ?? null,
       acreage: pt.acreage ?? null,
       areaCategory: pt.areaCategory ?? null,
+      road: pt.street ?? null,
       applicantCount: plotCounts.get(pt.id) ?? 0,
       geometry: pt.geometry ?? null,
       centroidLat: pt.centroidLat ?? null,

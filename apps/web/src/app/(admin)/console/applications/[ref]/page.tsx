@@ -149,6 +149,7 @@ export default async function AdminApplicationDetailPage({
                         <p className="text-xs text-ink-500">
                           {pt.zone ?? "—"} ·{" "}
                           {pt.acreage != null ? `${pt.acreage.toFixed(2)} acres` : "—"}
+                          {pt.road ? ` · ${pt.road}` : ""}
                           {pt.areaCategory ? ` · ${pt.areaCategory}` : ""}
                         </p>
                       </div>

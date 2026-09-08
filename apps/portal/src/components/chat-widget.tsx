@@ -52,7 +52,7 @@ export function ChatWidget() {
         ...m,
         {
           from: "team",
-          text: `Thanks, ${name.trim().split(" ")[0]}! We've received your message and will reply to ${email.trim()} within 1–2 business days.`,
+          text: `Thanks, ${name.trim().split(" ")[0]}! We've received your message and will reply to ${email.trim()} within 1–24 hours.`,
         },
       ]);
       setDone(true);
@@ -88,7 +88,7 @@ export function ChatWidget() {
             </span>
             <div className="leading-tight">
               <p className="text-[14px] font-bold">KIP Investor Support</p>
-              {/* <p className="text-[11px] text-white/55">Typically replies within 1–2 business days</p> */}
+              {/* <p className="text-[11px] text-white/55">Typically replies within 1–24 hours</p> */}
             </div>
           </div>
 

@@ -19,7 +19,7 @@ export default function PaymentPendingPage() {
           </h1>
           <p className="mb-6 text-sm text-ink-500">
             Your payment proof has been received and is now under review by the UNOC Finance
-            team. Confirmation typically takes up to <strong>2 business days</strong>. You will
+            team. Confirmation typically takes up to <strong>24 hours</strong>. You will
             receive an email notification once your payment is confirmed.
           </p>
 
