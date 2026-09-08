@@ -17,14 +17,14 @@
 import { Pool } from 'pg'
 import { randomUUID } from 'crypto'
 import { readFileSync } from 'fs'
-import { fileURLToPath } from 'url'
-import { dirname, join } from 'path'
+import { join } from 'path'
 
 const DB_URL =
   process.env.DATABASE_URL ??
   'postgresql://kip:kip_dev_password@localhost:5433/kip_portal?schema=public'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
+// CommonJS package (see tsconfig module=CommonJS): __dirname is a native global.
+// Run via tsx from src, so this resolves to src/data/phase2-plots.json.
 const DATA_FILE = join(__dirname, 'data', 'phase2-plots.json')
 
 type PlotRow = {
