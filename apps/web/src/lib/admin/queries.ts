@@ -742,7 +742,7 @@ export type AdminApplicationDetail = {
   documents: { id: string; kindLabel: string; filename: string; sizeLabel: string; uploadedAt: string; partnerName: string | null }[];
   plots: {
     id: string; plotName: string; zone: string | null; acreage: number | null;
-    areaCategory: string | null; applicantCount: number;
+    areaCategory: string | null; road: string | null; applicantCount: number;
   }[];
   totalAcres: number;
   auditTrail: { time: string; text: string; actor: string }[];
@@ -938,6 +938,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
       zone: pt.zone ?? null,
       acreage: pt.acreage ?? null,
       areaCategory: pt.areaCategory ?? null,
+      road: pt.street ?? null,
       applicantCount: plotCountMap.get(pt.id) ?? 0,
     })),
     totalAcres,

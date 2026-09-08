@@ -98,6 +98,7 @@ export default async function TcReviewPage({ params }: { params: { ref: string }
                         <p className="text-sm font-semibold text-ink-900">{pt.plotName}</p>
                         <p className="text-xs text-ink-500">
                           {pt.zone ?? "—"} · {pt.acreage != null ? `${pt.acreage.toFixed(2)} acres` : "—"}
+                          {pt.road ? ` · ${pt.road}` : ""}
                         </p>
                       </div>
                       {pt.applicantCount > 0 && (

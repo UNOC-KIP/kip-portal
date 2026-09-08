@@ -15,6 +15,7 @@
     "db:migrate:fake": "pnpm --filter @kip/db migrate:fake",
     "db:seed": "pnpm --filter @kip/db seed",
     "db:sync-plots": "pnpm --filter @kip/db sync:plots",
+    "db:load-plots": "pnpm --filter @kip/db load:plots",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
