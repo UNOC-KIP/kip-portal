@@ -13,6 +13,9 @@ import {
   EoiSection,
   LegalForm,
   PLOT_SELECTION_ENABLED,
+  APPLICATION_FEE_ENABLED,
+  computeApplicationFee,
+  formatMoney,
   REPORTING_YEARS,
   sectionSchemas,
 } from "@kip/shared";
@@ -320,6 +323,10 @@ export function EoiWizard({
   }
 
   const isLast = step === EOI_SECTION_ORDER.length;
+  const fee = useMemo(
+    () => computeApplicationFee(data.application.selectedPlotIds.length),
+    [data.application.selectedPlotIds.length],
+  );
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -484,6 +491,36 @@ export function EoiWizard({
                 />
               </div>
             </EoiFormProvider>
+
+            {!disabled && isLast && APPLICATION_FEE_ENABLED && (
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+                <p className="text-sm font-bold text-ink-900">
+                  Application fee — payable after you submit
+                </p>
+                <div className="mt-2 space-y-1 text-sm text-ink-700">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {fee.plotCount} plot{fee.plotCount === 1 ? "" : "s"} ×{" "}
+                      {formatMoney(fee.perPlot, fee.currency)}
+                    </span>
+                    <span>{formatMoney(fee.subtotal, fee.currency)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>VAT (18%)</span>
+                    <span>{formatMoney(fee.vat, fee.currency)}</span>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-amber-200 pt-1 font-bold text-ink-900">
+                    <span>Total payable</span>
+                    <span>{formatMoney(fee.total, fee.currency)}</span>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-ink-600">
+                  When you submit, UNOC will email you an invoice for this amount.
+                  Pay it by bank transfer, then upload your receipt from your
+                  dashboard — you don&apos;t pay before submitting.
+                </p>
+              </div>
+            )}
 
             {!disabled && (
               <div className="mt-6 flex flex-col-reverse items-stretch justify-between gap-3 border-t border-ink-200 pt-5 sm:flex-row sm:items-center">

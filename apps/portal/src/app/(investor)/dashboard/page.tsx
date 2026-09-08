@@ -205,6 +205,8 @@ export default async function InvestorDashboardPage({
   const paymentStatus = app?.paymentStatus ?? null;
   const paymentConfirmed = paymentStatus === "CONFIRMED";
   const paymentProofUploaded = paymentStatus === "PROOF_UPLOADED";
+  const paymentFailed = paymentStatus === "FAILED";
+  const invoiceSent = app?.invoiceStatus === "SENT";
   const isPreSubmission =
     !app || app.status === "DRAFT_PAYMENT_PENDING" || app.status === "DRAFT";
 
@@ -216,10 +218,11 @@ export default async function InvestorDashboardPage({
   const allSectionsComplete = completedCount === totalSections;
   const progressPct = Math.round((completedCount / totalSections) * 100);
 
+  // Submit-first: payment happens after submission (invoice-based), so the
+  // fee no longer gates submission.
   const canSubmit =
-    (APPLICATION_FEE_ENABLED ? paymentConfirmed : true) &&
     allSectionsComplete &&
-    app?.status === "DRAFT" &&
+    (app?.status === "DRAFT_PAYMENT_PENDING" || app?.status === "DRAFT") &&
     eoiUnlocked;
 
   const firstIncompleteIdx = sections.findIndex((s) => !s.complete);
@@ -601,11 +604,7 @@ export default async function InvestorDashboardPage({
             {app && isPreSubmission && eoiUnlocked && (
               <>
                 {/* 3 steps */}
-                <div
-                  className={`grid grid-cols-1 gap-3 ${
-                    APPLICATION_FEE_ENABLED ? "sm:grid-cols-3" : "sm:grid-cols-2"
-                  }`}
-                >
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {/* Step 1 â Complete EOI */}
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
@@ -642,68 +641,6 @@ export default async function InvestorDashboardPage({
                     </Button>
                   </div>
 
-                  {/* Step 2 â Application Fee (per plot, paid at the end) */}
-                  {APPLICATION_FEE_ENABLED && (
-                  <div
-                    className={`rounded-xl border p-4 shadow-sm ${
-                      paymentConfirmed ? "border-green-200 bg-green-50/40" : "border-amber-300 bg-white"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <span
-                        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
-                          paymentConfirmed ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                        }`}
-                      >
-                        {paymentConfirmed ? "✓" : "2"}
-                      </span>
-                      {paymentConfirmed ? (
-                        <CheckCircle2 size={18} className="text-green-500" />
-                      ) : (
-                        <AlertCircle size={18} className="text-amber-500" />
-                      )}
-                    </div>
-                    <h3 className="mt-3 text-sm font-bold">Application Fee</h3>
-                    {paymentConfirmed ? (
-                      <>
-                        <p className="mt-1 text-xs text-ink-500">
-                          {payCurrency} {payAmount} · confirmed
-                        </p>
-                        <Link
-                          href={`/dashboard/payment/bank?app=${app.id}`}
-                          className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
-                        >
-                          View receipt →
-                        </Link>
-                      </>
-                    ) : paymentProofUploaded ? (
-                      <>
-                        <p className="mt-1 text-xs text-amber-700">Proof submitted — awaiting confirmation</p>
-                        <Link
-                          href={`/dashboard/payment/bank?app=${app.id}`}
-                          className="mt-3 inline-block text-xs font-medium text-ink-500 underline hover:text-ink-900"
-                        >
-                          Check status →
-                        </Link>
-                      </>
-                    ) : plotCount > 0 ? (
-                      <>
-                        <p className="mt-1 text-xs text-ink-500">
-                          {payCurrency} {payAmount} · {plotCount} plot{plotCount === 1 ? "" : "s"} × 1,000 · non-refundable
-                        </p>
-                        <Button asChild size="sm" className="mt-3 w-full">
-                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>Pay Now →</Link>
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="mt-1 text-xs text-ink-500">
-                        Select the plot or plots you want in your EOI (Section 2) — the fee is
-                        USD 1,000 per plot, paid here at the end.
-                      </p>
-                    )}
-                  </div>
-                  )}
-
                   {/* Step 3 â Submit */}
                   <div
                     className={`rounded-xl border p-4 shadow-sm ${
@@ -716,7 +653,7 @@ export default async function InvestorDashboardPage({
                           canSubmit ? "bg-brand-100 text-brand-700" : "bg-ink-100 text-ink-500"
                         }`}
                       >
-                        {APPLICATION_FEE_ENABLED ? "3" : "2"}
+                        2
                       </span>
                       {!canSubmit && <Lock size={14} className="text-ink-500" />}
                     </div>
@@ -724,9 +661,7 @@ export default async function InvestorDashboardPage({
                     <p className="mt-1 text-xs text-ink-500">
                       {!allSectionsComplete
                         ? `${remaining} section${remaining !== 1 ? "s" : ""} remaining`
-                        : APPLICATION_FEE_ENABLED && !paymentConfirmed
-                          ? "Pay the fee to submit"
-                          : "Ready to submit!"}
+                        : "Ready to submit!"}
                     </p>
                     {canSubmit ? (
                       <Button asChild size="sm" className="mt-3 w-full bg-green-600 hover:bg-green-700">
@@ -800,22 +735,6 @@ export default async function InvestorDashboardPage({
                       })}
                     </div>
 
-                    {APPLICATION_FEE_ENABLED && allSectionsComplete && !paymentConfirmed && (
-                      <div className="mt-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm font-semibold text-amber-800">
-                            All sections complete — one step left
-                          </p>
-                          <p className="mt-0.5 text-xs text-amber-700">
-                            Pay the {payCurrency} {payAmount} application fee to submit your EOI.
-                          </p>
-                        </div>
-                        <Button asChild className="shrink-0">
-                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>Pay Application Fee →</Link>
-                        </Button>
-                      </div>
-                    )}
-
                     {canSubmit && (
                       <div className="mt-4 flex flex-col gap-3 rounded-lg border border-green-200 bg-green-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div>
@@ -839,6 +758,68 @@ export default async function InvestorDashboardPage({
             {/* ── Post-submission ──────────────────────────────────── */}
             {app && !isPreSubmission && (
               <>
+                {APPLICATION_FEE_ENABLED && (
+                  <Card>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-500">
+                          Application fee
+                        </p>
+                        <h2 className="mt-1 text-lg font-bold">
+                          {payCurrency} {payAmount}
+                        </h2>
+                        <p className="text-xs text-ink-500">
+                          {app.paymentSubtotal
+                            ? `${payCurrency} ${parseFloat(app.paymentSubtotal).toLocaleString()} + 18% VAT`
+                            : "incl. 18% VAT"}
+                        </p>
+                      </div>
+                      <StatusBadge
+                        variant={
+                          paymentConfirmed
+                            ? "tc-approved"
+                            : paymentFailed
+                              ? "tc-rejected"
+                              : paymentProofUploaded
+                                ? "status-pending"
+                                : "payment-pending"
+                        }
+                      >
+                        {paymentConfirmed
+                          ? "Paid"
+                          : paymentFailed
+                            ? "Payment failed"
+                            : paymentProofUploaded
+                              ? "Receipt under review"
+                              : invoiceSent
+                                ? "Invoice sent"
+                                : "Awaiting invoice"}
+                      </StatusBadge>
+                    </div>
+                    <p className="mt-3 text-sm text-ink-600">
+                      {paymentConfirmed
+                        ? "Your application fee has been received and verified. Thank you."
+                        : paymentFailed
+                          ? "We could not verify your payment. Please check your receipt and re-upload it, or contact the secretariat."
+                          : paymentProofUploaded
+                            ? "We've received your receipt and the finance team is verifying it."
+                            : invoiceSent
+                              ? "UNOC has emailed you an invoice. Pay it by bank transfer, then upload your receipt below."
+                              : "UNOC's finance team will email you an invoice for the fee shortly. You'll pay by bank transfer and upload your receipt here."}
+                    </p>
+                    {!paymentConfirmed && (
+                      <div className="mt-4">
+                        <Button asChild size="sm">
+                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>
+                            {paymentProofUploaded
+                              ? "View / update receipt →"
+                              : "Pay & upload receipt →"}
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
+                  </Card>
+                )}
                 <Card>
                   <div className="flex items-start justify-between gap-3">
                     <div>

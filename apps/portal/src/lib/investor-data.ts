@@ -148,7 +148,11 @@ export type DashboardData = {
     paymentMethod: string | null
     paymentCurrency: string | null
     paymentAmount: string | null
+    paymentSubtotal: string | null
+    paymentVat: string | null
     paymentConfirmedAt: string | null
+    invoiceStatus: string | null
+    invoiceSentAt: string | null
     plotCount: number
   } | null
   recentActivity: ActivityItem[]
@@ -337,7 +341,11 @@ export async function getInvestorDashboardData(
           paymentMethod:      payment?.method ?? null,
           paymentCurrency:    payment?.currency ?? null,
           paymentAmount:      payment ? String(payment.amount) : null,
+          paymentSubtotal:    payment?.subtotalAmount != null ? String(payment.subtotalAmount) : null,
+          paymentVat:         payment?.vatAmount != null ? String(payment.vatAmount) : null,
           paymentConfirmedAt: payment?.confirmedAt?.toISOString() ?? null,
+          invoiceStatus:      payment?.invoiceStatus ?? null,
+          invoiceSentAt:      payment?.invoiceSentAt?.toISOString() ?? null,
           plotCount: plotCount ?? 0,
         }
       : null,
