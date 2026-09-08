@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlertTriangle,
   BarChart2,
   ChevronLeft,
   ChevronRight,
@@ -17,6 +16,7 @@ import {
   Smartphone,
   Users,
   CalendarDays,
+  Landmark,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -42,7 +42,7 @@ const FULL_NAV = [
   { icon: ClipboardCheck, href: "/console/tc/queue",      label: "TC Review" },
   { icon: Megaphone,      href: "/console/communications",label: "Communications" },
   { icon: Smartphone,     href: "/console/land-plots",    label: "Land Plots" },
-  { icon: AlertTriangle,  href: "/console/bank-transfers",label: "Bank Transfers" },
+  { icon: Landmark,       href: "/console/finance/queue", label: "Finance" },
   { icon: BarChart2,      href: "/console/report",        label: "Reports" },
   { icon: Users,          href: "/console/users",         label: "Investors" },
   { icon: Inbox,          href: "/console/inquiries",     label: "Inquiries" },
@@ -54,7 +54,14 @@ const TC_NAV = [
   { icon: ClipboardCheck, href: "/console/tc/queue", label: "TC Review" },
 ];
 
+// Finance officer: finance-only workspace, no investor/admin data.
+const FINANCE_NAV = [
+  { icon: LayoutGrid, href: "/console/finance",       label: "Dashboard" },
+  { icon: Landmark,   href: "/console/finance/queue", label: "Finance" },
+];
+
 function getNavItems(role: string) {
+  if (role === "FINANCE_OFFICER") return FINANCE_NAV;
   return TC_ROLES.has(role) ? TC_NAV : FULL_NAV;
 }
 
@@ -65,6 +72,7 @@ function getRoleLabel(role: string) {
     TC_CHAIR: "TC Chair",
     GM_URHC: "GM, URHC",
     EXCO_MEMBER: "ExCo Member",
+    FINANCE_OFFICER: "Finance Officer",
     INVESTMENT_COMMITTEE_MEMBER: "Investment Committee",
     BOARD_MEMBER: "Board Member",
   };

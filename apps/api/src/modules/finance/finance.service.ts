@@ -14,6 +14,7 @@ import {
   InvoiceStatus,
   REFERENCED_STATUSES,
   formatMoney,
+  type FinanceRow,
 } from "@kip/shared";
 import { env } from "../../env.js";
 import {
@@ -45,28 +46,6 @@ function bankDetails(): { label: string; value: string }[] {
     { label: "Swift / BIC", value: process.env.STANBIC_SWIFT ?? "SBICUGKX" },
   ];
 }
-
-export type FinanceRow = {
-  paymentId: string | null;
-  applicationId: string;
-  reference: string | null;
-  status: string;
-  applicantName: string | null;
-  company: string | null;
-  email: string | null;
-  tin: string | null;
-  phone: string | null;
-  plotCount: number;
-  currency: string;
-  subtotal: number;
-  vat: number;
-  total: number;
-  paymentStatus: string | null;
-  invoiceStatus: string;
-  invoiceSentAt: string | null;
-  hasReceipt: boolean;
-  submittedAt: string | null;
-};
 
 /**
  * Every submitted application, with just the finance-relevant fields (applicant,

@@ -16,10 +16,14 @@ export const STAFF_ROLES = [
   UserRole.TC_CHAIR,
   UserRole.LAC_MEMBER,
   UserRole.EXCO_MEMBER,
+  UserRole.FINANCE_OFFICER,
 ] as const;
 
 /** Roles that can reach the TC review area. ADMIN can see everything. */
 export const TC_ROLES = [UserRole.TC_MEMBER, UserRole.TC_CHAIR, UserRole.ADMIN] as const;
+
+/** Finance workspace — application-fee invoicing and payment verification. */
+export const FINANCE_ROLES = [UserRole.FINANCE_OFFICER, UserRole.ADMIN] as const;
 
 /** Admin-management area (full data reads, user/window/payment management). */
 export const ADMIN_ONLY = [UserRole.ADMIN] as const;
@@ -45,6 +49,8 @@ export function homePathForRole(role: Role | undefined | null): string {
     case UserRole.TC_MEMBER:
     case UserRole.TC_CHAIR:
       return "/console/tc/queue";
+    case UserRole.FINANCE_OFFICER:
+      return "/console/finance";
     case UserRole.LAC_MEMBER:
     case UserRole.EXCO_MEMBER:
       return "/unauthorized";
@@ -60,6 +66,7 @@ export type RolePolicy = readonly Role[] | "any" | null;
 // parents (/console).
 const ROUTE_POLICY: { prefix: string; policy: RolePolicy }[] = [
   { prefix: "/console/tc", policy: TC_ROLES },
+  { prefix: "/console/finance", policy: FINANCE_ROLES },
   { prefix: "/console", policy: ADMIN_ONLY },
   { prefix: "/launch", policy: "any" },
   { prefix: "/unauthorized", policy: "any" },

@@ -49,3 +49,26 @@ export function formatMoney(amount: number, currency: string = "USD"): string {
     maximumFractionDigits: 2,
   })}`;
 }
+
+/** One row of the finance queue — submitted application + fee + payment state. */
+export type FinanceRow = {
+  paymentId: string | null;
+  applicationId: string;
+  reference: string | null;
+  status: string;
+  applicantName: string | null;
+  company: string | null;
+  email: string | null;
+  tin: string | null;
+  phone: string | null;
+  plotCount: number;
+  currency: string;
+  subtotal: number;
+  vat: number;
+  total: number;
+  paymentStatus: string | null;
+  invoiceStatus: string;
+  invoiceSentAt: string | null;
+  hasReceipt: boolean;
+  submittedAt: string | null;
+};
