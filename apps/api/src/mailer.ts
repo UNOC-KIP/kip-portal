@@ -30,6 +30,11 @@ export async function sendMail(opts: {
   to: string;
   subject: string;
   html: string;
+  attachments?: {
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }[];
 }): Promise<void> {
   try {
     await transport.sendMail({ from: env.EMAIL_FROM, ...opts });
@@ -565,5 +570,59 @@ export function announcementEmail(opts: {
         View in portal
       </a>
     </p>
+  `);
+}
+
+
+/**
+ * The application-fee invoice cover email. The invoice document itself is
+ * prepared by finance and attached to the message (or linked when a download
+ * URL is supplied). Amounts come from the server-authoritative fee.
+ */
+export function feeInvoiceEmail(opts: {
+  name: string;
+  reference: string;
+  plotCount: number;
+  subtotalLabel: string;
+  vatLabel: string;
+  totalLabel: string;
+  bank: { label: string; value: string }[];
+  paymentRef: string;
+  invoiceUrl?: string | null;
+  note?: string | null;
+}): string {
+  const row = (l: string, v: string, bold = false) => `
+    <tr>
+      <td style="padding:6px 0;color:#3f3f46;font-size:14px">${escapeHtml(l)}</td>
+      <td style="padding:6px 0;text-align:right;color:#09090b;font-size:14px;${bold ? "font-weight:700" : ""}">${escapeHtml(v)}</td>
+    </tr>`;
+  const bankRows = opts.bank
+    .map(
+      (b) => `<tr><td style="padding:3px 0;color:#71717a;font-size:13px">${escapeHtml(b.label)}</td>
+        <td style="padding:3px 0;text-align:right;color:#09090b;font-size:13px;font-weight:600">${escapeHtml(b.value)}</td></tr>`,
+    )
+    .join("");
+  return shell(`
+    <p style="margin:0 0 8px;color:#09090b;font-size:18px;font-weight:700">Application fee invoice</p>
+    <p style="margin:0 0 18px;color:#3f3f46;font-size:14px;line-height:1.6">
+      Dear ${escapeHtml(opts.name)}, please find attached the UNOC invoice for the
+      processing fee on application <strong>${escapeHtml(opts.reference)}</strong>
+      (${opts.plotCount} plot${opts.plotCount === 1 ? "" : "s"}). Kindly settle it by
+      bank transfer using the reference below, then upload your receipt from your
+      portal dashboard.
+    </p>
+    ${opts.note ? `<p style="margin:0 0 18px;color:#3f3f46;font-size:14px;line-height:1.6">${escapeHtml(opts.note)}</p>` : ""}
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #e4e4e7;border-bottom:1px solid #e4e4e7;margin:0 0 18px">
+      ${row("Application fee (excl. VAT)", opts.subtotalLabel)}
+      ${row("VAT (18%)", opts.vatLabel)}
+      ${row("Total payable", opts.totalLabel, true)}
+    </table>
+    ${opts.invoiceUrl ? `<p style="margin:0 0 18px;font-size:14px"><a href="${escapeHtml(opts.invoiceUrl)}" style="color:#2563eb;font-weight:600">Download the invoice (PDF)</a></p>` : ""}
+    <p style="margin:0 0 8px;color:#09090b;font-size:14px;font-weight:700">Bank details</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px">
+      ${bankRows}
+      <tr><td style="padding:3px 0;color:#71717a;font-size:13px">Payment reference</td>
+        <td style="padding:3px 0;text-align:right;color:#09090b;font-size:13px;font-weight:700">${escapeHtml(opts.paymentRef)}</td></tr>
+    </table>
   `);
 }

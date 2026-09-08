@@ -28,6 +28,7 @@ export const UserRole = {
   TC_CHAIR:    "TC_CHAIR",
   LAC_MEMBER:  "LAC_MEMBER",
   EXCO_MEMBER: "EXCO_MEMBER",
+  FINANCE_OFFICER: "FINANCE_OFFICER",
   ADMIN:       "ADMIN",
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
@@ -60,6 +61,13 @@ export const PaymentStatus = {
   REFUNDED:       "REFUNDED",
 } as const;
 export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
+
+/** Whether the UNOC invoice for the application fee has been sent to the investor. */
+export const InvoiceStatus = {
+  NOT_SENT: "NOT_SENT",
+  SENT:     "SENT",
+} as const;
+export type InvoiceStatus = (typeof InvoiceStatus)[keyof typeof InvoiceStatus];
 
 /** Payment method — MoMo / Airtel are explicitly out of scope. */
 export const PaymentMethod = {
@@ -137,6 +145,7 @@ export const DocumentKind = {
   SIGNED_DECLARATION:           "SIGNED_DECLARATION",
   // Fee step
   PAYMENT_PROOF:                "PAYMENT_PROOF",
+  FEE_INVOICE:                  "FEE_INVOICE",
   OTHER:                        "OTHER",
 } as const;
 export type DocumentKind = (typeof DocumentKind)[keyof typeof DocumentKind];
@@ -165,6 +174,7 @@ export const DOCUMENT_KIND_LABELS: Record<DocumentKind, string> = {
   PROCUREMENT_RECORD:           "Procurement register / local content report",
   SIGNED_DECLARATION:           "Signed declaration page",
   PAYMENT_PROOF:                "Proof of payment",
+  FEE_INVOICE:                  "UNOC application-fee invoice",
   OTHER:                        "Other supporting document",
 };
 
