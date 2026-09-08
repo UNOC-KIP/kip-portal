@@ -123,7 +123,7 @@ export default function HelpPage() {
               </div>
               <div>
                 <p className="text-[14px] font-bold text-black">Email Support</p>
-                <p className="mt-0.5 text-[13px] text-black/60">Get a response within 1–2 business days.</p>
+                <p className="mt-0.5 text-[13px] text-black/60">Get a response within 1–24 hours.</p>
                 <Link href="/contact" className="mt-2 inline-block text-[13px] font-semibold text-kip-red hover:underline">Send a message →</Link>
               </div>
             </div>

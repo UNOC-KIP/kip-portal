@@ -154,7 +154,7 @@ export default function ContactPage({ searchParams }: { searchParams: { sent?: s
             <div className="lg:col-span-2">
               <div className="rounded-[5px] border border-black/8 bg-white p-8">
                 <h2 className="mb-1 text-[15px] font-bold text-black">Send Us a Message</h2>
-                <p className="mb-7 text-[13px] text-black/60">We typically respond within 1–2 business days.</p>
+                <p className="mb-7 text-[13px] text-black/60">We typically respond within 1–24 hours.</p>
 
                 {sent && (
                   <div className="mb-6 flex items-start gap-3 rounded-[4px] border border-green-200 bg-green-50 px-4 py-3.5">

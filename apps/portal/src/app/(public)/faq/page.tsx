@@ -22,8 +22,8 @@ const CATEGORIES: { title: string; items: FAQ[] }[] = [
     items: [
       { q: "How much is the application fee?", a: "The non-refundable application fee is USD 1,000 (or equivalent in UGX at the prevailing Bank of Uganda rate). This fee is required before you can begin filling your EOI." },
       { q: "Is the application fee refundable?", a: "No. The USD 1,000 application fee is non-refundable regardless of the outcome of the review process, including if your application is not shortlisted." },
-      { q: "What payment method is accepted?", a: "Payment is by direct Stanbic Bank transfer only. Transfer USD 1,000 to the UNOC Stanbic account provided in the portal, then upload your proof of transfer. An admin will confirm within 1–2 business days." },
-      { q: "My bank transfer was confirmed but my application still shows 'Payment Pending'. What do I do?", a: "Bank transfers are confirmed manually by the UNOC admin team within 1–2 business days of receiving proof of payment. If more than 2 business days have passed, please contact us at kipinvestorrelations@unoc.com with your reference and payment proof." },
+      { q: "What payment method is accepted?", a: "Payment is by direct Stanbic Bank transfer only. Transfer USD 1,000 to the UNOC Stanbic account provided in the portal, then upload your proof of transfer. An admin will confirm within 1–24 hours." },
+      { q: "My bank transfer was confirmed but my application still shows 'Payment Pending'. What do I do?", a: "Bank transfers are confirmed manually by the UNOC admin team within 1–24 hours of receiving proof of payment. If more than 24 hours have passed, please contact us at kipinvestorrelations@unoc.com with your reference and payment proof." },
     ],
   },
   {
@@ -47,7 +47,7 @@ const CATEGORIES: { title: string; items: FAQ[] }[] = [
   {
     title: "Technical & Account",
     items: [
-      { q: "I didn't receive my account activation email. What should I do?", a: "Account activations are processed manually by the UNOC admin team within 1–2 business days. Check your spam/junk folder. If you still haven't received it after 2 business days, email kipinvestorrelations@unoc.com with your registered email address." },
+      { q: "I didn't receive my account activation email. What should I do?", a: "Account activations are processed manually by the UNOC admin team within 1–24 hours. Check your spam/junk folder. If you still haven't received it after 24 hours, email kipinvestorrelations@unoc.com with your registered email address." },
       { q: "I forgot my password. How do I reset it?", a: "Use the 'Forgot Password' link on the sign-in page to request a magic link to your registered email. If you no longer have access to that email, contact kipinvestorrelations@unoc.com." },
       { q: "Which browsers are supported?", a: "The portal supports all modern browsers: Chrome, Firefox, Safari, and Edge (latest two versions). JavaScript must be enabled. Internet Explorer is not supported." },
       { q: "What file formats are accepted for document uploads?", a: "The portal accepts PDF, JPEG, and PNG files. Maximum file size per upload is 10 MB." },

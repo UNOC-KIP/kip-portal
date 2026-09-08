@@ -34,9 +34,9 @@ const STEPS: Step[] = [
     items: ["Section 1 — Preliminary Information", "Section 2 — Land & Business Profile", "Section 3 — Utilities & Infrastructure Requirements", "Section 4 — Health, Safety, Security & Environment (H3SE)", "Section 5 — National Content Plan", "Section 6 — Declaration & Certification"],
   },
   {
-    number: "03", icon: CreditCard, title: "Pay the Application Fee", duration: "1–2 business days",
+    number: "03", icon: CreditCard, title: "Pay the Application Fee", duration: "1–24 hours",
     description: "A non-refundable application fee of USD 1,000 (or equivalent UGX) is required before you can submit your EOI. Make a direct bank transfer to the UNOC Stanbic Bank account and upload your proof of payment in the portal.",
-    items: ["Non-refundable fee: USD 1,000", "Payment method: direct Stanbic Bank transfer only", "Upload proof of transfer — confirmed by UNOC admin within 1–2 business days"],
+    items: ["Non-refundable fee: USD 1,000", "Payment method: direct Stanbic Bank transfer only", "Upload proof of transfer — confirmed by UNOC admin within 1–24 hours"],
   },
   
   {
