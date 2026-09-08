@@ -124,7 +124,7 @@ export function PlotPicker({
         <iframe
           src={KIP_LAND_MAP_EMBED_URL}
           title="KIP plot map"
-          className="h-[360px] w-full"
+          className="h-[560px] w-full sm:h-[640px]"
           loading="lazy"
           referrerPolicy="no-referrer"
         />
