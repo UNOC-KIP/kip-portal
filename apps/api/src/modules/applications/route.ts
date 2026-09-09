@@ -15,6 +15,8 @@ import {
   setApplicationPlotsSchema,
 } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
+import { requestInvoice } from "../payments/payments.service.js";
+import { getInvoiceDownloadUrl } from "../finance/finance.service.js";
 import { BadRequest, Forbidden, NotFound } from "../../errors.js";
 import {
   submitApplication,
@@ -141,6 +143,53 @@ applicationsRouter.put(
       const input = setApplicationPlotsSchema.parse(req.body);
       const app = await setApplicationPlots(id, req.user!, input);
       res.json(app);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * POST /applications/:id/request-invoice — investor generates (or refreshes)
+ * the fee invoice for the plots chosen so far, so they can pay early. Owner or
+ * ADMIN. Returns the payment (amount + VAT breakdown + status).
+ */
+applicationsRouter.post(
+  "/:id/request-invoice",
+  requireRole(UserRole.INVESTOR, UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const payment = await requestInvoice(id, req.user!);
+      res.json({
+        id: payment.id,
+        status: payment.status,
+        invoiceStatus: payment.invoiceStatus,
+        currency: payment.currency,
+        amount: String(payment.amount),
+        subtotalAmount: payment.subtotalAmount != null ? String(payment.subtotalAmount) : null,
+        vatAmount: payment.vatAmount != null ? String(payment.vatAmount) : null,
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * GET /applications/:id/invoice — presigned download URL for this application's
+ * fee invoice. Owner, finance, or admin. 404 if no invoice has been attached.
+ */
+applicationsRouter.get(
+  "/:id/invoice",
+  requireRole(UserRole.INVESTOR, UserRole.FINANCE_OFFICER, UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const url = await getInvoiceDownloadUrl(id, req.user!);
+      res.json({ url });
     } catch (e) {
       next(e);
     }

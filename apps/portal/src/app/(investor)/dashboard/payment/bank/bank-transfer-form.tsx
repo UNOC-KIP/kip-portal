@@ -115,14 +115,11 @@ export function BankTransferForm({ applicationId, paymentRef, bankDetails }: Ban
 
         <div className="mx-auto max-w-xl">
           <h1 className="mb-1 text-center text-2xl font-bold">Bank Transfer</h1>
-          <p className="mb-4 text-center text-sm text-ink-500">
-            Transfer USD 1,000 to UNOC&apos;s Stanbic Bank account, then upload your proof of
-            payment.
-          </p>
+          
 
           <div className="mb-5 rounded-lg border border-brand-300 bg-brand-50 px-4 py-3 text-sm text-ink-700">
-            Bank transfers are manually confirmed by the UNOC Finance team within 2 business
-            days. Your Submit button will be enabled once confirmed.
+            Bank transfers are manually confirmed by the UNOC Finance team within 24 hours.
+            Your Submit button will be enabled once confirmed.
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -176,7 +173,7 @@ export function BankTransferForm({ applicationId, paymentRef, bankDetails }: Ban
                   <>
                     <p className="text-sm font-semibold text-ink-700">Upload proof of payment</p>
                     <p className="mt-1 text-xs text-ink-500">
-                      Bank Slip, Screenshot, or MT103 · PDF, JPG, PNG · Max 10 MB
+                      Bank Slip, Screenshot,PDF, JPG, PNG · Max 10 MB
                     </p>
                     <Button
                       type="button"

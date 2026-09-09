@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { Op, type Transaction } from "sequelize";
 import { sequelize, Application, ApplicationPlot, Document, Payment } from "@kip/db";
 import {
   UserRole,
@@ -10,6 +11,8 @@ import {
   type InitiatePaymentInput,
   type PresignProofInput,
   type SubmitTransferProofInput,
+  computeApplicationFee,
+  type ApplicationFee,
 } from "@kip/shared";
 import { env } from "../../env.js";
 import { presignUpload, presignDownload } from "../../storage/index.js";
@@ -17,6 +20,146 @@ import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 
 function ownerOrAdmin(resourceOwnerId: string, actor: { id: string; role: string }): boolean {
   return resourceOwnerId === actor.id || actor.role === UserRole.ADMIN;
+}
+
+/**
+ * Server-authoritative fee for an application: per-plot fee (env) × plots, + 18%
+ * VAT. The single source used at submit, on the pay page, and by finance.
+ */
+export async function feeForApplication(
+  applicationId: string,
+  currency: string = Currency.USD,
+): Promise<ApplicationFee> {
+  const plotCount = await ApplicationPlot.count({ where: { applicationId } });
+  const perPlot =
+    currency === Currency.UGX
+      ? env.EOI_APPLICATION_FEE_UGX
+      : env.EOI_APPLICATION_FEE_USD;
+  return computeApplicationFee(plotCount, perPlot, currency);
+}
+
+/**
+ * Create — idempotently — the PENDING fee payment for an application. Called at
+ * submission so the amount and the invoice-tracking row exist before the
+ * investor pays. Returns the existing payment if one is already PENDING /
+ * PROOF_UPLOADED / CONFIRMED, and null if the application has no plots.
+ */
+export async function ensureFeePayment(
+  applicationId: string,
+  t?: Transaction,
+): Promise<Payment | null> {
+  const fee = await feeForApplication(applicationId);
+  if (fee.plotCount < 1) return null;
+
+  const run = async (tx: Transaction): Promise<Payment> => {
+    const existing = await Payment.findOne({
+      where: {
+        applicationId,
+        status: {
+          [Op.in]: [
+            PaymentStatus.PENDING,
+            PaymentStatus.PROOF_UPLOADED,
+            PaymentStatus.CONFIRMED,
+          ],
+        },
+      },
+      transaction: tx,
+    });
+    if (existing) return existing;
+    return Payment.create(
+      {
+        applicationId,
+        method: PaymentMethod.STANBIC_TRANSFER,
+        currency: fee.currency,
+        amount: String(fee.total),
+        subtotalAmount: String(fee.subtotal),
+        vatAmount: String(fee.vat),
+        status: PaymentStatus.PENDING,
+        invoiceStatus: "NOT_SENT",
+      },
+      { transaction: tx },
+    );
+  };
+  return t ? run(t) : sequelize.transaction(run);
+}
+
+/**
+ * Investor-initiated: create (or refresh) the fee payment for the plots chosen
+ * so far, so an invoice can be issued and paid before the application is
+ * finished. Idempotent, and safe to call again after changing plots:
+ *  - no live payment yet  -> create a PENDING one for the current plots;
+ *  - PENDING              -> refresh the amount to the current plots, and if an
+ *                           invoice was already sent, mark it for re-issue;
+ *  - PROOF_UPLOADED/CONFIRMED (settled or settling) -> returned unchanged;
+ *    the fee is locked in and non-refundable.
+ */
+export async function requestInvoice(
+  applicationId: string,
+  actor: { id: string; role: string },
+): Promise<Payment> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId"],
+  });
+  if (!app) throw NotFound("Application");
+  if (!ownerOrAdmin(app.ownerUserId, actor)) {
+    throw Forbidden("You can only request an invoice for your own application");
+  }
+  const fee = await feeForApplication(app.id);
+  if (fee.plotCount < 1) {
+    throw BadRequest("Select at least one plot before generating an invoice.");
+  }
+
+  return sequelize.transaction(async (t) => {
+    const existing = await Payment.findOne({
+      where: {
+        applicationId: app.id,
+        status: {
+          [Op.in]: [
+            PaymentStatus.PENDING,
+            PaymentStatus.PROOF_UPLOADED,
+            PaymentStatus.CONFIRMED,
+          ],
+        },
+      },
+      lock: true,
+      transaction: t,
+    });
+
+    if (!existing) {
+      return Payment.create(
+        {
+          applicationId: app.id,
+          method: PaymentMethod.STANBIC_TRANSFER,
+          currency: fee.currency,
+          amount: String(fee.total),
+          subtotalAmount: String(fee.subtotal),
+          vatAmount: String(fee.vat),
+          status: PaymentStatus.PENDING,
+          invoiceStatus: "NOT_SENT",
+        },
+        { transaction: t },
+      );
+    }
+
+    // Only an unpaid (PENDING) invoice can be regenerated for new plots.
+    if (existing.status === PaymentStatus.PENDING) {
+      const amountChanged = existing.amount !== String(fee.total);
+      await existing.update(
+        {
+          amount: String(fee.total),
+          subtotalAmount: String(fee.subtotal),
+          vatAmount: String(fee.vat),
+          // A sent invoice for a now-different amount is stale — re-issue it.
+          ...(amountChanged && existing.invoiceStatus === "SENT"
+            ? { invoiceStatus: "NOT_SENT", invoiceSentAt: null, invoiceDocumentId: null }
+            : {}),
+        },
+        { transaction: t },
+      );
+    }
+    // PROOF_UPLOADED / CONFIRMED: payment is in progress or settled — leave it.
+    return existing;
+  });
 }
 
 /**
@@ -35,36 +178,31 @@ export async function initiatePayment(
     throw Forbidden("You can only pay for your own application");
   }
 
-  // Only DRAFT_PAYMENT_PENDING is a valid state for initiating payment.
-  // DRAFT means payment was already confirmed — do not regress its status.
-  if (app.status !== ApplicationStatus.DRAFT_PAYMENT_PENDING) {
-    throw BadRequest(
-      `Application is not awaiting payment (status: ${app.status})`,
-    );
-  }
-
-  // Fee is per plot and server-configured, never client-supplied: the total is
-  // the per-plot fee times the number of plots the application is for.
-  const plotCount = await ApplicationPlot.count({ where: { applicationId: app.id } });
-  if (plotCount < 1) {
+  // The fee is now created at submission (ensureFeePayment); this endpoint just
+  // returns the live payment so the investor can upload their receipt. It stays
+  // callable after submission (the fee is paid post-submission, invoice-first).
+  const fee = await feeForApplication(app.id, input.currency);
+  if (fee.plotCount < 1) {
     throw BadRequest(
       "Select at least one plot before paying — the fee is charged per plot.",
     );
   }
-  const perPlot =
-    input.currency === Currency.UGX
-      ? env.EOI_APPLICATION_FEE_UGX
-      : env.EOI_APPLICATION_FEE_USD;
-  const amount = perPlot * plotCount;
 
-  // Idempotency: re-check inside the transaction with SELECT FOR UPDATE to
-  // serialise concurrent requests on an existing PENDING row. A partial unique
-  // index on (applicationId) WHERE status='PENDING' (migration
-  // 20260621000000-payment-pending-unique-index.ts) closes the concurrent-empty-
-  // set race that SELECT FOR UPDATE cannot catch (no row to lock yet).
+  // Idempotency: reuse any live payment (PENDING/PROOF_UPLOADED/CONFIRMED); the
+  // partial unique index on (applicationId) WHERE status='PENDING' backs this
+  // against concurrent creates.
   return sequelize.transaction(async (t) => {
     const existing = await Payment.findOne({
-      where: { applicationId: input.applicationId, status: PaymentStatus.PENDING },
+      where: {
+        applicationId: input.applicationId,
+        status: {
+          [Op.in]: [
+            PaymentStatus.PENDING,
+            PaymentStatus.PROOF_UPLOADED,
+            PaymentStatus.CONFIRMED,
+          ],
+        },
+      },
       lock: true,
       transaction: t,
     });
@@ -75,8 +213,11 @@ export async function initiatePayment(
         applicationId: input.applicationId,
         method: input.method,
         currency: input.currency,
-        amount: String(amount),
+        amount: String(fee.total),
+        subtotalAmount: String(fee.subtotal),
+        vatAmount: String(fee.vat),
         status: PaymentStatus.PENDING,
+        invoiceStatus: "NOT_SENT",
       },
       { transaction: t },
     );
@@ -206,6 +347,42 @@ export async function confirmPayment(
   });
 
   // fireWebhook('payment-confirmed', { applicationId: payment.applicationId }) — Phase 3
+}
+
+/**
+ * Finance verification — the finance officer (or admin) marks a fee payment
+ * PAID (CONFIRMED) or FAILED after reconciling the bank transfer. This only
+ * flags the payment; it does NOT move the application in the review pipeline
+ * (review proceeds independently of payment). Allowed from PENDING or
+ * PROOF_UPLOADED so finance can confirm a transfer they see on the statement
+ * even if the investor never uploaded a receipt.
+ */
+export async function verifyPayment(
+  paymentId: string,
+  actor: { id: string; role: string },
+  result: "CONFIRMED" | "FAILED",
+): Promise<void> {
+  if (actor.role !== UserRole.FINANCE_OFFICER && actor.role !== UserRole.ADMIN) {
+    throw Forbidden("Only the finance officer or an admin can verify payments");
+  }
+  const payment = await Payment.findByPk(paymentId);
+  if (!payment) throw NotFound("Payment");
+  if (
+    payment.status !== PaymentStatus.PENDING &&
+    payment.status !== PaymentStatus.PROOF_UPLOADED
+  ) {
+    throw Conflict(`This payment is already ${payment.status.toLowerCase()}.`);
+  }
+  const now = new Date();
+  if (result === "CONFIRMED") {
+    await payment.update({
+      status: PaymentStatus.CONFIRMED,
+      paidAt: payment.paidAt ?? now,
+      confirmedAt: now,
+    });
+  } else {
+    await payment.update({ status: PaymentStatus.FAILED });
+  }
 }
 
 /**

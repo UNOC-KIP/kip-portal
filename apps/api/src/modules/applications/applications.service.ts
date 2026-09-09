@@ -39,6 +39,7 @@ import {
   type SetApplicationPlotsInput,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
+import { ensureFeePayment } from "../payments/payments.service.js";
 
 const ALL_SECTIONS = Object.values(EoiSection);
 
@@ -521,6 +522,10 @@ export async function submitApplication(
       { status: ApplicationStatus.SUBMITTED, submittedAt: now, reference },
       { transaction: t },
     );
+    // Create the PENDING fee payment now (submit-first): the amount + invoice
+    // tracking exist before the finance officer sends the invoice and the
+    // investor pays. Idempotent, so a resubmit or admin action won't duplicate.
+    await ensureFeePayment(app.id, t);
     // TODO(Phase 3): fireWebhook("application-submitted", …) after commit.
     return app;
   });

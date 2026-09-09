@@ -792,7 +792,8 @@ async function main() {
   await upsertUser(staffId('TC_MEMBER'),   'tc.reviewer@kip.unoc.co.ug', 'Samuel Opio (TC Reviewer)',         'TC_MEMBER',   pw)
   await upsertUser(staffId('LAC_MEMBER'),  'lac.member@kip.unoc.co.ug',  'Agnes Nakato (LAC Member)',         'LAC_MEMBER',  pw)
   await upsertUser(staffId('EXCO_MEMBER'), 'exco@kip.unoc.co.ug',        'Peter Owori (ExCo Member)',         'EXCO_MEMBER', pw)
-  console.log('  ✓ staff: 5 accounts')
+  await upsertUser(staffId('FINANCE_OFFICER'), 'finance@kip.unoc.co.ug', 'Diana Achieng (Finance Officer)',   'FINANCE_OFFICER', pw)
+  console.log('  ✓ staff: 6 accounts')
 
   await upsertOrg(IDS.orgGulf, 'Gulf Petrochem International FZE',        'UAE',    'P.O. Box 18334, JAFZA, Dubai',      '+971 4 884 5500',   'eoi@gulfpetrochem.ae',
     { tin: '100543219', tradingName: 'Gulf Petrochem', registrationNumber: 'JAFZA-18334', ursbRegistrationNumber: 'URSB-F-2026-00871', companyType: 'PUBLIC_LIMITED_COMPANY', businessSector: 'PETROCHEMICALS_REFINING' })
@@ -992,6 +993,7 @@ async function main() {
   console.log('  │ Email                                         │ Role          │')
   console.log('  ├──────────────────────────────────────────────┼───────────────┤')
   console.log('  │ admin@kip.unoc.co.ug                         │ ADMIN         │')
+  console.log('  │ finance@kip.unoc.co.ug                       │ FINANCE       │')
   console.log('  │ tc.chair@kip.unoc.co.ug                      │ TC_CHAIR      │')
   console.log('  │ tc.reviewer@kip.unoc.co.ug                   │ TC_MEMBER     │')
   console.log('  │ lac.member@kip.unoc.co.ug                    │ LAC_MEMBER    │')

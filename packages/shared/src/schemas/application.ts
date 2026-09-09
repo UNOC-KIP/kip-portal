@@ -1141,7 +1141,8 @@ export type UpdateSectionInput = z.infer<typeof updateSectionSchema>;
 export const validTransitions: Record<ApplicationStatus, ApplicationStatus[]> =
   {
     [ApplicationStatus.DRAFT_PAYMENT_PENDING]: [
-      ApplicationStatus.DRAFT,     // payment confirmed
+      ApplicationStatus.DRAFT,      // payment confirmed (legacy pay-before-submit)
+      ApplicationStatus.SUBMITTED,  // submit-first: fee is invoiced & paid after submission
       ApplicationStatus.WITHDRAWN,
     ],
     [ApplicationStatus.DRAFT]: [

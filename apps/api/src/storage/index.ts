@@ -85,3 +85,26 @@ export async function presignDownload(opts: {
     asConfigError(e);
   }
 }
+
+/**
+ * Fetch an object's bytes (e.g. a finance-uploaded invoice) so it can be
+ * attached to an email. Returns null on any failure — callers fall back to a
+ * secure download link rather than failing the send.
+ */
+export async function getObjectBuffer(
+  key: string,
+): Promise<{ buffer: Buffer; contentType: string | undefined } | null> {
+  try {
+    const out = await s3.send(
+      new GetObjectCommand({ Bucket: env.S3_BUCKET, Key: key }),
+    );
+    const body = out.Body as unknown as
+      | { transformToByteArray?: () => Promise<Uint8Array> }
+      | undefined;
+    if (!body?.transformToByteArray) return null;
+    const bytes = await body.transformToByteArray();
+    return { buffer: Buffer.from(bytes), contentType: out.ContentType };
+  } catch {
+    return null;
+  }
+}
