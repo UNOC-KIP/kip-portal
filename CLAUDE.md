@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 24 August 2026. Update this file in the same commit as any architectural change.
+> Last updated: 9 September 2026. Update this file in the same commit as any architectural change.
+> Finance workspace documented 9 September 2026 — fee invoicing, payment verification, the applicant profile behind an invoice and the proof-of-payment download. See "Finance (application fee)".
 > Site-visit booking gate enforced end to end 24 August 2026 — one pure gate closes the form, the public CTAs and the API writes together. See "Site-visit booking window".
 > Admin EOI preview added 11 August 2026 — ADMIN can sign into the investor portal and run the EOI with the window gate lifted. See "Admin EOI preview".
 > EOI module rebuilt 2 August 2026 to the UNOC Master Content Specification — see "EOI module".
@@ -261,6 +262,7 @@ TC_MEMBER     — list + score + decide SUBMITTED apps (after window closes)
 TC_CHAIR      — TC_MEMBER + assign apps
 LAC_MEMBER    — list + review SHORTLISTED apps
 EXCO_MEMBER   — list + approve/reject LAC_APPROVED apps
+FINANCE_OFFICER — invoice the application fee + verify payment; read the applicant profile behind each invoice. No review decisions
 ```
 
 ---
@@ -286,6 +288,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `PATCH /:id` edit + `DELETE /:id` (owner INVESTOR or ADMIN, **only while status = NEW and the booking window is open** — delete is a hard delete so the investor can immediately re-book); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `timeline/` | `POST /` create, `PATCH /:id` update, `DELETE /:id` delete timeline milestones (ADMIN only). Position uniqueness + end-after-start guarded in the service; both portals read the table directly with `FALLBACK_MILESTONES` when empty |
 | `communications/` | admin broadcasts. `POST /` compose + send (ADMIN) — writes the `Communication` + one `Notification` per recipient in one transaction, then drains delivery **detached from the request**; `POST /test` send the draft to the acting admin only (deliberately no `to` field, so it can't relay); `POST /:id/retry` re-queue failed *and* stalled-`PENDING` rows; `DELETE /:id` (blocked while `SENDING`); `POST /templates`, `PATCH /templates/:id`, `DELETE /templates/:id`; `POST /inbox/:id/read` (INVESTOR/ADMIN, owner-checked in the service); `POST /attachments/presign` + `POST /attachments` (ADMIN) and **`GET /attachments/:id`** — the one unauthenticated route, declared above `requireAuth`, 302 to a signed S3 URL. Literal routes are declared before `/:id`. **The recipient list is resolved in the browser and posted** — see the Communications section below |
+| `finance/` | Application-fee invoicing + payment verification (FINANCE_OFFICER or ADMIN, enforced router-wide). `GET /applications` the queue; `POST /payments/:id/invoice/presign` → S3 PUT URL; `POST /payments/:id/invoice/send` (attach-and-send, or `markOnly` when the invoice went out off-platform); `POST /payments/:id/verify` CONFIRMED/FAILED. The two application-scoped downloads live on `applications/` because they are keyed by application: `GET /:id/invoice` (owner, finance or admin) and `GET /:id/proof` (**finance/admin only** — an investor has no business fetching a receipt through this route) |
 | `health/` | complete |
 
 ---
@@ -421,6 +424,22 @@ Admins compose and send messages to investors or staff from **`/console/communic
 - Terminal status is derived, not set: no failures → `SENT`, none delivered → `FAILED`, otherwise `PARTIALLY_SENT`.
 - `CommunicationChannel.IN_APP` skips SMTP entirely; the `Notification` row *is* the message. An `EMAIL`-only send still writes rows (that's the delivery log) but the portal inbox filters them out.
 
+## Finance (application fee)
+
+`FINANCE_OFFICER` is a staff role in `apps/web` with its own workspace at **`/console/finance`** — RBAC prefix `/console/finance` → `FINANCE_ROLES` (`FINANCE_OFFICER` + `ADMIN`), which is also where the role lands after login. Finance invoices and reconciles; it takes **no** part in the TC/LAC/ExCo pipeline, and verifying a payment only flags the `Payment` row — it does not move the application's status.
+
+**Fee maths is pure and shared.** `packages/shared/src/fees.ts` — `computeApplicationFee(plotCount)` (per-plot fee × plots, + 18% VAT), `formatMoney()`, and the `FinanceRow` type. The API is authoritative (it reads `EOI_APPLICATION_FEE_USD`); the portal and the admin queue render the same function so the amount an investor is quoted is the amount finance invoices. Stored breakdowns (`Payment.subtotalAmount` / `vatAmount` / `amount`) win over the computed default, which is only a fallback for legacy rows.
+
+**The queue is not just submitted applications.** `getFinanceRows()` (`apps/web/src/lib/admin/finance-queries.ts`) merges every application in `REFERENCED_STATUSES` **with every application that already has a `Payment`** — an investor can generate an invoice early, before finishing and submitting. Dropping that merge silently hides early-invoiced applicants from the people meant to bill them. Withdrawn applications are excluded; the merge dedupes by id.
+
+**Two things finance needs that the queue table can't hold.** Both hang off `/console/finance/[applicationId]`:
+- **The applicant profile** — `getFinanceApplicationDetail()` returns the representative, the full company block (legal/trading name, TIN, URSB + registration numbers, company type, sector, country, registered address, contacts), the plots applied for, and the fee breakdown. That is the information needed to *raise* an invoice, and it is why the queue row links to it. Enum values are rendered through `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS`, never raw.
+- **The proof of payment** — the receipt the investor uploaded. `FinanceRow.hasReceipt` drives a download button in the queue row *and* on the detail page; both call `GET /applications/:id/proof`, which 404s until a proof exists. Downloads are **presigned S3 URLs opened in a new tab**, never bytes proxied through the API — same model as every other document in the app.
+
+`getFinanceSummary()` rolls the same rows into the `/console/finance` KPIs, so the dashboard and the queue can never disagree.
+
+---
+
 ## Site-visit booking window
 
 Whether an investor may request a site visit is decided by **one pure function** — `siteVisitBookingGate()` in `packages/shared/src/timeline.ts`. It reads the timeline: a `SITE_VISIT_BOOKING` milestone closes bookings at its `endsAt` (or `startsAt`); a legacy timeline with only a combined `SITE_VISIT` milestone closes them when the visits begin; a timeline scheduling no visits at all leaves them open (nothing has closed yet). Pure, `now` injected, unit-tested in `apps/portal/src/lib/timeline.test.ts`.
@@ -528,6 +547,10 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/portal/src/lib/eoi-data.ts` | `server-only` — `getEoiWizardData()` (application + sections + documents + prefill in one read) and `prefillPreliminaryInfo()` |
 | `apps/portal/src/lib/form-path.ts` | Pure dotted-path `getIn`/`setIn`/`appendTo`/`removeAt`/`issuesByPath` over section payloads — paths match Zod's `issue.path.join(".")` so errors map onto inputs with no translation layer. Unit-tested |
 | `apps/portal/src/app/(investor)/dashboard/eoi/` | The EOI wizard — `[section]/page.tsx` server shell → `eoi-wizard.tsx` (state, draft/complete saves, submit, blockers) + `eoi-sections.tsx` (the six forms) + `eoi-fields.tsx` (path-bound primitives, N/A toggles, repeatables, year rows) + `document-slots.tsx` (presign → PUT → register) |
+| `packages/shared/src/fees.ts` | Fee maths — `computeApplicationFee()` (per-plot × plots + 18% VAT), `formatMoney()`, `FinanceRow`. Pure; shared by the API, the portal quote and the admin finance queue |
+| `apps/api/src/modules/finance/` | Invoicing + verification — `listFinanceApplications()`, invoice presign/send, `verifyPayment()`, `getInvoiceDownloadUrl()`, `getProofDownloadUrl()` (finance/admin only). Router-wide `requireRole(FINANCE_OFFICER, ADMIN)` |
+| `apps/web/src/lib/admin/finance-queries.ts` | `server-only` finance read layer — `getFinanceRows()` (submitted **plus** early-invoiced, deduped), `getFinanceSummary()` KPIs, `getFinanceApplicationDetail()` (applicant + company + plots + fee + proof state) |
+| `apps/web/src/app/(admin)/console/finance/` | Finance workspace — `page.tsx` KPI dashboard, `queue/` the payments & invoices table (filters, CSV, send-invoice, verify, proof download, profile link), `[applicationId]/` the applicant profile behind an invoice + proof/invoice downloads |
 | `apps/api/src/errors.ts` | `AppError` + factory functions |
 | `apps/api/src/env.ts` | Zod-validated env |
 | `apps/api/src/server.ts` | Express setup — CORS, helmet, middleware, routes |
@@ -688,6 +711,10 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Give a preview actor a separate code path, mock S3, or skip validation — preview runs the real services or it proves nothing
 - Write `User.investorOrgId` on a staff account — the preview sandbox org hangs off the `Application`, which is what keeps admins out of investor reports
 - Assume an investor has an `Application` — registration creates none; `POST /applications` from the dashboard does
+- Narrow `getFinanceRows()` to submitted applications only — the merge with applications that already have a `Payment` is what keeps early-invoiced applicants visible to the people billing them
+- Expose `GET /applications/:id/proof` to `INVESTOR`, or proxy a proof/invoice through the API — finance/admin only, and downloads are presigned S3 URLs
+- Render a stored `companyType`/`businessSector` raw in the finance profile — use `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS`
+- Give `FINANCE_OFFICER` a review decision, or let verifying a payment move an application's status — finance flags the `Payment` row and nothing else
 - Query `@kip/db` from a client component or directly inside a page
 - One-layer route protection — need both middleware policy entry AND `requireRole()`
 - `NEXTAUTH_SECRET` drift between web and api

@@ -16,7 +16,7 @@ import {
 } from "@kip/shared";
 import { requireAuth, requireRole } from "../../middleware/auth.js";
 import { requestInvoice } from "../payments/payments.service.js";
-import { getInvoiceDownloadUrl } from "../finance/finance.service.js";
+import { getInvoiceDownloadUrl, getProofDownloadUrl } from "../finance/finance.service.js";
 import { BadRequest, Forbidden, NotFound } from "../../errors.js";
 import {
   submitApplication,
@@ -190,6 +190,26 @@ applicationsRouter.get(
       if (!id) throw BadRequest("id required");
       const url = await getInvoiceDownloadUrl(id, req.user!);
       res.json({ url });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * GET /applications/:id/proof — presigned download URL for the payment proof
+ * (receipt) uploaded against this application. Finance or admin only. 404 if no
+ * proof has been uploaded yet.
+ */
+applicationsRouter.get(
+  "/:id/proof",
+  requireRole(UserRole.FINANCE_OFFICER, UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const result = await getProofDownloadUrl(id, req.user!);
+      res.json(result);
     } catch (e) {
       next(e);
     }
