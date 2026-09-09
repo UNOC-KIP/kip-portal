@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Op, type Transaction } from "sequelize";
-import { sequelize, Application, ApplicationPlot, Document, Payment } from "@kip/db";
+import { sequelize, Application, ApplicationPlot, Document, InvestorOrg, Payment } from "@kip/db";
 import {
   UserRole,
   ApplicationStatus,
@@ -97,12 +97,21 @@ export async function requestInvoice(
   applicationId: string,
   actor: { id: string; role: string },
 ): Promise<Payment> {
-  const app = await Application.findByPk(applicationId, {
+  const app = (await Application.findByPk(applicationId, {
     attributes: ["id", "ownerUserId"],
-  });
+    include: [{ model: InvestorOrg, as: "investorOrg", attributes: ["tin"] }],
+  })) as (Application & { investorOrg?: { tin: string | null } }) | null;
   if (!app) throw NotFound("Application");
   if (!ownerOrAdmin(app.ownerUserId, actor)) {
     throw Forbidden("You can only request an invoice for your own application");
+  }
+  // An invoice is a tax document — it must carry the investor's TIN. Block
+  // generation until the company's TIN is on file so finance never issues an
+  // invoice without one.
+  if (!app.investorOrg?.tin?.trim()) {
+    throw BadRequest(
+      "Add your company TIN in Settings before generating an invoice.",
+    );
   }
   const fee = await feeForApplication(app.id);
   if (fee.plotCount < 1) {

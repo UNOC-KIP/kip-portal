@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Download, Loader2, Upload, FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -285,7 +286,20 @@ export function FeeActions({ applicationId }: { applicationId: string }) {
         </p>
       )}
       {error && (
-        <p role="alert" className="mt-3 text-xs font-medium text-red-600">{error}</p>
+        <p role="alert" className="mt-3 text-xs font-medium text-red-600">
+          {error}
+          {/\bTIN\b/i.test(error) && (
+            <>
+              {" "}
+              <Link
+                href="/dashboard/settings"
+                className="font-semibold underline underline-offset-2"
+              >
+                Add it in Settings →
+              </Link>
+            </>
+          )}
+        </p>
       )}
     </div>
   );

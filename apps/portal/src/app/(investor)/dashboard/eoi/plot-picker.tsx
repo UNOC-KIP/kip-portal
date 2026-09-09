@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ExternalLink, FileText, Loader2, MapPin, Users, X } from "lucide-react";
 import { KIP_LAND_MAP_EMBED_URL, computeApplicationFee, formatMoney } from "@kip/shared";
@@ -263,7 +264,20 @@ export function PlotPicker({
                   </>
                 )}
                 {invoiceErr && (
-                  <p role="alert" className="mt-2 text-xs font-medium text-red-600">{invoiceErr}</p>
+                  <p role="alert" className="mt-2 text-xs font-medium text-red-600">
+                    {invoiceErr}
+                    {/\bTIN\b/i.test(invoiceErr) && (
+                      <>
+                        {" "}
+                        <Link
+                          href="/dashboard/settings"
+                          className="font-semibold underline underline-offset-2"
+                        >
+                          Add it in Settings →
+                        </Link>
+                      </>
+                    )}
+                  </p>
                 )}
               </div>
             )}
