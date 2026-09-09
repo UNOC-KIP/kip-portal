@@ -36,9 +36,10 @@ export const updateUserSchema = z.object({
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 
 // Self-service profile edit (any authenticated user, acting on themselves).
-// Legal-identity org fields (legalName, registration numbers, type, sector,
-// country, TIN) are intentionally NOT editable here — they are verified at
-// registration and only an admin may amend them.
+// Contact fields and the TIN are editable here (investors need to keep their TIN
+// current — it's required to raise a fee invoice). The rest of the legal
+// identity (legalName, registration numbers, type, sector, country) stays
+// verified at registration and admin-only.
 export const updateOwnProfileSchema = z.object({
   name: z.string().min(1, "Name is required").max(200).optional(),
   designation: z.string().max(200).nullable().optional(),
@@ -46,6 +47,7 @@ export const updateOwnProfileSchema = z.object({
   org: z
     .object({
       tradingName: z.string().max(300).nullable().optional(),
+      tin: z.string().max(100).nullable().optional(),
       address: z.string().max(500).nullable().optional(),
       phone: z.string().max(50).nullable().optional(),
       email: z.string().email("Must be a valid email address").nullable().optional(),

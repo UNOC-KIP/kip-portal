@@ -23,6 +23,7 @@ export type CompanyInitial = {
 export function CompanyForm({ initial }: { initial: CompanyInitial }) {
   const router = useRouter();
   const [tradingName, setTradingName] = useState(initial.tradingName ?? "");
+  const [tin, setTin] = useState(initial.tin ?? "");
   const [address, setAddress] = useState(initial.address ?? "");
   const [phone, setPhone] = useState(initial.phone ?? "");
   const [email, setEmail] = useState(initial.email ?? "");
@@ -32,6 +33,7 @@ export function CompanyForm({ initial }: { initial: CompanyInitial }) {
 
   const dirty =
     tradingName.trim() !== (initial.tradingName ?? "") ||
+    tin.trim() !== (initial.tin ?? "") ||
     address.trim() !== (initial.address ?? "") ||
     phone.trim() !== (initial.phone ?? "") ||
     email.trim() !== (initial.email ?? "");
@@ -59,6 +61,7 @@ export function CompanyForm({ initial }: { initial: CompanyInitial }) {
         body: JSON.stringify({
           org: {
             tradingName: tradingName.trim() || null,
+            tin: tin.trim() || null,
             address: address.trim() || null,
             phone: phone.trim() || null,
             email: email.trim() || null,
@@ -96,6 +99,18 @@ export function CompanyForm({ initial }: { initial: CompanyInitial }) {
               className={inputClass}
               placeholder="Optional"
             />
+          </Field>
+          <Field label="TIN" htmlFor="tin" className="sm:col-span-2">
+            <input
+              id="tin"
+              value={tin}
+              onChange={onChange(setTin)}
+              className={inputClass}
+              placeholder="Tax Identification Number"
+            />
+            <p className="mt-1 text-xs text-ink-500">
+              Required to generate your application-fee invoice.
+            </p>
           </Field>
           <Field label="Company phone" htmlFor="orgPhone">
             <input
@@ -154,7 +169,6 @@ export function CompanyForm({ initial }: { initial: CompanyInitial }) {
           <ReadonlyRow label="Country of incorporation" value={initial.countryOfIncorporation} />
           <ReadonlyRow label="Registration number" value={initial.registrationNumber} />
           <ReadonlyRow label="URSB number" value={initial.ursbRegistrationNumber} />
-          <ReadonlyRow label="TIN" value={initial.tin} />
         </div>
       </SettingsCard>
     </form>
