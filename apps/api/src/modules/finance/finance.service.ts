@@ -32,21 +32,6 @@ function assertFinance(actor: { role: string }): void {
   }
 }
 
-/** KIP-APP-XXXXXXXX — the transfer reference shown on the invoice/bank page. */
-function paymentRefFor(applicationId: string): string {
-  return `KIP-APP-${applicationId.slice(0, 8).toUpperCase()}`;
-}
-
-function bankDetails(): { label: string; value: string }[] {
-  return [
-    { label: "Bank", value: process.env.STANBIC_BANK_NAME ?? "Stanbic Bank Uganda Ltd" },
-    { label: "Account Name", value: process.env.STANBIC_ACCOUNT_NAME ?? "Uganda National Oil Company Ltd" },
-    { label: "Account No.", value: process.env.STANBIC_ACCOUNT_NUMBER ?? "9030011896005" },
-    { label: "Currency", value: "USD" },
-    { label: "Swift / BIC", value: process.env.STANBIC_SWIFT ?? "SBICUGKX" },
-  ];
-}
-
 /**
  * Every submitted application, with just the finance-relevant fields (applicant,
  * company, email, TIN, plots, amount, payment/invoice status). No personal
@@ -198,8 +183,6 @@ export async function sendInvoice(
       subtotalLabel: formatMoney(Number(payment.subtotalAmount ?? 0), payment.currency),
       vatLabel: formatMoney(Number(payment.vatAmount ?? 0), payment.currency),
       totalLabel: formatMoney(Number(payment.amount ?? 0), payment.currency),
-      bank: bankDetails(),
-      paymentRef: paymentRefFor(app.id),
       invoiceUrl,
       note: input.note ?? null,
     });
@@ -220,4 +203,34 @@ export async function sendInvoice(
     invoiceSentByUserId: actor.id,
     invoiceDocumentId,
   });
+}
+
+/**
+ * A presigned download URL for an application's fee invoice. The application
+ * owner (or finance/admin) may fetch it; 404 if no invoice document has been
+ * attached (e.g. it was sent outside the app).
+ */
+export async function getInvoiceDownloadUrl(
+  applicationId: string,
+  actor: { id: string; role: string },
+): Promise<string> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId"],
+  });
+  if (!app) throw NotFound("Application");
+  const isOwner = app.ownerUserId === actor.id;
+  const isStaff =
+    actor.role === UserRole.ADMIN || actor.role === UserRole.FINANCE_OFFICER;
+  if (!isOwner && !isStaff) {
+    throw Forbidden("You can only view your own invoice");
+  }
+  const payment = await Payment.findOne({
+    where: { applicationId },
+    order: [["createdAt", "DESC"]],
+  });
+  const docId = payment?.invoiceDocumentId;
+  if (!docId) throw NotFound("Invoice");
+  const doc = await Document.findByPk(docId, { attributes: ["storageKey"] });
+  if (!doc) throw NotFound("Invoice");
+  return presignDownload({ key: doc.storageKey, expiresInSeconds: 300 });
 }

@@ -1,18 +1,10 @@
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 import { authOptions } from "@/lib/auth";
 import { getInvestorDashboardData } from "@/lib/investor-data";
-import { BankTransferForm } from "./bank-transfer-form";
-
-function getBankDetails() {
-  return [
-    { label: "Bank",         value: process.env.STANBIC_BANK_NAME        ?? "Stanbic Bank Uganda Ltd" },
-    { label: "Account Name", value: process.env.STANBIC_ACCOUNT_NAME     ?? "Uganda National Oil Company Ltd" },
-    { label: "Account No.",  value: process.env.STANBIC_ACCOUNT_NUMBER   ?? "9030011896005" },
-    { label: "Currency",     value: "USD" },
-    { label: "Swift / BIC",  value: process.env.STANBIC_SWIFT            ?? "SBICUGKX" },
-  ];
-}
+import { FeeActions } from "../../fee-actions";
 
 export default async function BankTransferPage({
   searchParams,
@@ -27,17 +19,26 @@ export default async function BankTransferPage({
   // layer); with none, the most recent one.
   const data = await getInvestorDashboardData(userId, searchParams.app);
   const app = data.application;
-
   if (!app) redirect("/dashboard");
 
-  const paymentRef = `KIP-APP-${app.id.slice(0, 8).toUpperCase()}`;
-  const bankDetails = getBankDetails();
-
   return (
-    <BankTransferForm
-      applicationId={app.id}
-      paymentRef={paymentRef}
-      bankDetails={[...bankDetails, { label: "Payment Reference", value: paymentRef }]}
-    />
+    <main className="mx-auto w-full max-w-2xl flex-1 p-4 sm:p-6">
+      <Link
+        href="/dashboard/applications"
+        className="inline-flex items-center gap-1 text-sm text-ink-500 hover:text-ink-900"
+      >
+        <ChevronLeft size={15} /> All applications
+      </Link>
+      <h1 className="mt-2 text-xl font-bold">
+        Application fee{app.reference ? ` · ${app.reference}` : ""}
+      </h1>
+      <p className="mt-1 text-sm text-ink-500">
+        Generate your invoice, download it, pay by bank transfer using the
+        details on the invoice, then upload your receipt.
+      </p>
+      <div className="mt-5">
+        <FeeActions applicationId={app.id} />
+      </div>
+    </main>
   );
 }

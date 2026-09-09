@@ -24,8 +24,8 @@ export default async function BankTransfersPage() {
 
         <Alert className="mb-5 border-amber-200 bg-amber-50 text-amber-800">
           <AlertDescription>
-            Pending transfers must be confirmed or rejected within 2 business
-            days. Investor Submit buttons remain locked until actioned.
+            Pending transfers must be confirmed or rejected within 24 hours.
+            Investor Submit buttons remain locked until actioned.
           </AlertDescription>
         </Alert>
 

@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ExternalLink, Loader2, MapPin, Users, X } from "lucide-react";
-import { KIP_LAND_MAP_EMBED_URL } from "@kip/shared";
+import { Check, ExternalLink, FileText, Loader2, MapPin, Users, X } from "lucide-react";
+import { KIP_LAND_MAP_EMBED_URL, computeApplicationFee, formatMoney } from "@kip/shared";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { EoiPlotOption } from "@/lib/eoi-data";
 
@@ -41,6 +42,11 @@ export function PlotPicker({
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [invoiceBusy, setInvoiceBusy] = useState(false);
+  const [invoiceErr, setInvoiceErr] = useState<string | null>(null);
+  const [invoice, setInvoice] = useState<
+    { amount: string; currency: string; status: string } | null
+  >(null);
 
   const selectedPlots = useMemo(
     () => plots.filter((p) => selectedIds.includes(p.id)),
@@ -96,6 +102,29 @@ export function PlotPicker({
       setError(e instanceof Error ? e.message : "Could not update your plot selection");
     } finally {
       setSaving(false);
+    }
+  }
+
+  const fee = computeApplicationFee(selectedPlots.length);
+
+  async function generateInvoice() {
+    if (invoiceBusy) return;
+    setInvoiceBusy(true);
+    setInvoiceErr(null);
+    try {
+      const res = await fetch(
+        `${API_BASE}/applications/${applicationId}/request-invoice`,
+        { method: "POST", credentials: "include" },
+      );
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        throw new Error(d?.error?.message ?? "Could not generate your invoice");
+      }
+      setInvoice((await res.json()) as { amount: string; currency: string; status: string });
+    } catch (e) {
+      setInvoiceErr(e instanceof Error ? e.message : "Could not generate your invoice");
+    } finally {
+      setInvoiceBusy(false);
     }
   }
 
@@ -177,6 +206,67 @@ export function PlotPicker({
                 required land area
               </span>
             </p>
+
+            {/* Early invoice: pay before finishing the application. */}
+            {!disabled && (
+              <div className="mt-3 border-t border-ink-100 pt-3">
+                {invoice ? (
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-xs text-green-800">
+                    <p className="font-semibold">
+                      Invoice ready — {formatMoney(Number(invoice.amount), invoice.currency)} (incl. 18% VAT).
+                    </p>
+                    <p className="mt-1">
+                      UNOC will email it shortly. Pay by bank transfer, then upload
+                      your receipt. If you change plots, generate a new invoice —
+                      this only works while it&apos;s unpaid. Once paid, the fee is
+                      non-refundable.
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <a
+                        href={`/dashboard/payment/bank?app=${applicationId}`}
+                        className="inline-flex items-center rounded-md bg-brand-600 px-3 py-1.5 font-semibold text-white hover:bg-brand-700"
+                      >
+                        Pay / upload receipt →
+                      </a>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={generateInvoice}
+                        disabled={invoiceBusy}
+                      >
+                        {invoiceBusy ? "Updating…" : "Update invoice"}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={generateInvoice}
+                      disabled={invoiceBusy}
+                    >
+                      {invoiceBusy ? (
+                        <Loader2 size={14} className="mr-1.5 animate-spin" />
+                      ) : (
+                        <FileText size={14} className="mr-1.5" />
+                      )}
+                      Generate invoice · {formatMoney(fee.total, fee.currency)}
+                    </Button>
+                    <p className="mt-2 text-xs text-ink-500">
+                      Get your invoice and pay now, before you finish the
+                      application. Change plots later? Generate a new invoice while
+                      this one is unpaid — once paid, the fee is non-refundable.
+                    </p>
+                  </>
+                )}
+                {invoiceErr && (
+                  <p role="alert" className="mt-2 text-xs font-medium text-red-600">{invoiceErr}</p>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <p className="text-sm text-ink-500">No plots selected yet.</p>

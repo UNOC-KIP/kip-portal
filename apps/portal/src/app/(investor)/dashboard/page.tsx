@@ -35,6 +35,7 @@ import { CountdownTimer } from "@/components/countdown-timer";
 import { SiteVisitSummary } from "@/components/site-visit-summary";
 import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { StartEoiButton } from "./start-eoi-button";
+import { FeeActions } from "./fee-actions";
 import {
   getInvestorDashboardData,
   listInvestorApplications,
@@ -205,8 +206,6 @@ export default async function InvestorDashboardPage({
   const paymentStatus = app?.paymentStatus ?? null;
   const paymentConfirmed = paymentStatus === "CONFIRMED";
   const paymentProofUploaded = paymentStatus === "PROOF_UPLOADED";
-  const paymentFailed = paymentStatus === "FAILED";
-  const invoiceSent = app?.invoiceStatus === "SENT";
   const isPreSubmission =
     !app || app.status === "DRAFT_PAYMENT_PENDING" || app.status === "DRAFT";
 
@@ -290,6 +289,29 @@ export default async function InvestorDashboardPage({
       <DashboardTopbar />
 
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6">
+        {/* ── Fee CTA — sits right under the nav bar so paying or
+            grabbing the invoice is the first thing in reach when an
+            application is open. Hidden once the fee is confirmed. ──── */}
+        {app && APPLICATION_FEE_ENABLED && !paymentConfirmed && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-ink-900">
+                Application fee{app.reference ? ` · ${app.reference}` : ""}
+              </p>
+              <p className="text-xs text-ink-500">
+                {paymentProofUploaded
+                  ? "Proof received — we're verifying your payment."
+                  : "Generate your invoice, then pay and upload your receipt."}
+              </p>
+            </div>
+            <Button asChild size="sm">
+              <Link href={`/dashboard/payment/bank?app=${app.id}`}>
+                Pay / invoice →
+              </Link>
+            </Button>
+          </div>
+        )}
+
         {/* ── Greeting ──────────────────────────────────────────── */}
         <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
           <div>
@@ -758,68 +780,7 @@ export default async function InvestorDashboardPage({
             {/* ── Post-submission ──────────────────────────────────── */}
             {app && !isPreSubmission && (
               <>
-                {APPLICATION_FEE_ENABLED && (
-                  <Card>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-500">
-                          Application fee
-                        </p>
-                        <h2 className="mt-1 text-lg font-bold">
-                          {payCurrency} {payAmount}
-                        </h2>
-                        <p className="text-xs text-ink-500">
-                          {app.paymentSubtotal
-                            ? `${payCurrency} ${parseFloat(app.paymentSubtotal).toLocaleString()} + 18% VAT`
-                            : "incl. 18% VAT"}
-                        </p>
-                      </div>
-                      <StatusBadge
-                        variant={
-                          paymentConfirmed
-                            ? "tc-approved"
-                            : paymentFailed
-                              ? "tc-rejected"
-                              : paymentProofUploaded
-                                ? "status-pending"
-                                : "payment-pending"
-                        }
-                      >
-                        {paymentConfirmed
-                          ? "Paid"
-                          : paymentFailed
-                            ? "Payment failed"
-                            : paymentProofUploaded
-                              ? "Receipt under review"
-                              : invoiceSent
-                                ? "Invoice sent"
-                                : "Awaiting invoice"}
-                      </StatusBadge>
-                    </div>
-                    <p className="mt-3 text-sm text-ink-600">
-                      {paymentConfirmed
-                        ? "Your application fee has been received and verified. Thank you."
-                        : paymentFailed
-                          ? "We could not verify your payment. Please check your receipt and re-upload it, or contact the secretariat."
-                          : paymentProofUploaded
-                            ? "We've received your receipt and the finance team is verifying it."
-                            : invoiceSent
-                              ? "UNOC has emailed you an invoice. Pay it by bank transfer, then upload your receipt below."
-                              : "UNOC's finance team will email you an invoice for the fee shortly. You'll pay by bank transfer and upload your receipt here."}
-                    </p>
-                    {!paymentConfirmed && (
-                      <div className="mt-4">
-                        <Button asChild size="sm">
-                          <Link href={`/dashboard/payment/bank?app=${app.id}`}>
-                            {paymentProofUploaded
-                              ? "View / update receipt →"
-                              : "Pay & upload receipt →"}
-                          </Link>
-                        </Button>
-                      </div>
-                    )}
-                  </Card>
-                )}
+                {APPLICATION_FEE_ENABLED && <FeeActions applicationId={app.id} />}
                 <Card>
                   <div className="flex items-start justify-between gap-3">
                     <div>

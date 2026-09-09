@@ -153,6 +153,7 @@ export type DashboardData = {
     paymentConfirmedAt: string | null
     invoiceStatus: string | null
     invoiceSentAt: string | null
+    hasInvoiceDocument: boolean
     plotCount: number
   } | null
   recentActivity: ActivityItem[]
@@ -346,6 +347,7 @@ export async function getInvestorDashboardData(
           paymentConfirmedAt: payment?.confirmedAt?.toISOString() ?? null,
           invoiceStatus:      payment?.invoiceStatus ?? null,
           invoiceSentAt:      payment?.invoiceSentAt?.toISOString() ?? null,
+          hasInvoiceDocument: payment?.invoiceDocumentId != null,
           plotCount: plotCount ?? 0,
         }
       : null,

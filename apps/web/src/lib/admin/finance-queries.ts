@@ -1,5 +1,4 @@
 import "server-only";
-import { Op } from "sequelize";
 import {
   Application,
   ApplicationPlot,
@@ -18,22 +17,51 @@ import {
  * beyond what finance needs to invoice and reconcile). Amounts come from the
  * stored payment breakdown, falling back to a computed default for legacy rows. */
 export async function getFinanceRows(): Promise<FinanceRow[]> {
-  const apps = await Application.findAll({
-    where: { status: { [Op.in]: REFERENCED_STATUSES } },
-    order: [["submittedAt", "DESC"]],
-    include: [
-      { model: User, as: "owner", attributes: ["name", "email", "phone"] },
-      {
-        model: InvestorOrg,
-        as: "investorOrg",
-        attributes: ["legalName", "tin", "phone", "email"],
-      },
-    ],
+  const includes = [
+    { model: User, as: "owner", attributes: ["name", "email", "phone"] },
+    {
+      model: InvestorOrg,
+      as: "investorOrg",
+      attributes: ["legalName", "tin", "phone", "email"],
+    },
+  ];
+
+  // The queue is every submitted application PLUS any application that already
+  // has a fee payment — i.e. an investor who generated an invoice early, before
+  // finishing (and submitting) their application.
+  const allPayments = await Payment.findAll({ order: [["createdAt", "DESC"]] });
+  const paidAppIds = Array.from(new Set(allPayments.map((p) => p.applicationId)));
+
+  const [submitted, earlyInvoiced] = await Promise.all([
+    Application.findAll({
+      where: { status: REFERENCED_STATUSES },
+      order: [["submittedAt", "DESC"]],
+      include: includes,
+    }),
+    paidAppIds.length
+      ? Application.findAll({ where: { id: paidAppIds }, include: includes })
+      : Promise.resolve([] as Application[]),
+  ]);
+
+  // Merge (dedupe by id); drop withdrawn applications.
+  const byId = new Map<string, Application>();
+  for (const a of [...submitted, ...earlyInvoiced]) {
+    if (a.status !== "WITHDRAWN") byId.set(a.id, a);
+  }
+  const apps = Array.from(byId.values()).sort((x, y) => {
+    const tx = x.submittedAt?.getTime() ?? x.createdAt?.getTime() ?? 0;
+    const ty = y.submittedAt?.getTime() ?? y.createdAt?.getTime() ?? 0;
+    return ty - tx;
   });
+
   const appIds = apps.map((a) => a.id);
   const [payments, plotRows] = await Promise.all([
-    Payment.findAll({ where: { applicationId: { [Op.in]: appIds } }, order: [["createdAt", "DESC"]] }),
-    ApplicationPlot.findAll({ where: { applicationId: { [Op.in]: appIds } }, attributes: ["applicationId"] }),
+    appIds.length
+      ? Payment.findAll({ where: { applicationId: appIds }, order: [["createdAt", "DESC"]] })
+      : Promise.resolve([] as Payment[]),
+    appIds.length
+      ? ApplicationPlot.findAll({ where: { applicationId: appIds }, attributes: ["applicationId"] })
+      : Promise.resolve([] as ApplicationPlot[]),
   ]);
   const payByApp = new Map<string, Payment>();
   for (const p of payments) if (!payByApp.has(p.applicationId)) payByApp.set(p.applicationId, p);

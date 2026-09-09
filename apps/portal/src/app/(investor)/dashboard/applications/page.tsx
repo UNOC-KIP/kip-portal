@@ -139,6 +139,11 @@ export default async function ApplicationsPage() {
                           <Button asChild size="sm" variant="outline">
                             <Link href={dest.href}>{dest.label} →</Link>
                           </Button>
+                          <Button asChild size="sm" variant="outline">
+                            <Link href={`/dashboard/payment/bank?app=${a.id}`}>
+                              Pay / invoice →
+                            </Link>
+                          </Button>
                           {DELETABLE_STATUSES.has(a.status) && (
                             <DeleteApplicationButton
                               applicationId={a.id}

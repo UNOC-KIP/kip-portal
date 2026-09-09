@@ -84,6 +84,85 @@ export async function ensureFeePayment(
 }
 
 /**
+ * Investor-initiated: create (or refresh) the fee payment for the plots chosen
+ * so far, so an invoice can be issued and paid before the application is
+ * finished. Idempotent, and safe to call again after changing plots:
+ *  - no live payment yet  -> create a PENDING one for the current plots;
+ *  - PENDING              -> refresh the amount to the current plots, and if an
+ *                           invoice was already sent, mark it for re-issue;
+ *  - PROOF_UPLOADED/CONFIRMED (settled or settling) -> returned unchanged;
+ *    the fee is locked in and non-refundable.
+ */
+export async function requestInvoice(
+  applicationId: string,
+  actor: { id: string; role: string },
+): Promise<Payment> {
+  const app = await Application.findByPk(applicationId, {
+    attributes: ["id", "ownerUserId"],
+  });
+  if (!app) throw NotFound("Application");
+  if (!ownerOrAdmin(app.ownerUserId, actor)) {
+    throw Forbidden("You can only request an invoice for your own application");
+  }
+  const fee = await feeForApplication(app.id);
+  if (fee.plotCount < 1) {
+    throw BadRequest("Select at least one plot before generating an invoice.");
+  }
+
+  return sequelize.transaction(async (t) => {
+    const existing = await Payment.findOne({
+      where: {
+        applicationId: app.id,
+        status: {
+          [Op.in]: [
+            PaymentStatus.PENDING,
+            PaymentStatus.PROOF_UPLOADED,
+            PaymentStatus.CONFIRMED,
+          ],
+        },
+      },
+      lock: true,
+      transaction: t,
+    });
+
+    if (!existing) {
+      return Payment.create(
+        {
+          applicationId: app.id,
+          method: PaymentMethod.STANBIC_TRANSFER,
+          currency: fee.currency,
+          amount: String(fee.total),
+          subtotalAmount: String(fee.subtotal),
+          vatAmount: String(fee.vat),
+          status: PaymentStatus.PENDING,
+          invoiceStatus: "NOT_SENT",
+        },
+        { transaction: t },
+      );
+    }
+
+    // Only an unpaid (PENDING) invoice can be regenerated for new plots.
+    if (existing.status === PaymentStatus.PENDING) {
+      const amountChanged = existing.amount !== String(fee.total);
+      await existing.update(
+        {
+          amount: String(fee.total),
+          subtotalAmount: String(fee.subtotal),
+          vatAmount: String(fee.vat),
+          // A sent invoice for a now-different amount is stale — re-issue it.
+          ...(amountChanged && existing.invoiceStatus === "SENT"
+            ? { invoiceStatus: "NOT_SENT", invoiceSentAt: null, invoiceDocumentId: null }
+            : {}),
+        },
+        { transaction: t },
+      );
+    }
+    // PROOF_UPLOADED / CONFIRMED: payment is in progress or settled — leave it.
+    return existing;
+  });
+}
+
+/**
  * Initiates a payment for an application in DRAFT_PAYMENT_PENDING status.
  * Fee amount is a server-side business rule — never trusted from the client.
  * Payment row is created inside a transaction.
