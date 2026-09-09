@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { Loader2, Upload, CheckCircle2, XCircle, Send } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Loader2, Upload, CheckCircle2, XCircle, Send, Download, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatMoney, type FinanceRow } from "@kip/shared";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
@@ -15,6 +16,69 @@ function paymentLabel(r: FinanceRow): { label: string; cls: string } {
   return { label: "Awaiting payment", cls: "bg-ink-100 text-ink-600" };
 }
 
+/** Normalised payment bucket for filtering (null/PENDING both count as awaiting). */
+function payBucket(r: FinanceRow): "CONFIRMED" | "FAILED" | "PROOF_UPLOADED" | "AWAITING" {
+  if (r.paymentStatus === "CONFIRMED") return "CONFIRMED";
+  if (r.paymentStatus === "FAILED") return "FAILED";
+  if (r.paymentStatus === "PROOF_UPLOADED") return "PROOF_UPLOADED";
+  return "AWAITING";
+}
+
+function csvEscape(v: unknown): string {
+  const s = v == null ? "" : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function dateOnly(iso: string | null): string {
+  return iso ? new Date(iso).toISOString().slice(0, 10) : "";
+}
+
+/** Build a CSV (with a BOM so Excel reads UTF-8 correctly) from the given rows. */
+function buildCsv(rows: FinanceRow[]): string {
+  const headers = [
+    "Reference", "Applicant", "Company", "Email", "TIN", "Phone",
+    "Plots", "Subtotal", "VAT", "Total", "Currency",
+    "Invoice", "Invoice sent", "Payment", "Submitted",
+  ];
+  const lines = [headers.map(csvEscape).join(",")];
+  for (const r of rows) {
+    lines.push(
+      [
+        r.reference ?? "",
+        r.applicantName ?? "",
+        r.company ?? "",
+        r.email ?? "",
+        r.tin ?? "",
+        r.phone ?? "",
+        r.plotCount,
+        r.subtotal.toFixed(2),
+        r.vat.toFixed(2),
+        r.total.toFixed(2),
+        r.currency,
+        r.invoiceStatus === "SENT" ? "Sent" : "Not sent",
+        dateOnly(r.invoiceSentAt),
+        paymentLabel(r).label,
+        dateOnly(r.submittedAt),
+      ]
+        .map(csvEscape)
+        .join(","),
+    );
+  }
+  return "﻿" + lines.join("\r\n");
+}
+
+function downloadCsv(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -22,6 +86,27 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
   const [openInvoice, setOpenInvoice] = useState<string | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const noteRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Filters
+  const [query, setQuery] = useState("");
+  const [payFilter, setPayFilter] = useState("");
+  const [invFilter, setInvFilter] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (payFilter && payBucket(r) !== payFilter) return false;
+      if (invFilter && r.invoiceStatus !== invFilter) return false;
+      if (!q) return true;
+      return [r.reference, r.applicantName, r.company, r.email, r.tin]
+        .some((v) => (v ?? "").toLowerCase().includes(q));
+    });
+  }, [rows, query, payFilter, invFilter]);
+
+  function exportCsv() {
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadCsv(`kip-finance-${stamp}.csv`, buildCsv(filtered));
+  }
 
   async function post(url: string, body: unknown): Promise<Response> {
     return fetch(`${API_BASE}${url}`, {
@@ -97,6 +182,48 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
       {error && (
         <p role="alert" className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>
       )}
+
+      {/* Filters + export */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search reference, applicant, company, email, TIN…"
+            className="h-9 w-72 pl-8 text-sm"
+          />
+        </div>
+        <select
+          value={payFilter}
+          onChange={(e) => setPayFilter(e.target.value)}
+          className="h-9 rounded-md border border-ink-300 bg-white px-2 text-sm"
+        >
+          <option value="">All payments</option>
+          <option value="AWAITING">Awaiting payment</option>
+          <option value="PROOF_UPLOADED">Receipt uploaded</option>
+          <option value="CONFIRMED">Paid</option>
+          <option value="FAILED">Failed</option>
+        </select>
+        <select
+          value={invFilter}
+          onChange={(e) => setInvFilter(e.target.value)}
+          className="h-9 rounded-md border border-ink-300 bg-white px-2 text-sm"
+        >
+          <option value="">All invoices</option>
+          <option value="NOT_SENT">Invoice not sent</option>
+          <option value="SENT">Invoice sent</option>
+        </select>
+        <span className="text-xs text-ink-500">
+          {filtered.length} of {rows.length}
+        </span>
+        <div className="ml-auto">
+          <Button size="sm" variant="outline" onClick={exportCsv} disabled={filtered.length === 0}>
+            <Download size={14} className="mr-1.5" /> Export CSV
+          </Button>
+        </div>
+      </div>
+
       <div className="overflow-x-auto rounded-xl border border-ink-200 bg-white">
         <table className="w-full min-w-[1100px] text-sm">
           <thead>
@@ -114,7 +241,7 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {filtered.map((r) => {
               const pay = paymentLabel(r);
               const invoiceSent = r.invoiceStatus === "SENT";
               const settled = r.paymentStatus === "CONFIRMED" || r.paymentStatus === "FAILED";
@@ -188,8 +315,8 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
                 </tr>
               );
             })}
-            {rows.length === 0 && (
-              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-ink-400">No submitted applications yet.</td></tr>
+            {filtered.length === 0 && (
+              <tr><td colSpan={10} className="px-3 py-10 text-center text-sm text-ink-400">No applications match these filters.</td></tr>
             )}
           </tbody>
         </table>

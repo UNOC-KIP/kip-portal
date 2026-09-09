@@ -14,6 +14,7 @@ const STAFF_ROLES = [
   { value: "TC_MEMBER",    label: "TC Member" },
   { value: "LAC_MEMBER",   label: "LAC Member" },
   { value: "EXCO_MEMBER",  label: "ExCo Member" },
+  { value: "FINANCE_OFFICER", label: "Finance Officer" },
 ] as const;
 
 interface Props {

@@ -517,7 +517,7 @@ export function EoiWizard({
                 <p className="mt-3 text-xs text-ink-600">
                   When you submit, UNOC will email you an invoice for this amount.
                   Pay it by bank transfer, then upload your receipt from your
-                  dashboard — you don&apos;t pay before submitting.
+                  dashboard.
                 </p>
               </div>
             )}

@@ -1277,8 +1277,7 @@ export function SectionDeclaration() {
             className="mt-0.5 h-4 w-4 shrink-0 accent-brand-500"
           />
           <span className="text-sm text-ink-800">
-            I confirm the declaration above and that the USD 1,000 application fee is
-            non-refundable.
+            I confirm the declaration above.
           </span>
         </label>
         {errors["declarationAccepted"] && (
