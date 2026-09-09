@@ -234,3 +234,30 @@ export async function getInvoiceDownloadUrl(
   if (!doc) throw NotFound("Invoice");
   return presignDownload({ key: doc.storageKey, expiresInSeconds: 300 });
 }
+
+/**
+ * A presigned download URL for the payment proof (receipt) an investor uploaded
+ * against an application. Finance/admin only — this is how the finance officer
+ * verifies a payment. 404 if no proof has been uploaded yet.
+ */
+export async function getProofDownloadUrl(
+  applicationId: string,
+  actor: { role: string },
+): Promise<{ url: string; filename: string }> {
+  assertFinance(actor);
+  const app = await Application.findByPk(applicationId, { attributes: ["id"] });
+  if (!app) throw NotFound("Application");
+
+  const payment = await Payment.findOne({
+    where: { applicationId },
+    order: [["createdAt", "DESC"]],
+  });
+  const docId = payment?.proofDocumentId;
+  if (!docId) throw NotFound("Payment proof");
+  const doc = await Document.findByPk(docId, {
+    attributes: ["storageKey", "filename"],
+  });
+  if (!doc) throw NotFound("Payment proof");
+  const url = await presignDownload({ key: doc.storageKey, expiresInSeconds: 300 });
+  return { url, filename: doc.filename };
+}

@@ -4,6 +4,7 @@ import {
   ApplicationPlot,
   InvestorOrg,
   Payment,
+  Plot,
   User,
 } from "@kip/db";
 import {
@@ -135,5 +136,191 @@ export async function getFinanceSummary(): Promise<FinanceSummary> {
     failed,
     outstandingTotal: outstanding,
     currency,
+  };
+}
+
+// --- Applicant detail (finance inner page) -----------------------------------
+
+export type FinancePlot = {
+  plotName: string | null;
+  zone: string | null;
+  street: string | null;
+  road: string | null;
+  acreage: number | null;
+};
+
+export type FinanceApplicationDetail = {
+  applicationId: string;
+  reference: string | null;
+  status: string;
+  submittedAt: string | null;
+  // Applicant (representative)
+  applicant: {
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    designation: string | null;
+  };
+  // Company profile
+  company: {
+    legalName: string | null;
+    tradingName: string | null;
+    registrationNumber: string | null;
+    ursbRegistrationNumber: string | null;
+    companyType: string | null;
+    businessSector: string | null;
+    countryOfIncorporation: string | null;
+    tin: string | null;
+    address: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null;
+  plots: FinancePlot[];
+  // Fee + payment
+  currency: string;
+  subtotal: number;
+  vat: number;
+  total: number;
+  paymentStatus: string | null;
+  invoiceStatus: string;
+  invoiceSentAt: string | null;
+  hasInvoiceDocument: boolean;
+  // Proof of payment
+  hasProof: boolean;
+  transferRef: string | null;
+  paidAt: string | null;
+  confirmedAt: string | null;
+};
+
+/**
+ * Full finance view of a single application: the applicant/company profile, the
+ * plots applied for, and the fee/payment (including whether a proof of payment
+ * has been uploaded). Returns null if the application doesn't exist. Reads only
+ * what finance needs to invoice, reconcile and verify.
+ */
+export async function getFinanceApplicationDetail(
+  idOrReference: string,
+): Promise<FinanceApplicationDetail | null> {
+  // The queue links by internal id (UUID); we also accept a human reference
+  // (e.g. KIP-EOI-2026-0001) so the page can be opened directly from a ref.
+  const isUuid =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrReference);
+  const app = (await Application.findOne({
+    where: isUuid ? { id: idOrReference } : { reference: idOrReference },
+    include: [
+      { model: User, as: "owner", attributes: ["name", "email", "phone", "designation"] },
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: [
+          "legalName",
+          "tradingName",
+          "registrationNumber",
+          "ursbRegistrationNumber",
+          "companyType",
+          "businessSector",
+          "countryOfIncorporation",
+          "tin",
+          "address",
+          "phone",
+          "email",
+        ],
+      },
+    ],
+  })) as
+    | (Application & {
+        owner?: {
+          name: string | null;
+          email: string | null;
+          phone: string | null;
+          designation: string | null;
+        };
+        investorOrg?: {
+          legalName: string | null;
+          tradingName: string | null;
+          registrationNumber: string | null;
+          ursbRegistrationNumber: string | null;
+          companyType: string | null;
+          businessSector: string | null;
+          countryOfIncorporation: string | null;
+          tin: string | null;
+          address: string | null;
+          phone: string | null;
+          email: string | null;
+        };
+      })
+    | null;
+  if (!app) return null;
+
+  const appPlots = await ApplicationPlot.findAll({
+    where: { applicationId: app.id },
+    attributes: ["plotId", "road"],
+  });
+  const plotIds = appPlots.map((p) => p.plotId);
+  const plotRows = plotIds.length
+    ? await Plot.findAll({
+        where: { id: plotIds },
+        attributes: ["id", "plotName", "zone", "street", "acreage"],
+      })
+    : [];
+  const plotById = new Map(plotRows.map((p) => [p.id, p]));
+  const plots: FinancePlot[] = appPlots.map((ap) => {
+    const p = plotById.get(ap.plotId);
+    return {
+      plotName: p?.plotName ?? null,
+      zone: p?.zone ?? null,
+      street: p?.street ?? null,
+      road: ap.road ?? null,
+      acreage: p?.acreage ?? null,
+    };
+  });
+
+  const pay = await Payment.findOne({
+    where: { applicationId: app.id },
+    order: [["createdAt", "DESC"]],
+  });
+  const fallback = computeApplicationFee(plots.length);
+
+  const org = app.investorOrg;
+
+  return {
+    applicationId: app.id,
+    reference: app.reference,
+    status: app.status,
+    submittedAt: app.submittedAt?.toISOString() ?? null,
+    applicant: {
+      name: app.owner?.name ?? null,
+      email: app.owner?.email ?? null,
+      phone: app.owner?.phone ?? null,
+      designation: app.owner?.designation ?? null,
+    },
+    company: org
+      ? {
+          legalName: org.legalName ?? null,
+          tradingName: org.tradingName ?? null,
+          registrationNumber: org.registrationNumber ?? null,
+          ursbRegistrationNumber: org.ursbRegistrationNumber ?? null,
+          companyType: org.companyType ?? null,
+          businessSector: org.businessSector ?? null,
+          countryOfIncorporation: org.countryOfIncorporation ?? null,
+          tin: org.tin ?? null,
+          address: org.address ?? null,
+          phone: org.phone ?? null,
+          email: org.email ?? null,
+        }
+      : null,
+    plots,
+    currency: pay?.currency ?? fallback.currency,
+    subtotal: pay?.subtotalAmount != null ? Number(pay.subtotalAmount) : fallback.subtotal,
+    vat: pay?.vatAmount != null ? Number(pay.vatAmount) : fallback.vat,
+    total: pay?.amount != null ? Number(pay.amount) : fallback.total,
+    paymentStatus: pay?.status ?? null,
+    invoiceStatus: pay?.invoiceStatus ?? InvoiceStatus.NOT_SENT,
+    invoiceSentAt: pay?.invoiceSentAt?.toISOString() ?? null,
+    hasInvoiceDocument: pay?.invoiceDocumentId != null,
+    hasProof: pay?.proofDocumentId != null,
+    transferRef: pay?.transferRef ?? null,
+    paidAt: pay?.paidAt?.toISOString() ?? null,
+    confirmedAt: pay?.confirmedAt?.toISOString() ?? null,
   };
 }

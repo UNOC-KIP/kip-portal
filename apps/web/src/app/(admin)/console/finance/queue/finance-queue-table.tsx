@@ -1,8 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Upload, CheckCircle2, XCircle, Send, Download, Search } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  CheckCircle2,
+  XCircle,
+  Send,
+  Download,
+  Search,
+  Receipt,
+  UserSearch,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatMoney, type FinanceRow } from "@kip/shared";
@@ -162,6 +173,29 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
     }
   }
 
+  /** Open the receipt the investor uploaded, via a short-lived presigned URL. */
+  async function downloadProof(r: FinanceRow) {
+    setBusy(r.applicationId + ":proof");
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE}/applications/${r.applicationId}/proof`, {
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error(
+          (await res.json().catch(() => ({})))?.error?.message ??
+            "The proof of payment isn't available.",
+        );
+      }
+      const { url } = (await res.json()) as { url: string };
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open the proof of payment.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function verify(r: FinanceRow, result: "CONFIRMED" | "FAILED") {
     if (!r.paymentId) return;
     setBusy(r.paymentId + ":ver");
@@ -247,9 +281,17 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
               const settled = r.paymentStatus === "CONFIRMED" || r.paymentStatus === "FAILED";
               const invBusy = busy === r.paymentId + ":inv";
               const verBusy = busy === r.paymentId + ":ver";
+              const proofBusy = busy === r.applicationId + ":proof";
               return (
                 <tr key={r.applicationId} className="border-b border-ink-100 align-top last:border-0 hover:bg-ink-50/40">
-                  <td className="px-3 py-3 font-bold tracking-tight text-ink-900">{r.reference ?? "—"}</td>
+                  <td className="px-3 py-3 font-bold tracking-tight">
+                    <Link
+                      href={`/console/finance/${r.applicationId}`}
+                      className="text-ink-900 underline-offset-2 hover:text-brand-700 hover:underline"
+                    >
+                      {r.reference ?? "Draft — no ref"}
+                    </Link>
+                  </td>
                   <td className="px-3 py-3 text-ink-700">{r.applicantName ?? "—"}</td>
                   <td className="px-3 py-3 text-ink-700">{r.company ?? "—"}</td>
                   <td className="px-3 py-3 text-ink-600">{r.email ?? "—"}</td>
@@ -271,7 +313,29 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
                   </td>
                   <td className="px-3 py-3">
                     <div className="flex flex-col items-end gap-2">
-                      {openInvoice === r.paymentId ? (
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link href={`/console/finance/${r.applicationId}`}>
+                            <UserSearch size={13} className="mr-1" /> View profile
+                          </Link>
+                        </Button>
+                        {r.hasReceipt && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={proofBusy}
+                            onClick={() => downloadProof(r)}
+                          >
+                            {proofBusy ? (
+                              <Loader2 size={13} className="mr-1 animate-spin" />
+                            ) : (
+                              <Receipt size={13} className="mr-1" />
+                            )}
+                            Proof
+                          </Button>
+                        )}
+                      </div>
+                      {r.paymentId !== null && openInvoice === r.paymentId ? (
                         <div className="w-64 rounded-lg border border-ink-200 bg-white p-2 text-left shadow-sm">
                           <input
                             ref={(el) => { fileRefs.current[r.paymentId as string] = el; }}
