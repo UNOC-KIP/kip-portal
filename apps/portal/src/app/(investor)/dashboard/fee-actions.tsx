@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Download, Loader2, Upload, FileText, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatMoney } from "@kip/shared";
+import { formatMoney, invoiceBlockers } from "@kip/shared";
+import { InvoiceBlockersNotice } from "@/components/invoice-blockers-notice";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 const PROOF_TYPES = ["application/pdf", "image/jpeg", "image/png"];
@@ -23,10 +24,20 @@ type PaymentLite = {
 
 /**
  * Everything an investor needs for one application's fee: generate the invoice,
- * download it, and upload the payment receipt. Self-contained — give it an
- * applicationId and it fetches and manages its own state.
+ * download it, and upload the payment receipt. It fetches and manages its own
+ * payment state; `plotCount` and `billing` (company TIN + registered address)
+ * come from the page, and feed the shared invoice-readiness gate so the
+ * "Generate invoice" button never offers what the API will refuse.
  */
-export function FeeActions({ applicationId }: { applicationId: string }) {
+export function FeeActions({
+  applicationId,
+  plotCount,
+  billing,
+}: {
+  applicationId: string;
+  plotCount: number;
+  billing: { tin: string | null; address: string | null };
+}) {
   const [loading, setLoading] = useState(true);
   const [payment, setPayment] = useState<PaymentLite | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -59,7 +70,14 @@ export function FeeActions({ applicationId }: { applicationId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applicationId]);
 
+  const blockers = invoiceBlockers({
+    plotCount,
+    tin: billing.tin,
+    address: billing.address,
+  });
+
   async function generate() {
+    if (blockers.length > 0) return;
     setBusy("gen");
     setError(null);
     setNotice(null);
@@ -251,11 +269,19 @@ export function FeeActions({ applicationId }: { applicationId: string }) {
             </div>
           )}
 
+          {status === "PENDING" && blockers.length > 0 && (
+            <div className="mt-3">
+              <InvoiceBlockersNotice
+                blockers={blockers}
+                plotsHref={`/dashboard/eoi/${applicationId}/2`}
+              />
+            </div>
+          )}
           {status === "PENDING" && (
             <button
               type="button"
               onClick={generate}
-              disabled={busy === "gen"}
+              disabled={busy === "gen" || blockers.length > 0}
               className="mt-3 block text-xs font-medium text-ink-500 underline underline-offset-2 hover:text-ink-900"
             >
               {busy === "gen" ? "Updating…" : "Plots changed? Update the invoice amount"}
@@ -271,8 +297,16 @@ export function FeeActions({ applicationId }: { applicationId: string }) {
             change plots later, generate a new invoice while this one is unpaid — once
             paid, the fee is non-refundable.
           </p>
+          {blockers.length > 0 && (
+            <div className="mt-3">
+              <InvoiceBlockersNotice
+                blockers={blockers}
+                plotsHref={`/dashboard/eoi/${applicationId}/2`}
+              />
+            </div>
+          )}
           <div className="mt-4">
-            <Button size="sm" onClick={generate} disabled={busy === "gen"}>
+            <Button size="sm" onClick={generate} disabled={busy === "gen" || blockers.length > 0}>
               {busy === "gen" ? <Loader2 size={14} className="mr-1.5 animate-spin" /> : <FileText size={14} className="mr-1.5" />}
               Generate invoice
             </Button>
@@ -295,7 +329,7 @@ export function FeeActions({ applicationId }: { applicationId: string }) {
                 href="/dashboard/settings"
                 className="font-semibold underline underline-offset-2"
               >
-                Add it in Settings →
+                Update in Settings →
               </Link>
             </>
           )}

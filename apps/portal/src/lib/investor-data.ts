@@ -137,6 +137,8 @@ export type DocumentItem = {
 
 export type DashboardData = {
   orgName: string | null
+  /** Billing identity behind the fee invoice — drives the invoice-readiness gate. */
+  billing: { tin: string | null; address: string | null }
   application: {
     id: string
     reference: string | null
@@ -251,7 +253,13 @@ export async function getInvestorDashboardData(
 ): Promise<DashboardData> {
   const [user, activeWindow] = await Promise.all([
     User.findByPk(userId, {
-      include: [{ model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] }],
+      include: [
+        {
+          model: InvestorOrg,
+          as: "investorOrg",
+          attributes: ["legalName", "tin", "address"],
+        },
+      ],
     }),
     ApplicationWindow.findOne({
       where: { status: ApplicationWindowStatus.OPEN },
@@ -290,7 +298,11 @@ export async function getInvestorDashboardData(
       },
       // Falls back for a preview actor (ADMIN), whose own User row carries no
       // `investorOrgId` — their org hangs off the application instead.
-      { model: InvestorOrg, as: "investorOrg", attributes: ["legalName"] },
+      {
+        model: InvestorOrg,
+        as: "investorOrg",
+        attributes: ["legalName", "tin", "address"],
+      },
     ],
   });
 
@@ -330,6 +342,10 @@ export async function getInvestorDashboardData(
 
   return {
     orgName: org?.legalName ?? appWith?.investorOrg?.legalName ?? null,
+    billing: {
+      tin: org?.tin ?? appWith?.investorOrg?.tin ?? null,
+      address: org?.address ?? appWith?.investorOrg?.address ?? null,
+    },
     application: app
       ? {
           id: app.id,

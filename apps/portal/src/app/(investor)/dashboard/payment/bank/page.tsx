@@ -37,7 +37,11 @@ export default async function BankTransferPage({
         details on the invoice, then upload your receipt.
       </p>
       <div className="mt-5">
-        <FeeActions applicationId={app.id} />
+        <FeeActions
+          applicationId={app.id}
+          plotCount={app.plotCount}
+          billing={data.billing}
+        />
       </div>
     </main>
   );

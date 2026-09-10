@@ -91,6 +91,8 @@ export type EoiWizardData = {
   plots: EoiPlotOption[];
   /** Registration data used to prefill Section 1 (see `prefillPreliminaryInfo`). */
   prefill: Record<string, unknown>;
+  /** Billing identity behind the fee invoice — drives the invoice-readiness gate. */
+  billing: { tin: string | null; address: string | null };
 };
 
 /** Registration captures a subset of `CompanyType`; the EOI asks for `LegalForm`. */
@@ -281,5 +283,6 @@ export async function getEoiWizardData(
       centroidLng: pt.centroidLng ?? null,
     })),
     prefill: prefillPreliminaryInfo(org, user),
+    billing: { tin: org?.tin ?? null, address: org?.address ?? null },
   };
 }
