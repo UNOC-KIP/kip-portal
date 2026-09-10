@@ -4,9 +4,15 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ExternalLink, FileText, Loader2, MapPin, Users, X } from "lucide-react";
-import { KIP_LAND_MAP_EMBED_URL, computeApplicationFee, formatMoney } from "@kip/shared";
+import {
+  KIP_LAND_MAP_EMBED_URL,
+  computeApplicationFee,
+  formatMoney,
+  invoiceBlockers,
+} from "@kip/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InvoiceBlockersNotice } from "@/components/invoice-blockers-notice";
 import type { EoiPlotOption } from "@/lib/eoi-data";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
@@ -23,17 +29,23 @@ function acres(v: number | null): string {
  * reports the total acreage so the wizard auto-fills the required land area.
  * Each row shows the road the plot fronts and how many OTHER investors have
  * applied for it (transparency).
+ *
+ * `billing` is the company's TIN + registered address; with the plot count it
+ * feeds the shared invoice-readiness gate, so the "Generate invoice" button here
+ * offers exactly what the API will accept.
  */
 export function PlotPicker({
   applicationId,
   plots,
   selectedPlotIds,
+  billing,
   disabled,
   onTotalAcresChange,
 }: {
   applicationId: string;
   plots: EoiPlotOption[];
   selectedPlotIds: string[];
+  billing: { tin: string | null; address: string | null };
   disabled?: boolean;
   onTotalAcresChange?: (totalAcres: number) => void;
 }) {
@@ -107,9 +119,14 @@ export function PlotPicker({
   }
 
   const fee = computeApplicationFee(selectedPlots.length);
+  const blockers = invoiceBlockers({
+    plotCount: selectedPlots.length,
+    tin: billing.tin,
+    address: billing.address,
+  });
 
   async function generateInvoice() {
-    if (invoiceBusy) return;
+    if (invoiceBusy || blockers.length > 0) return;
     setInvoiceBusy(true);
     setInvoiceErr(null);
     try {
@@ -242,12 +259,17 @@ export function PlotPicker({
                   </div>
                 ) : (
                   <>
+                    {blockers.length > 0 && (
+                      <div className="mb-2">
+                        <InvoiceBlockersNotice blockers={blockers} />
+                      </div>
+                    )}
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       onClick={generateInvoice}
-                      disabled={invoiceBusy}
+                      disabled={invoiceBusy || blockers.length > 0}
                     >
                       {invoiceBusy ? (
                         <Loader2 size={14} className="mr-1.5 animate-spin" />
@@ -273,7 +295,7 @@ export function PlotPicker({
                           href="/dashboard/settings"
                           className="font-semibold underline underline-offset-2"
                         >
-                          Add it in Settings →
+                          Update in Settings →
                         </Link>
                       </>
                     )}

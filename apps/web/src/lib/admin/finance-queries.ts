@@ -19,11 +19,29 @@ import {
  * stored payment breakdown, falling back to a computed default for legacy rows. */
 export async function getFinanceRows(): Promise<FinanceRow[]> {
   const includes = [
-    { model: User, as: "owner", attributes: ["name", "email", "phone"] },
+    {
+      model: User,
+      as: "owner",
+      attributes: ["name", "email", "phone", "designation"],
+    },
     {
       model: InvestorOrg,
       as: "investorOrg",
-      attributes: ["legalName", "tin", "phone", "email"],
+      // The whole billed party — finance raises invoices off the CSV export, so
+      // the registered address and legal identity travel with the row.
+      attributes: [
+        "legalName",
+        "tradingName",
+        "registrationNumber",
+        "ursbRegistrationNumber",
+        "companyType",
+        "businessSector",
+        "countryOfIncorporation",
+        "tin",
+        "address",
+        "phone",
+        "email",
+      ],
     },
   ];
 
@@ -61,19 +79,54 @@ export async function getFinanceRows(): Promise<FinanceRow[]> {
       ? Payment.findAll({ where: { applicationId: appIds }, order: [["createdAt", "DESC"]] })
       : Promise.resolve([] as Payment[]),
     appIds.length
-      ? ApplicationPlot.findAll({ where: { applicationId: appIds }, attributes: ["applicationId"] })
+      ? ApplicationPlot.findAll({
+          where: { applicationId: appIds },
+          attributes: ["applicationId", "plotId"],
+        })
       : Promise.resolve([] as ApplicationPlot[]),
   ]);
   const payByApp = new Map<string, Payment>();
   for (const p of payments) if (!payByApp.has(p.applicationId)) payByApp.set(p.applicationId, p);
+
+  // Plot names for the export — the invoice itemises the plots, not just a count.
+  const plotIds = Array.from(new Set(plotRows.map((r) => r.plotId)));
+  const plotRecords = plotIds.length
+    ? await Plot.findAll({ where: { id: plotIds }, attributes: ["id", "plotName"] })
+    : [];
+  const plotNameById = new Map(plotRecords.map((p) => [p.id, p.plotName]));
+  const plotNamesByApp = new Map<string, string[]>();
+  for (const r of plotRows) {
+    const list = plotNamesByApp.get(r.applicationId) ?? [];
+    const name = plotNameById.get(r.plotId);
+    if (name) list.push(name);
+    plotNamesByApp.set(r.applicationId, list);
+  }
   const plotByApp = new Map<string, number>();
   for (const r of plotRows) plotByApp.set(r.applicationId, (plotByApp.get(r.applicationId) ?? 0) + 1);
 
   return apps.map((app) => {
     const a = app as Application & {
-      owner?: { name: string | null; email: string | null; phone: string | null };
-      investorOrg?: { legalName: string | null; tin: string | null; phone: string | null; email: string | null };
+      owner?: {
+        name: string | null;
+        email: string | null;
+        phone: string | null;
+        designation: string | null;
+      };
+      investorOrg?: {
+        legalName: string | null;
+        tradingName: string | null;
+        registrationNumber: string | null;
+        ursbRegistrationNumber: string | null;
+        companyType: string | null;
+        businessSector: string | null;
+        countryOfIncorporation: string | null;
+        tin: string | null;
+        address: string | null;
+        phone: string | null;
+        email: string | null;
+      };
     };
+    const org = a.investorOrg;
     const pay = payByApp.get(app.id);
     const plotCount = plotByApp.get(app.id) ?? 0;
     const fallback = computeApplicationFee(plotCount);
@@ -83,11 +136,23 @@ export async function getFinanceRows(): Promise<FinanceRow[]> {
       reference: app.reference,
       status: app.status,
       applicantName: a.owner?.name ?? null,
-      company: a.investorOrg?.legalName ?? null,
-      email: a.owner?.email ?? a.investorOrg?.email ?? null,
-      tin: a.investorOrg?.tin ?? null,
-      phone: a.investorOrg?.phone ?? a.owner?.phone ?? null,
+      applicantDesignation: a.owner?.designation ?? null,
+      applicantPhone: a.owner?.phone ?? null,
+      company: org?.legalName ?? null,
+      tradingName: org?.tradingName ?? null,
+      registrationNumber: org?.registrationNumber ?? null,
+      ursbRegistrationNumber: org?.ursbRegistrationNumber ?? null,
+      companyType: org?.companyType ?? null,
+      businessSector: org?.businessSector ?? null,
+      countryOfIncorporation: org?.countryOfIncorporation ?? null,
+      address: org?.address ?? null,
+      companyEmail: org?.email ?? null,
+      companyPhone: org?.phone ?? null,
+      email: a.owner?.email ?? org?.email ?? null,
+      tin: org?.tin ?? null,
+      phone: org?.phone ?? a.owner?.phone ?? null,
       plotCount,
+      plotNames: plotNamesByApp.get(app.id) ?? [],
       currency: pay?.currency ?? fallback.currency,
       subtotal: pay?.subtotalAmount != null ? Number(pay.subtotalAmount) : fallback.subtotal,
       vat: pay?.vatAmount != null ? Number(pay.vatAmount) : fallback.vat,
@@ -96,6 +161,9 @@ export async function getFinanceRows(): Promise<FinanceRow[]> {
       invoiceStatus: pay?.invoiceStatus ?? InvoiceStatus.NOT_SENT,
       invoiceSentAt: pay?.invoiceSentAt?.toISOString() ?? null,
       hasReceipt: pay?.proofDocumentId != null,
+      transferRef: pay?.transferRef ?? null,
+      paidAt: pay?.paidAt?.toISOString() ?? null,
+      confirmedAt: pay?.confirmedAt?.toISOString() ?? null,
       submittedAt: app.submittedAt?.toISOString() ?? null,
     };
   });

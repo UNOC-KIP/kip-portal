@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 9 September 2026. Update this file in the same commit as any architectural change.
+> Last updated: 10 September 2026. Update this file in the same commit as any architectural change.
+> Invoice-readiness gate added 10 September 2026 — one pure gate (plots + TIN + registered address) closes the portal's "Generate invoice" buttons and the API write together, and the finance CSV now carries the whole billed party. See "Invoice readiness".
 > Finance workspace documented 9 September 2026 — fee invoicing, payment verification, the applicant profile behind an invoice and the proof-of-payment download. See "Finance (application fee)".
 > Site-visit booking gate enforced end to end 24 August 2026 — one pure gate closes the form, the public CTAs and the API writes together. See "Site-visit booking window".
 > Admin EOI preview added 11 August 2026 — ADMIN can sign into the investor portal and run the EOI with the window gate lifted. See "Admin EOI preview".
@@ -432,6 +433,14 @@ Admins compose and send messages to investors or staff from **`/console/communic
 
 **The queue is not just submitted applications.** `getFinanceRows()` (`apps/web/src/lib/admin/finance-queries.ts`) merges every application in `REFERENCED_STATUSES` **with every application that already has a `Payment`** — an investor can generate an invoice early, before finishing and submitting. Dropping that merge silently hides early-invoiced applicants from the people meant to bill them. Withdrawn applications are excluded; the merge dedupes by id.
 
+**Invoice readiness — one pure gate.** `invoiceBlockers()` in `packages/shared/src/fees.ts` answers whether a fee invoice can be raised: at least one plot selected (the fee is per plot), plus the billing identity that goes on the face of a tax invoice — the company's **TIN** and its **registered address**. Registration collects neither (`InvestorOrg.tin` / `.address` stay nullable and are filled in later), so each blocker carries a `fix` of `"settings"` or `"plots"` and the portal points the investor straight at `/dashboard/settings`. Two consumers, which is the point:
+- **The API** — `requestInvoice()` (`payments.service.ts`) runs the gate before creating or refreshing a `Payment` and throws `BadRequest(invoiceBlockerMessage(...))` naming *every* outstanding item at once.
+- **The portal** — `InvoiceBlockersNotice` (`apps/portal/src/components/invoice-blockers-notice.tsx`) renders the same list and disables the "Generate invoice" button in both places it appears (`fee-actions.tsx` and the EOI wizard's `plot-picker.tsx`). `DashboardData.billing` and `EoiWizardData.billing` exist to feed it.
+
+Never re-derive the requirement inline, and never let a portal button offer a generation the API refuses. Tested in `apps/portal/src/lib/invoice-gate.test.ts`.
+
+**The queue CSV is the invoicing document.** Finance raises invoices from the export, not from the table, so `FinanceRow` carries the whole billed party — representative (name, designation, email, phone), company (legal + trading name, TIN, type, sector, registration + URSB numbers, country, **registered address**, contacts), the plot numbers applied for, and the reconciliation fields (transfer ref, date paid, verified on, proof state). The table still shows only the summary columns; enum values go through `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS` in the CSV too, never raw.
+
 **Two things finance needs that the queue table can't hold.** Both hang off `/console/finance/[applicationId]`:
 - **The applicant profile** — `getFinanceApplicationDetail()` returns the representative, the full company block (legal/trading name, TIN, URSB + registration numbers, company type, sector, country, registered address, contacts), the plots applied for, and the fee breakdown. That is the information needed to *raise* an invoice, and it is why the queue row links to it. Enum values are rendered through `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS`, never raw.
 - **The proof of payment** — the receipt the investor uploaded. `FinanceRow.hasReceipt` drives a download button in the queue row *and* on the detail page; both call `GET /applications/:id/proof`, which 404s until a proof exists. Downloads are **presigned S3 URLs opened in a new tab**, never bytes proxied through the API — same model as every other document in the app.
@@ -547,7 +556,8 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `apps/portal/src/lib/eoi-data.ts` | `server-only` — `getEoiWizardData()` (application + sections + documents + prefill in one read) and `prefillPreliminaryInfo()` |
 | `apps/portal/src/lib/form-path.ts` | Pure dotted-path `getIn`/`setIn`/`appendTo`/`removeAt`/`issuesByPath` over section payloads — paths match Zod's `issue.path.join(".")` so errors map onto inputs with no translation layer. Unit-tested |
 | `apps/portal/src/app/(investor)/dashboard/eoi/` | The EOI wizard — `[section]/page.tsx` server shell → `eoi-wizard.tsx` (state, draft/complete saves, submit, blockers) + `eoi-sections.tsx` (the six forms) + `eoi-fields.tsx` (path-bound primitives, N/A toggles, repeatables, year rows) + `document-slots.tsx` (presign → PUT → register) |
-| `packages/shared/src/fees.ts` | Fee maths — `computeApplicationFee()` (per-plot × plots + 18% VAT), `formatMoney()`, `FinanceRow`. Pure; shared by the API, the portal quote and the admin finance queue |
+| `packages/shared/src/fees.ts` | Fee maths — `computeApplicationFee()` (per-plot × plots + 18% VAT), `formatMoney()`, `FinanceRow` (the full billed party, for the finance CSV), and the invoice-readiness gate `invoiceBlockers()` / `invoiceBlockerMessage()`. Pure; shared by the API, the portal quote and the admin finance queue |
+| `apps/portal/src/components/invoice-blockers-notice.tsx` | Renders `invoiceBlockers()` as the "before we can raise your invoice" list, linking each item to Settings or the plot picker. Used by `fee-actions.tsx` and `plot-picker.tsx` |
 | `apps/api/src/modules/finance/` | Invoicing + verification — `listFinanceApplications()`, invoice presign/send, `verifyPayment()`, `getInvoiceDownloadUrl()`, `getProofDownloadUrl()` (finance/admin only). Router-wide `requireRole(FINANCE_OFFICER, ADMIN)` |
 | `apps/web/src/lib/admin/finance-queries.ts` | `server-only` finance read layer — `getFinanceRows()` (submitted **plus** early-invoiced, deduped), `getFinanceSummary()` KPIs, `getFinanceApplicationDetail()` (applicant + company + plots + fee + proof state) |
 | `apps/web/src/app/(admin)/console/finance/` | Finance workspace — `page.tsx` KPI dashboard, `queue/` the payments & invoices table (filters, CSV, send-invoice, verify, proof download, profile link), `[applicationId]/` the applicant profile behind an invoice + proof/invoice downloads |
@@ -711,6 +721,7 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Give a preview actor a separate code path, mock S3, or skip validation — preview runs the real services or it proves nothing
 - Write `User.investorOrgId` on a staff account — the preview sandbox org hangs off the `Application`, which is what keeps admins out of investor reports
 - Assume an investor has an `Application` — registration creates none; `POST /applications` from the dashboard does
+- Re-derive the invoice requirements inline, or let a portal "Generate invoice" button offer what the API refuses — call `invoiceBlockers()`, the one gate the API guard and both portal buttons share
 - Narrow `getFinanceRows()` to submitted applications only — the merge with applications that already have a `Payment` is what keeps early-invoiced applicants visible to the people billing them
 - Expose `GET /applications/:id/proof` to `INVESTOR`, or proxy a proof/invoice through the API — finance/admin only, and downloads are presigned S3 URLs
 - Render a stored `companyType`/`businessSector` raw in the finance profile — use `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS`

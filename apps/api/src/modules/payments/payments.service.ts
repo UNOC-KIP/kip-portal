@@ -12,6 +12,8 @@ import {
   type PresignProofInput,
   type SubmitTransferProofInput,
   computeApplicationFee,
+  invoiceBlockers,
+  invoiceBlockerMessage,
   type ApplicationFee,
 } from "@kip/shared";
 import { env } from "../../env.js";
@@ -99,24 +101,26 @@ export async function requestInvoice(
 ): Promise<Payment> {
   const app = (await Application.findByPk(applicationId, {
     attributes: ["id", "ownerUserId"],
-    include: [{ model: InvestorOrg, as: "investorOrg", attributes: ["tin"] }],
-  })) as (Application & { investorOrg?: { tin: string | null } }) | null;
+    include: [
+      { model: InvestorOrg, as: "investorOrg", attributes: ["tin", "address"] },
+    ],
+  })) as
+    | (Application & { investorOrg?: { tin: string | null; address: string | null } })
+    | null;
   if (!app) throw NotFound("Application");
   if (!ownerOrAdmin(app.ownerUserId, actor)) {
     throw Forbidden("You can only request an invoice for your own application");
   }
-  // An invoice is a tax document — it must carry the investor's TIN. Block
-  // generation until the company's TIN is on file so finance never issues an
-  // invoice without one.
-  if (!app.investorOrg?.tin?.trim()) {
-    throw BadRequest(
-      "Add your company TIN in Settings before generating an invoice.",
-    );
-  }
   const fee = await feeForApplication(app.id);
-  if (fee.plotCount < 1) {
-    throw BadRequest("Select at least one plot before generating an invoice.");
-  }
+  // The shared readiness gate — plots to charge for, plus the billing identity
+  // that goes on the face of a tax invoice (TIN + registered address). The
+  // portal renders the same blockers, so its button and this guard agree.
+  const blockers = invoiceBlockers({
+    plotCount: fee.plotCount,
+    tin: app.investorOrg?.tin,
+    address: app.investorOrg?.address,
+  });
+  if (blockers.length > 0) throw BadRequest(invoiceBlockerMessage(blockers));
 
   return sequelize.transaction(async (t) => {
     const existing = await Payment.findOne({

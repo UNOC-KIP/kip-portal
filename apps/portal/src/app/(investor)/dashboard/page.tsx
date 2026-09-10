@@ -780,7 +780,13 @@ export default async function InvestorDashboardPage({
             {/* ── Post-submission ──────────────────────────────────── */}
             {app && !isPreSubmission && (
               <>
-                {APPLICATION_FEE_ENABLED && <FeeActions applicationId={app.id} />}
+                {APPLICATION_FEE_ENABLED && (
+                  <FeeActions
+                    applicationId={app.id}
+                    plotCount={app.plotCount}
+                    billing={data.billing}
+                  />
+                )}
                 <Card>
                   <div className="flex items-start justify-between gap-3">
                     <div>

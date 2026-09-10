@@ -469,6 +469,7 @@ export function EoiWizard({
                       applicationId={data.application.id}
                       plots={data.plots}
                       selectedPlotIds={data.application.selectedPlotIds}
+                      billing={data.billing}
                       disabled={disabled}
                       onTotalAcresChange={handlePlotAcres}
                     />

@@ -16,7 +16,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatMoney, type FinanceRow } from "@kip/shared";
+import {
+  formatMoney,
+  COMPANY_TYPE_LABELS,
+  BUSINESS_SECTOR_LABELS,
+  type CompanyType,
+  type BusinessSector,
+  type FinanceRow,
+} from "@kip/shared";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4001";
 
@@ -44,24 +51,55 @@ function dateOnly(iso: string | null): string {
   return iso ? new Date(iso).toISOString().slice(0, 10) : "";
 }
 
-/** Build a CSV (with a BOM so Excel reads UTF-8 correctly) from the given rows. */
+/** Display label for a stored enum value, falling back to the raw value. */
+function labelFor<T extends string>(map: Record<T, string>, value: string | null): string {
+  if (!value) return "";
+  return map[value as T] ?? value;
+}
+
+/**
+ * Build a CSV (with a BOM so Excel reads UTF-8 correctly) from the given rows.
+ * Finance raises invoices from this file, so it carries the billed party in
+ * full — legal identity, registered address and contacts — not just the summary
+ * the table has room for.
+ */
 function buildCsv(rows: FinanceRow[]): string {
   const headers = [
-    "Reference", "Applicant", "Company", "Email", "TIN", "Phone",
-    "Plots", "Subtotal", "VAT", "Total", "Currency",
-    "Invoice", "Invoice sent", "Payment", "Submitted",
+    "Reference", "Application status",
+    "Applicant", "Designation", "Applicant email", "Applicant phone",
+    "Company (legal name)", "Trading name", "TIN",
+    "Company type", "Business sector",
+    "Registration no.", "URSB no.", "Country of incorporation",
+    "Registered address", "Company email", "Company phone",
+    "Plots", "Plot numbers",
+    "Subtotal", "VAT", "Total", "Currency",
+    "Invoice", "Invoice sent",
+    "Payment", "Transfer ref", "Date paid", "Verified on",
+    "Proof of payment", "Submitted",
   ];
   const lines = [headers.map(csvEscape).join(",")];
   for (const r of rows) {
     lines.push(
       [
         r.reference ?? "",
+        r.status,
         r.applicantName ?? "",
-        r.company ?? "",
+        r.applicantDesignation ?? "",
         r.email ?? "",
+        r.applicantPhone ?? "",
+        r.company ?? "",
+        r.tradingName ?? "",
         r.tin ?? "",
-        r.phone ?? "",
+        labelFor<CompanyType>(COMPANY_TYPE_LABELS, r.companyType),
+        labelFor<BusinessSector>(BUSINESS_SECTOR_LABELS, r.businessSector),
+        r.registrationNumber ?? "",
+        r.ursbRegistrationNumber ?? "",
+        r.countryOfIncorporation ?? "",
+        r.address ?? "",
+        r.companyEmail ?? "",
+        r.companyPhone ?? "",
         r.plotCount,
+        r.plotNames.join(" | "),
         r.subtotal.toFixed(2),
         r.vat.toFixed(2),
         r.total.toFixed(2),
@@ -69,6 +107,10 @@ function buildCsv(rows: FinanceRow[]): string {
         r.invoiceStatus === "SENT" ? "Sent" : "Not sent",
         dateOnly(r.invoiceSentAt),
         paymentLabel(r).label,
+        r.transferRef ?? "",
+        dateOnly(r.paidAt),
+        dateOnly(r.confirmedAt),
+        r.hasReceipt ? "Uploaded" : "None",
         dateOnly(r.submittedAt),
       ]
         .map(csvEscape)
@@ -109,8 +151,15 @@ export function FinanceQueueTable({ rows }: { rows: FinanceRow[] }) {
       if (payFilter && payBucket(r) !== payFilter) return false;
       if (invFilter && r.invoiceStatus !== invFilter) return false;
       if (!q) return true;
-      return [r.reference, r.applicantName, r.company, r.email, r.tin]
-        .some((v) => (v ?? "").toLowerCase().includes(q));
+      return [
+        r.reference,
+        r.applicantName,
+        r.company,
+        r.tradingName,
+        r.email,
+        r.tin,
+        r.address,
+      ].some((v) => (v ?? "").toLowerCase().includes(q));
     });
   }, [rows, query, payFilter, invFilter]);
 
