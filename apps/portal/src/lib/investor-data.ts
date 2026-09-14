@@ -15,6 +15,8 @@ import {
   UserRole,
   COMPANY_TYPE_LABELS,
   BUSINESS_SECTOR_LABELS,
+  applicationEditGate,
+  type ApplicationEditGate,
   type CompanyType,
   type BusinessSector,
 } from "@kip/shared";
@@ -162,6 +164,12 @@ export type DashboardData = {
   documents: DocumentItem[]
   windowCloseAt: string | null
   windowName: string | null
+  /**
+   * Whether the application above may still be edited, and why. Null when the
+   * investor has no application yet. A submitted application stays editable
+   * until the window closes — see `applicationEditGate` in @kip/shared.
+   */
+  edit: ApplicationEditGate | null
   /** True while the investor is still on the auto-generated password. */
   mustChangePassword: boolean
 }
@@ -179,6 +187,12 @@ export type ApplicationSummary = {
   nextSectionNum: number
   plotCount: number
   paymentStatus: string | null
+  /**
+   * Whether this application is still editable, and why. Submitted applications
+   * stay editable until the window closes, so the row action cannot be derived
+   * from `status` alone — see `applicationEditGate` in @kip/shared.
+   */
+  edit: ApplicationEditGate
 }
 
 export type ApplicationDetail = {
@@ -377,6 +391,22 @@ export async function getInvestorDashboardData(
     })),
     windowCloseAt: windowIsOpen ? activeWindow!.closeAt.toISOString() : null,
     windowName:    windowIsOpen ? activeWindow!.name : null,
+    edit: app
+      ? applicationEditGate({
+          status: app.status,
+          role: user?.role,
+          // `activeWindow` is already filtered to status OPEN by the query; the
+          // gate re-checks the date range itself.
+          window: activeWindow
+            ? {
+                status: ApplicationWindowStatus.OPEN,
+                openAt: activeWindow.openAt,
+                closeAt: activeWindow.closeAt,
+              }
+            : null,
+          now,
+        })
+      : null,
     mustChangePassword: user ? user.passwordChangedAt == null : false,
   } satisfies DashboardData;
 }
@@ -406,6 +436,19 @@ export async function listInvestorApplications(
   const apps = allApps.filter((a) => a.status !== "WITHDRAWN");
 
   const totalSections = SECTION_ORDER.length;
+
+  // One window read for the whole list: the edit gate is a schedule question,
+  // so every row is judged against the same instant. The role goes in too, so
+  // an ADMIN previewing the journey sees the same actions the API will accept.
+  const [openWindow, actor] = await Promise.all([
+    ApplicationWindow.findOne({
+      where: { status: ApplicationWindowStatus.OPEN },
+      order: [["openAt", "DESC"]],
+      attributes: ["status", "openAt", "closeAt"],
+    }),
+    User.findByPk(userId, { attributes: ["role"] }),
+  ]);
+  const now = new Date();
 
   const [payments, plotRows] = await Promise.all([
     Payment.findAll({
@@ -455,6 +498,12 @@ export async function listInvestorApplications(
       nextSectionNum: firstIncompleteIdx >= 0 ? firstIncompleteIdx + 1 : 1,
       plotCount: plotCountByApp.get(app.id) ?? 0,
       paymentStatus: paymentByApp.get(app.id) ?? null,
+      edit: applicationEditGate({
+        status: app.status,
+        role: actor?.role,
+        window: openWindow,
+        now,
+      }),
     } satisfies ApplicationSummary;
   });
 }

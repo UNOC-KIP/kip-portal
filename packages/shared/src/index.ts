@@ -5,6 +5,7 @@ export * from "./fees";
 export * from "./timeline";
 export * from "./communications";
 export * from "./eoi-preview";
+export * from "./application-edit";
 export * from "./reference";
 export * from "./schemas/application";
 export * from "./eoi-documents";

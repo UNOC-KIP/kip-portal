@@ -14,13 +14,6 @@ import {
   type ApplicationSummary,
 } from "@/lib/investor-data";
 
-/** Statuses the investor can still edit — a "Resume" lands in the wizard. */
-const EDITABLE_STATUSES = new Set([
-  "DRAFT_PAYMENT_PENDING",
-  "DRAFT",
-  "TC_CLARIFICATION_REQUESTED",
-]);
-
 /** Investors may delete only their own pre-submission drafts. */
 const DELETABLE_STATUSES = new Set(["DRAFT_PAYMENT_PENDING", "DRAFT"]);
 
@@ -33,12 +26,21 @@ function formatDate(iso: string) {
   });
 }
 
-/** Where the row action leads, given the application's stage. */
+/**
+ * Where the row action leads. Editability is not a function of status alone —
+ * a submitted application is still the applicant's until the window closes —
+ * so this asks the shared gate that `listInvestorApplications` resolved.
+ */
 function destinationFor(a: ApplicationSummary): { href: string; label: string } {
-  if (EDITABLE_STATUSES.has(a.status)) {
+  if (a.edit.editable) {
     return {
       href: `/dashboard/eoi/${a.id}/${a.nextSectionNum}`,
-      label: a.completedCount === a.totalSections ? "Review" : "Resume",
+      label:
+        a.edit.mode === "AMEND"
+          ? "Edit"
+          : a.completedCount === a.totalSections
+            ? "Review"
+            : "Resume",
     };
   }
   return {

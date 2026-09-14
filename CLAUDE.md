@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 10 September 2026. Update this file in the same commit as any architectural change.
+> Last updated: 14 September 2026. Update this file in the same commit as any architectural change.
+> Post-submission editing added 14 September 2026 — submission is no longer the lock; one pure gate keeps a submitted application editable by its applicant until the window closes, and the wizard, the row actions and the API write guards all read it. See "Editing after submission".
 > Invoice-readiness gate added 10 September 2026 — one pure gate (plots + TIN + registered address) closes the portal's "Generate invoice" buttons and the API write together, and the finance CSV now carries the whole billed party. See "Invoice readiness".
 > Finance workspace documented 9 September 2026 — fee invoicing, payment verification, the applicant profile behind an invoice and the proof-of-payment download. See "Finance (application fee)".
 > Site-visit booking gate enforced end to end 24 August 2026 — one pure gate closes the form, the public CTAs and the API writes together. See "Site-visit booking window".
@@ -184,8 +185,9 @@ WITHDRAWN               → terminal (before SUBMITTED)
 1. Cannot leave `DRAFT_PAYMENT_PENDING` until `Payment.status = CONFIRMED`
 2. `SUBMITTED` requires `ApplicationWindow.status = OPEN` and `now()` in window range
 3. TC / LAC / ExCo cannot access applications while window is still open → 403
-4. ExCo is one-shot — no reversal
-5. LAC `REQUEST_MORE_INFO` creates a `ClarificationRequest` row; does NOT create a second LAC record
+4. A `SUBMITTED` application stays editable by its applicant while the window is open — see "Editing after submission"
+5. ExCo is one-shot — no reversal
+6. LAC `REQUEST_MORE_INFO` creates a `ClarificationRequest` row; does NOT create a second LAC record
 
 ---
 
@@ -280,8 +282,8 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 
 | Module | Status |
 |---|---|
-| `applications/` | create draft, get, `PUT /:id/section` (owner or ADMIN — **`complete` flag splits draft saves from completion**), `GET /:id/blockers` (dry run of the submit guard), submit (DRAFT→SUBMITTED assigns ref); `DELETE /:id` soft delete + payments (ADMIN only) |
-| `documents/` | EOI attachments. `POST /presign` → S3 PUT URL; `POST /` registers the row **after** the upload succeeds; `GET /?applicationId=`; `GET /:id/download`; `DELETE /:id`. Owner-or-ADMIN, PDF-only, 5 MB. Payment proof is rejected here — it belongs to `payments/` |
+| `applications/` | create draft, get, `PUT /:id/section` (owner or ADMIN — **`complete` flag splits draft saves from completion**), `GET /:id/blockers` (dry run of the submit guard), submit (DRAFT→SUBMITTED assigns ref); `PUT /:id/partners` + `PUT /:id/plots`; `DELETE /:id` soft delete + payments (ADMIN only). Every write above is fronted by `assertApplicationEditable()` — see "Editing after submission" |
+| `documents/` | EOI attachments. `POST /presign` → S3 PUT URL; `POST /` registers the row **after** the upload succeeds; `GET /?applicationId=`; `GET /:id/download`; `DELETE /:id`. Owner-or-ADMIN, PDF-only, 5 MB. Payment proof is rejected here — it belongs to `payments/`. Add/remove follows the application's edit gate, not a status list of its own |
 | `payments/` | initiate only |
 | `users/` | **Self-service (any authenticated user, declared before `/:id`):** `PATCH /me` (own rep details + own org contact block — never email/role/status/legal identity); `POST /me/password` (verify current → set new, stamps `passwordChangedAt`, best-effort confirmation email). **ADMIN only:** `POST /staff` (create staff); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject`; `POST /:id/reset-password` (ACTIVE accounts only — generates a new temp password, clears `passwordChangedAt`, emails it to the login address; plaintext never returned to the admin or any webhook) |
 | `windows/` | `POST /` create; `PATCH /:id` update; `DELETE /:id` soft delete (not while OPEN); `POST /:id/open|close|archive` status transitions (ADMIN only) |
@@ -449,6 +451,32 @@ Never re-derive the requirement inline, and never let a portal button offer a ge
 
 ---
 
+## Editing after submission
+
+**The application window is the lock, not the submit button.** An investor may keep changing a `SUBMITTED` application — sections, joint-venture partners, attachments — for as long as the `ApplicationWindow` is OPEN and `now` is inside its range. Submitting early used to freeze an application while the call still had weeks to run, which turned every typo into a Request for Clarification.
+
+One pure function decides it — **`applicationEditGate()` in `packages/shared/src/application-edit.ts`**. Pure, `now` injected, unit-tested in `apps/portal/src/lib/application-edit.test.ts`. It returns `{ editable, mode, closesAt, message }`, and the `mode` is what callers branch on:
+
+| mode | when | notes |
+|---|---|---|
+| `DRAFT` | `DRAFT_PAYMENT_PENDING` / `DRAFT` | editable with or without an open window (they just can't submit) |
+| `AMEND` | `SUBMITTED` **and** a genuinely open window | changes land immediately; nothing is resubmitted |
+| `CLARIFICATION` | `TC_CLARIFICATION_REQUESTED` | outranks the schedule — the TC may ask after the window shuts |
+| `STAFF` | actor is `ADMIN` | console raw-JSON corrections + EOI preview, at any stage |
+| `LOCKED` | everything else | read-only |
+
+Status `OPEN` alone is not enough: a stale window left OPEN with a past `closeAt` must not hand a submitted application back to its applicant, so the gate re-checks the date range itself (same trap `toWindowRow()` and `eoiCallReadiness()` exist for).
+
+Four consumers read that one gate, which is the point — the fields the portal lets an investor type into and the writes the API accepts cannot drift:
+- **The API** — `assertApplicationEditable()` in `apps/api/src/modules/applications/application-edit.ts` fronts `saveSection()`, `savePartners()` and `setApplicationPlots()`, and the documents module's `assertMutable()` delegates to it. The 409 carries `gate.message`, so the sentence the API refuses with is the sentence the portal shows.
+- **The EOI wizard** — `EoiWizardData.edit` drives read-only mode, the banner, and the closing controls. In `AMEND` the "Submit EOI application" button is replaced by "Save changes" (there is nothing to submit again) and the "payable after you submit" fee card is hidden.
+- **The applications list** — `ApplicationSummary.edit` decides whether a row offers Edit / Resume / Review or View. Never re-derive it from `status`.
+- **The dashboard** — `DashboardData.edit`; the post-submission card gains an "Edit my application" button while `mode === "AMEND"`.
+
+**Plots are the one exception, and `canEditPlots()` is where it is written down.** Submitting prices the fee per plot (`computeApplicationFee`) and hands finance an invoice that may already have been sent and paid, so `setApplicationPlots()` refuses during `AMEND` and the wizard's `PlotPicker` is disabled with a pointer to the secretariat. ADMIN can still correct a selection.
+
+**An amendment does not re-run the submit guard.** Draft saves stay available (`complete: false` still clears `completedAt`), so an investor mid-edit never loses work — which means an applicant *can* leave a submitted application with a section they emptied. That is deliberate: `submissionBlockers()` is a gate on the SUBMITTED *transition*, and re-running it on every keystroke would break save-and-resume. "Check my application" (`GET /:id/blockers`) stays available throughout the amendment window, and an incomplete application is exactly what TC review and `TC_CLARIFICATION_REQUESTED` exist to catch.
+
 ## Site-visit booking window
 
 Whether an investor may request a site visit is decided by **one pure function** — `siteVisitBookingGate()` in `packages/shared/src/timeline.ts`. It reads the timeline: a `SITE_VISIT_BOOKING` milestone closes bookings at its `endsAt` (or `startsAt`); a legacy timeline with only a combined `SITE_VISIT` milestone closes them when the visits begin; a timeline scheduling no visits at all leaves them open (nothing has closed yet). Pure, `now` injected, unit-tested in `apps/portal/src/lib/timeline.test.ts`.
@@ -548,6 +576,8 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `packages/shared/src/zones.ts` | `KIP_ZONES` — zone labels, colours, areas, land uses. Source of truth for the land map + site-visit form |
 | `packages/shared/src/communications.ts` | Pure broadcast rendering — `MERGE_TOKENS`, `applyMergeTokens()`, `sampleMergeVars()`, `renderBodyHtml()` (escape-then-format; the XSS boundary), `bodyExcerpt()`, plus the broadcast-attachment rules (`COMMUNICATION_ATTACHMENT_MAX_BYTES`, `COMMUNICATION_ATTACHMENT_TYPES`, `validateCommunicationFile()`, `formatFileSize()`). Shared by the composer preview, the API's send, and the portal inbox. Tested in `apps/web/src/lib/communications.test.ts` |
 | `packages/shared/src/schemas/application.ts` | **The EOI, in executable form** — six section schemas transcribed from the Master Content Specification, the `notApplicable` mechanism (`requireUnlessNA`), EOI form enums + label maps, `ugandanEmploymentPercentages()`, `crossSectionIssues()`, `EOI_SECTION_ORDER`/`_LABELS`, `updateSectionSchema` (the `complete` flag), and the status transition table |
+| `packages/shared/src/application-edit.ts` | **The single application-edit gate** — `applicationEditGate()` (`DRAFT` / `AMEND` / `CLARIFICATION` / `STAFF` / `LOCKED`) and `canEditPlots()`. Pure, `now` injected; read by the API write guards, the EOI wizard, the applications list and the dashboard. See "Editing after submission". Tested in `apps/portal/src/lib/application-edit.test.ts` |
+| `apps/api/src/modules/applications/application-edit.ts` | The API's half of that gate — `editGateFor()` reads the live OPEN window, `assertApplicationEditable()` throws `Conflict(gate.message)`. Used by `applications/` **and** `documents/` so attachments follow the sections they belong to |
 | `packages/shared/src/eoi-preview.ts` | Admin EOI preview policy — `EOI_PREVIEW_ROLES`, `canPreviewEoi()`, `previewOrgLegalName()`, `isPreviewOrgName()`. Pure; read by all three apps |
 | `apps/portal/src/components/admin-preview-banner.tsx` | Banner shown on every investor-portal page while a preview role is signed in — warns that the data is real |
 | `packages/shared/src/eoi-documents.ts` | The attachment checklist — `EOI_DOCUMENT_REQUIREMENTS` (kind, clause, descriptor, required, multiple, applicant category, N/A allowed), `documentRequirementsFor()`, `missingRequiredDocuments()`, `validateEoiFile()`, `EOI_MAX_FILE_BYTES` (5 MB, PDF only). Pure |
@@ -721,6 +751,9 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Give a preview actor a separate code path, mock S3, or skip validation — preview runs the real services or it proves nothing
 - Write `User.investorOrgId` on a staff account — the preview sandbox org hangs off the `Application`, which is what keeps admins out of investor reports
 - Assume an investor has an `Application` — registration creates none; `POST /applications` from the dashboard does
+- Treat `SUBMITTED` as read-only to the applicant, or re-derive editability from a status list — call `applicationEditGate()`, the one gate the wizard, the row actions and the API write guards share. The window closing is the lock
+- Let an amendment change the plot selection — the fee is priced per plot and the invoice may already be out; `canEditPlots()` is the exception and the secretariat handles the rest
+- Give the documents module its own editable-status list — it delegates to `assertApplicationEditable()`, so an attachment can never outlive the section that refers to it
 - Re-derive the invoice requirements inline, or let a portal "Generate invoice" button offer what the API refuses — call `invoiceBlockers()`, the one gate the API guard and both portal buttons share
 - Narrow `getFinanceRows()` to submitted applications only — the merge with applications that already have a `Payment` is what keeps early-invoiced applicants visible to the people billing them
 - Expose `GET /applications/:id/proof` to `INVESTOR`, or proxy a proof/invoice through the API — finance/admin only, and downloads are presigned S3 URLs

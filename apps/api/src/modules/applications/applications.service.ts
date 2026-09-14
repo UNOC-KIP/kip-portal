@@ -33,12 +33,14 @@ import {
   FINAL_OUTCOME_STATUSES,
   REFERENCED_STATUSES,
   PLOT_SELECTION_ENABLED,
+  canEditPlots,
   type ApplicantCategory,
   type AdminOverrideStatusInput,
   type SavePartnersInput,
   type SetApplicationPlotsInput,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
+import { assertApplicationEditable } from "./application-edit.js";
 import { ensureFeePayment } from "../payments/payments.service.js";
 
 const ALL_SECTIONS = Object.values(EoiSection);
@@ -124,19 +126,11 @@ export async function saveSection(
     throw Forbidden("You can only edit your own application");
   }
 
-  // Once submitted the payload is evidence before a committee, so an investor
-  // can no longer edit it. ADMIN keeps write access for the raw-JSON corrections
-  // the console offers.
-  const editable: string[] = [
-    ApplicationStatus.DRAFT_PAYMENT_PENDING,
-    ApplicationStatus.DRAFT,
-    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
-  ];
-  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
-    throw Conflict(
-      `This application can no longer be edited (status ${app.status})`,
-    );
-  }
+  // A submitted application stays the applicant's until the call closes — the
+  // window is the lock, not the submit button. `assertApplicationEditable`
+  // reads the same shared gate the wizard renders, so the fields the portal
+  // lets an investor type into are exactly the ones this accepts.
+  await assertApplicationEditable(app, actor);
 
   const payload = input.complete
     ? (sectionSchemas[input.section].parse(input.payload) as object)
@@ -623,14 +617,7 @@ export async function savePartners(
   if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
     throw Forbidden("You can only edit your own application");
   }
-  const editable: string[] = [
-    ApplicationStatus.DRAFT_PAYMENT_PENDING,
-    ApplicationStatus.DRAFT,
-    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
-  ];
-  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
-    throw Conflict(`This application can no longer be edited (status ${app.status})`);
-  }
+  await assertApplicationEditable(app, actor);
 
   const partners = input.partners;
   // Only an explicitly flagged partner is the lead; the co-venturer list may
@@ -702,13 +689,15 @@ export async function setApplicationPlots(
   if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
     throw Forbidden("You can only edit your own application");
   }
-  const editable: string[] = [
-    ApplicationStatus.DRAFT_PAYMENT_PENDING,
-    ApplicationStatus.DRAFT,
-    ApplicationStatus.TC_CLARIFICATION_REQUESTED,
-  ];
-  if (!editable.includes(app.status) && actor.role !== UserRole.ADMIN) {
-    throw Conflict(`This application can no longer be edited (status ${app.status})`);
+  // Plots are the one thing an amendment may not touch: submitting prices the
+  // fee per plot and hands finance an invoice, so a post-submission plot change
+  // would silently desync an invoice that may already have been sent and paid.
+  // `canEditPlots` is where that exception is written down.
+  const gate = await assertApplicationEditable(app, actor);
+  if (!canEditPlots(gate)) {
+    throw Conflict(
+      "Your application fee has already been raised for the plots you selected, so they can no longer be changed here. Contact the KIP secretariat to amend your plot selection.",
+    );
   }
 
   const plotIds = Array.from(new Set(input.plotIds));

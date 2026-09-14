@@ -211,6 +211,10 @@ export default async function InvestorDashboardPage({
 
   const statusBadge = app ? statusBadgeProps(app.status) : null;
 
+  // Submitted but still changeable: the window, not the submit button, is the
+  // lock (see `applicationEditGate` in @kip/shared).
+  const canAmend = data.edit?.mode === "AMEND";
+
   const sections = app?.sections ?? [];
   const completedCount = sections.filter((s) => s.complete).length;
   const totalSections = 6;
@@ -798,10 +802,20 @@ export default async function InvestorDashboardPage({
                     <StatusBadge variant={statusBadge!.variant}>{statusBadge!.label}</StatusBadge>
                   </div>
                   <p className="mt-3 text-sm text-ink-500">
-                    Your EOI is progressing through the KIP review pipeline. You&apos;ll be notified
-                    by email of any updates or requests for clarification.
+                    {canAmend
+                      ? data.edit!.message
+                      : "Your EOI is progressing through the KIP review pipeline. You'll be notified by email of any updates or requests for clarification."}
                   </p>
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                    {/* Submitted, but the call is still open — the applicant can
+                        still correct what they sent. */}
+                    {canAmend && (
+                      <Button asChild size="sm">
+                        <Link href={`/dashboard/eoi/${app.id}/1`}>
+                          Edit my application →
+                        </Link>
+                      </Button>
+                    )}
                     <Button asChild variant="outline" size="sm">
                       <Link href={`/dashboard/application/${app.reference}`}>
                         View application details →
