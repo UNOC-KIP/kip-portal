@@ -5,6 +5,7 @@ import {
   ApplicationPartner,
   ApplicationPlot,
   ApplicationSection,
+  ApplicationWindow,
   Document,
   InvestorOrg,
   Plot,
@@ -12,10 +13,14 @@ import {
 } from "@kip/db";
 import {
   ApplicationStatus,
+  ApplicationWindowStatus,
   CompanyType,
   EoiSection,
   ApplicantCategory,
   LegalForm,
+  applicationEditGate,
+  canEditPlots,
+  type ApplicationEditGate,
 } from "@kip/shared";
 
 /**
@@ -81,8 +86,16 @@ export type EoiWizardData = {
     /** Plots this application has selected (may be several). */
     selectedPlotIds: string[];
   };
-  /** True while the investor may still edit — drives read-only mode. */
+  /**
+   * Whether the investor may still edit, and why — drives read-only mode, the
+   * banner wording and whether the wizard offers Submit or amendment controls.
+   * See `applicationEditGate` in @kip/shared.
+   */
+  edit: ApplicationEditGate;
+  /** Shorthand for `edit.editable`, which most of the wizard just wants. */
   editable: boolean;
+  /** False during an amendment — the fee is already priced per plot. */
+  plotsEditable: boolean;
   sections: EoiSectionState[];
   documents: EoiDocument[];
   /** Joint-venture co-applicants (empty for a single-company application). */
@@ -158,13 +171,6 @@ export function prefillPreliminaryInfo(
   };
 }
 
-/** Statuses in which the investor may still edit the EOI. */
-const EDITABLE_STATUSES: string[] = [
-  ApplicationStatus.DRAFT_PAYMENT_PENDING,
-  ApplicationStatus.DRAFT,
-  ApplicationStatus.TC_CLARIFICATION_REQUESTED,
-];
-
 /**
  * Everything the wizard needs in one read. Returns null when the investor has
  * no application yet — the caller redirects to the dashboard, which owns the
@@ -233,6 +239,22 @@ export async function getEoiWizardData(
     plotCounts.set(ap.plotId, (plotCounts.get(ap.plotId) ?? 0) + 1);
   }
 
+  // Whether this application is still editable is a schedule question, not a
+  // status question: a submitted application stays the applicant's until the
+  // application window closes. One shared gate answers it for the wizard, the
+  // applications list and the API's write guards alike.
+  const openWindow = await ApplicationWindow.findOne({
+    where: { status: ApplicationWindowStatus.OPEN },
+    order: [["openAt", "DESC"]],
+    attributes: ["status", "openAt", "closeAt"],
+  });
+  const edit = applicationEditGate({
+    status: application.status,
+    role: user.role,
+    window: openWindow,
+    now: new Date(),
+  });
+
   return {
     application: {
       id: application.id,
@@ -241,7 +263,9 @@ export async function getEoiWizardData(
       lotReference: application.lotReference,
       selectedPlotIds,
     },
-    editable: EDITABLE_STATUSES.includes(application.status),
+    edit,
+    editable: edit.editable,
+    plotsEditable: canEditPlots(edit),
     sections: sections.map((s) => ({
       section: s.section as EoiSection,
       payload: (s.payload ?? {}) as Record<string, unknown>,

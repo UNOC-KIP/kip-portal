@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { Application, ApplicationPartner, Document } from "@kip/db";
 import {
-  ApplicationStatus,
   DocumentKind,
   UserRole,
   EOI_DOCUMENT_REQUIREMENTS,
 } from "@kip/shared";
 import { BadRequest, Conflict, Forbidden, NotFound } from "../../errors.js";
 import { presignUpload, presignDownload } from "../../storage/index.js";
+import { assertApplicationEditable } from "../applications/application-edit.js";
 import type {
   PresignDocumentInput,
   RegisterDocumentInput,
@@ -53,24 +53,19 @@ async function assertPartnerBelongs(
 }
 
 /**
- * Statuses in which the investor may still add or remove attachments. Once the
- * application is with a committee its documents are evidence, so only ADMIN can
- * touch them — except during TC_CLARIFICATION_REQUESTED, which exists precisely
- * so the applicant can supply what was missing.
+ * Attachments follow the application: whenever the investor may still edit a
+ * section they may still change the files that section refers to, and once the
+ * application locks so do its documents. That is the shared gate in
+ * @kip/shared, read here through the same API helper the application service
+ * uses — re-deriving the rule from a status list is what let the two drift.
+ *
+ * In practice this means an attachment can be replaced after submission while
+ * the application window is still open, which is the point: a wrong or
+ * unreadable certificate is exactly the kind of thing an applicant notices the
+ * day after submitting.
  */
-const MUTABLE_STATUSES: string[] = [
-  ApplicationStatus.DRAFT_PAYMENT_PENDING,
-  ApplicationStatus.DRAFT,
-  ApplicationStatus.TC_CLARIFICATION_REQUESTED,
-];
-
-function assertMutable(app: Application, actor: Actor): void {
-  if (actor.role === UserRole.ADMIN) return;
-  if (!MUTABLE_STATUSES.includes(app.status)) {
-    throw Conflict(
-      `Documents can no longer be changed (application status ${app.status})`,
-    );
-  }
+async function assertMutable(app: Application, actor: Actor): Promise<void> {
+  await assertApplicationEditable(app, actor);
 }
 
 /** Kinds the checklist says may hold only one file (spec §1–§6). */
@@ -88,7 +83,7 @@ export async function presignDocument(
   actor: Actor,
 ): Promise<{ documentId: string; uploadUrl: string; storageKey: string }> {
   const app = await loadApplicationFor(input.applicationId, actor);
-  assertMutable(app, actor);
+  await assertMutable(app, actor);
   await assertPartnerBelongs(input.applicationId, input.partnerId);
 
   if (input.kind === DocumentKind.PAYMENT_PROOF) {
@@ -116,7 +111,7 @@ export async function registerDocument(
   actor: Actor,
 ): Promise<Document> {
   const app = await loadApplicationFor(input.applicationId, actor);
-  assertMutable(app, actor);
+  await assertMutable(app, actor);
   await assertPartnerBelongs(input.applicationId, input.partnerId);
 
   if (input.kind === DocumentKind.PAYMENT_PROOF) {
@@ -218,7 +213,7 @@ export async function deleteDocument(
   if (!doc) throw NotFound("Document");
 
   const app = await loadApplicationFor(doc.applicationId, actor);
-  assertMutable(app, actor);
+  await assertMutable(app, actor);
 
   if (doc.kind === DocumentKind.PAYMENT_PROOF && actor.role !== UserRole.ADMIN) {
     throw Forbidden("Proof of payment cannot be removed once uploaded");

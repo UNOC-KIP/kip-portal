@@ -19,7 +19,7 @@ import {
   REPORTING_YEARS,
   sectionSchemas,
 } from "@kip/shared";
-import { AlertTriangle, Check, Loader2, Lock } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Lock, PencilLine } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -134,6 +134,12 @@ export function EoiWizard({
   const [blockers, setBlockers] = useState<Blocker[]>([]);
 
   const disabled = !data.editable;
+  /**
+   * An amendment is not a draft: the application is already submitted, so there
+   * is nothing to submit again and no invoice still to be raised. The wizard
+   * keeps the same forms but swaps the closing controls.
+   */
+  const amending = data.edit.mode === "AMEND";
 
   const set = useCallback((path: string, next: unknown) => {
     setPayload((current) => setIn(current, path, next) as Record<string, unknown>);
@@ -245,6 +251,8 @@ export function EoiWizard({
 
     router.refresh();
     if (step < EOI_SECTION_ORDER.length) router.push(`/dashboard/eoi/${data.application.id}/${step + 1}`);
+    else if (amending)
+      setBanner("Changes saved. Your submitted application now reflects them.");
     else setBanner("Section complete. Review the checklist below, then submit.");
   }
 
@@ -405,12 +413,25 @@ export function EoiWizard({
               returned as a Request for Clarification before a decision is made.
             </p>
 
-            {disabled && (
-              <div className="mb-5 flex items-start gap-2 rounded-lg border border-ink-300 bg-white px-4 py-3 text-sm text-ink-700">
-                <Lock size={16} className="mt-0.5 shrink-0 text-ink-400" />
+            {/* One notice, worded by the shared gate — so what the investor is
+                told here is the same sentence the API refuses with. */}
+            {data.edit.mode !== "DRAFT" && data.edit.mode !== "STAFF" && (
+              <div
+                className={cn(
+                  "mb-5 flex items-start gap-2 rounded-lg border px-4 py-3 text-sm",
+                  disabled
+                    ? "border-ink-300 bg-white text-ink-700"
+                    : "border-blue-300 bg-blue-50 text-blue-900",
+                )}
+              >
+                {disabled ? (
+                  <Lock size={16} className="mt-0.5 shrink-0 text-ink-400" />
+                ) : (
+                  <PencilLine size={16} className="mt-0.5 shrink-0 text-blue-500" />
+                )}
                 <span>
-                  This application is now with the review committee and can no longer be
-                  edited. It is shown here read-only.
+                  {data.edit.message}
+                  {disabled && " It is shown here read-only."}
                 </span>
               </div>
             )}
@@ -470,7 +491,7 @@ export function EoiWizard({
                       plots={data.plots}
                       selectedPlotIds={data.application.selectedPlotIds}
                       billing={data.billing}
-                      disabled={disabled}
+                      disabled={disabled || !data.plotsEditable}
                       onTotalAcresChange={handlePlotAcres}
                     />
                   )}
@@ -493,7 +514,7 @@ export function EoiWizard({
               </div>
             </EoiFormProvider>
 
-            {!disabled && isLast && APPLICATION_FEE_ENABLED && (
+            {!disabled && !amending && isLast && APPLICATION_FEE_ENABLED && (
               <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
                 <p className="text-sm font-bold text-ink-900">
                   Application fee — payable after you submit
@@ -562,20 +583,36 @@ export function EoiWizard({
                       >
                         Check my application
                       </Button>
-                      <Button
-                        onClick={handleSubmit}
-                        disabled={busy !== null}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {busy === "submit" ? (
-                          <>
-                            <Loader2 size={14} className="mr-1.5 animate-spin" />
-                            Submitting…
-                          </>
-                        ) : (
-                          "Submit EOI application"
-                        )}
-                      </Button>
+                      {/* Already submitted: the only closing action is to mark
+                          this section complete again — resubmitting is neither
+                          possible nor needed. */}
+                      {amending ? (
+                        <Button onClick={handleContinue} disabled={busy !== null}>
+                          {busy === "continue" ? (
+                            <>
+                              <Loader2 size={14} className="mr-1.5 animate-spin" />
+                              Saving…
+                            </>
+                          ) : (
+                            "Save changes"
+                          )}
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={handleSubmit}
+                          disabled={busy !== null}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          {busy === "submit" ? (
+                            <>
+                              <Loader2 size={14} className="mr-1.5 animate-spin" />
+                              Submitting…
+                            </>
+                          ) : (
+                            "Submit EOI application"
+                          )}
+                        </Button>
+                      )}
                     </>
                   ) : (
                     <Button onClick={handleContinue} disabled={busy !== null}>
