@@ -139,7 +139,7 @@ docker build -f apps/portal/Dockerfile -t kip-portal-app \
    unzip -q awscliv2.zip && sudo ./aws/install && rm -rf aws awscliv2.zip
   ```
 6. **Deploy key for GitHub Actions**: on your machine, `ssh-keygen -t ed25519 -f kip-deploy` → append `kip-deploy.pub` to `~/.ssh/authorized_keys` on the EC2. The private key becomes the `EC2_SSH_KEY` GitHub secret.
-7. **GHCR pull auth** on the EC2: create a GitHub classic PAT with only `read:packages`, then `docker login ghcr.io -u <your-username> -p <PAT>`.
+7. **GHCR pull auth**: nothing to set up. The deploy job logs the server in to GHCR with that run's short-lived `GITHUB_TOKEN`, pulls, and logs out again (`deploy.yml`). Do **not** store a PAT on the box: it expires and the deploy then fails at the pull with `error from registry: denied` (happened 5 October 2026). For a manual pull outside a deploy, log in by hand first and `docker logout ghcr.io` afterwards.
 8. **Server directory**:
   ```bash
    sudo mkdir -p /opt/kip && sudo chown ubuntu:ubuntu /opt/kip
