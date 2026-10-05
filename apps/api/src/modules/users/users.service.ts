@@ -24,6 +24,7 @@ import {
   passwordResetEmail,
   rejectionEmail,
   passwordChangedEmail,
+  staffWelcomeEmail,
 } from "../../mailer.js";
 import { env } from "../../env.js";
 
@@ -31,7 +32,18 @@ export async function createStaffUser(input: {
   name: string;
   email: string;
   role: string;
-}): Promise<{ id: string; email: string; role: string; tempPassword: string }> {
+}): Promise<{
+  id: string;
+  email: string;
+  role: string;
+  /** True when the login details reached the mail server. */
+  emailed: boolean;
+  /**
+   * Returned ONLY when the welcome email failed, so the admin can hand the
+   * password over themselves instead of being stuck with an unusable account.
+   */
+  tempPassword?: string;
+}> {
   const existing = await User.findOne({ where: { email: input.email } });
   if (existing) throw Conflict(`A user with email ${input.email} already exists`);
 
@@ -46,15 +58,38 @@ export async function createStaffUser(input: {
     passwordHash,
   });
 
+  // The new member gets their login details straight from the API, like an
+  // investor at registration — the password never passes through a webhook.
+  let emailed = false;
+  try {
+    await sendMail({
+      to: user.email,
+      subject: "Your KIP Admin Console account",
+      html: staffWelcomeEmail({
+        name: input.name,
+        email: user.email,
+        role: input.role,
+        tempPassword,
+        signInUrl: env.WEB_PUBLIC_URL,
+      }),
+    });
+    emailed = true;
+  } catch {
+    // Logged inside sendMail; the account stands and the admin gets the
+    // password back as a fallback.
+  }
+
   await fireWebhook("staff-invited", {
     userId: user.id,
     email: user.email,
     name: input.name,
     role: input.role,
-    tempPassword,
+    emailed,
   });
 
-  return { id: user.id, email: user.email, role: user.role, tempPassword };
+  return emailed
+    ? { id: user.id, email: user.email, role: user.role, emailed }
+    : { id: user.id, email: user.email, role: user.role, emailed, tempPassword };
 }
 
 function generatePassword(): string {
