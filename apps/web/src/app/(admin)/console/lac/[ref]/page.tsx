@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { LAC_DECISION_ROLES, LAC_REVIEW_ROLES } from "@kip/shared";
 import { AdminTopbar } from "@/components/admin-topbar";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge } from "@/components/status-badge";
@@ -7,28 +8,31 @@ import {
   ClarificationsPanel,
   DecisionLogPanel,
   GateNotice,
+  LacReviewsPanel,
   Panel,
 } from "@/components/committee/committee-panels";
 import { getAdminApplicationDetail } from "@/lib/admin/queries";
 import { getCommitteeContext } from "@/lib/admin/committee-queries";
 import { statusBadgeProps } from "@/lib/application-data";
 import { requireRole } from "@/lib/rbac-server";
-import { TC_ROLES } from "@/lib/rbac";
+import { LAC_ROLES } from "@/lib/rbac";
 import { ApplicationReviewBody } from "../../applications/application-review-body";
-import { TcDecisionForm } from "./tc-decision-form";
-import { AiScreeningButton } from "./ai-screening-button";
+import { LacDecisionForm, LacReviewForm } from "./lac-forms";
 
 export const dynamic = "force-dynamic";
 
-// Access (TC_MEMBER / TC_CHAIR / ADMIN) is also enforced by the tc/ layout guard.
-export default async function TcReviewPage({ params }: { params: { ref: string } }) {
-  const { session } = await requireRole(TC_ROLES);
+// Access (LAC_MEMBER / ADMIN) is also enforced by the lac/ layout guard.
+export default async function LacReviewPage({ params }: { params: { ref: string } }) {
+  const { session, role } = await requireRole(LAC_ROLES);
   const ref = decodeURIComponent(params.ref);
   const app = await getAdminApplicationDetail(ref);
   if (!app) notFound();
 
   const committee = await getCommitteeContext(app.id, app.status, session.user.id);
   const badge = statusBadgeProps(app.status);
+  const gate = committee.lacGate;
+  const isMember = LAC_REVIEW_ROLES.includes(role);
+  const canDecide = LAC_DECISION_ROLES.includes(role);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -36,15 +40,10 @@ export default async function TcReviewPage({ params }: { params: { ref: string }
       <main className="flex-1 p-6">
         <PageHeader
           crumbs={[
-            { label: "TC Review Queue", href: "/console/tc/queue" },
+            { label: "LAC Review Queue", href: "/console/lac/queue" },
             { label: app.reference ?? ref },
           ]}
-          action={
-            <div className="flex flex-wrap items-center gap-2">
-              <AiScreeningButton />
-              <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
-            </div>
-          }
+          action={<StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>}
         />
 
         <div className="mb-2">
@@ -61,13 +60,27 @@ export default async function TcReviewPage({ params }: { params: { ref: string }
           </div>
 
           <div className="min-w-0 space-y-4">
-            <Panel title="TC decision">
-              {committee.tcGate.open ? (
-                <TcDecisionForm applicationId={app.id} />
-              ) : (
-                <GateNotice reason={committee.tcGate.reason ?? "The TC cannot act on this application."} />
-              )}
-            </Panel>
+            {!gate.open && <GateNotice reason={gate.reason ?? "The LAC cannot act on this application."} />}
+
+            <LacReviewsPanel reviews={committee.lacReviews} tally={committee.lacTally} />
+
+            {gate.open && isMember && (
+              <Panel title="Your review">
+                <LacReviewForm applicationId={app.id} initial={committee.myLacReview} />
+              </Panel>
+            )}
+
+            {gate.open && canDecide && (
+              <Panel title="Committee decision" className="border-2">
+                {committee.lacTally.total === 0 && (
+                  <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    No member has recorded a recommendation yet. Record the decision only once the committee has agreed.
+                  </p>
+                )}
+                <LacDecisionForm applicationId={app.id} />
+              </Panel>
+            )}
+
             <ClarificationsPanel items={committee.clarifications} />
             <DecisionLogPanel entries={committee.decisionLog} />
             <AuditTrailPanel items={app.auditTrail} />

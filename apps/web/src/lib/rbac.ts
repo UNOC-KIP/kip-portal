@@ -22,6 +22,9 @@ export const STAFF_ROLES = [
 /** Roles that can reach the TC review area. ADMIN can see everything. */
 export const TC_ROLES = [UserRole.TC_MEMBER, UserRole.TC_CHAIR, UserRole.ADMIN] as const;
 
+/** LAC review area. ADMIN can see everything and may record the final decision. */
+export const LAC_ROLES = [UserRole.LAC_MEMBER, UserRole.ADMIN] as const;
+
 /** Finance workspace — application-fee invoicing and payment verification. */
 export const FINANCE_ROLES = [UserRole.FINANCE_OFFICER, UserRole.ADMIN] as const;
 
@@ -37,8 +40,8 @@ export const ADMIN_ONLY = [UserRole.ADMIN] as const;
  * INVESTOR routes live in apps/portal (port 4002). If an investor somehow
  * authenticates on this app they are redirected to the portal.
  *
- * LAC/ExCo have no dedicated workspace yet (Phase 3), so they land on the
- * neutral `/unauthorized` notice rather than seeing admin data.
+ * ExCo has no dedicated workspace yet, so it lands on the neutral
+ * `/unauthorized` notice rather than seeing admin data.
  */
 export function homePathForRole(role: Role | undefined | null): string {
   switch (role) {
@@ -52,6 +55,7 @@ export function homePathForRole(role: Role | undefined | null): string {
     case UserRole.FINANCE_OFFICER:
       return "/console/finance";
     case UserRole.LAC_MEMBER:
+      return "/console/lac/queue";
     case UserRole.EXCO_MEMBER:
       return "/unauthorized";
     default:
@@ -66,6 +70,7 @@ export type RolePolicy = readonly Role[] | "any" | null;
 // parents (/console).
 const ROUTE_POLICY: { prefix: string; policy: RolePolicy }[] = [
   { prefix: "/console/tc", policy: TC_ROLES },
+  { prefix: "/console/lac", policy: LAC_ROLES },
   { prefix: "/console/finance", policy: FINANCE_ROLES },
   { prefix: "/console", policy: ADMIN_ONLY },
   { prefix: "/launch", policy: "any" },

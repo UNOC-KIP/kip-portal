@@ -613,3 +613,35 @@ export function feeInvoiceEmail(opts: {
     <p style="margin:0;color:#71717a;font-size:13px">The bank account and payment details are on the attached invoice.</p>
   `);
 }
+
+/**
+ * A review committee has asked the investor for more information. The question
+ * is the committee's own wording, escaped; the reply happens on the portal
+ * dashboard, never by email.
+ */
+export function clarificationRequestEmail(opts: {
+  name: string;
+  reference: string;
+  committee: string;
+  question: string;
+  portalUrl: string;
+}): string {
+  return shell(`
+    <p style="margin:0 0 8px;color:#09090b;font-size:18px;font-weight:700">More information requested</p>
+    <p style="margin:0 0 18px;color:#3f3f46;font-size:14px;line-height:1.6">
+      Dear ${escapeHtml(opts.name)}, the ${escapeHtml(opts.committee)} reviewing application
+      <strong>${escapeHtml(opts.reference)}</strong> needs more information before it can continue.
+    </p>
+    <div style="margin:0 0 18px;padding:14px 16px;background:#f4f4f5;border-radius:8px;color:#09090b;font-size:14px;line-height:1.6;white-space:pre-wrap">${escapeHtml(opts.question)}</div>
+    <p style="margin:0 0 22px;color:#3f3f46;font-size:14px;line-height:1.6">
+      Sign in to the investor portal to update your application if needed, then send your reply
+      from your dashboard. Your application stays with the committee until you reply.
+    </p>
+    <p style="margin:0">
+      <a href="${escapeHtml(opts.portalUrl)}/dashboard"
+         style="display:inline-block;background:#000;color:#fff;font-size:14px;font-weight:600;padding:11px 24px;border-radius:8px;text-decoration:none">
+        Reply in the portal
+      </a>
+    </p>
+  `);
+}

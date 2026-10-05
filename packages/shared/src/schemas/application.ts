@@ -1149,24 +1149,37 @@ export const validTransitions: Record<ApplicationStatus, ApplicationStatus[]> =
       ApplicationStatus.SUBMITTED,  // all 6 sections complete + window OPEN
       ApplicationStatus.WITHDRAWN,
     ],
+    // Nothing moves SUBMITTED → UNDER_TC_REVIEW on its own, so once the window
+    // has closed the TC decides on a SUBMITTED application directly.
     [ApplicationStatus.SUBMITTED]: [
-      ApplicationStatus.UNDER_TC_REVIEW, // window closes
+      ApplicationStatus.UNDER_TC_REVIEW,
+      ApplicationStatus.TC_CLARIFICATION_REQUESTED,
+      ApplicationStatus.LAC_REVIEW,      // TC shortlists → straight into LAC review
+      ApplicationStatus.NOT_SHORTLISTED,
     ],
     [ApplicationStatus.UNDER_TC_REVIEW]: [
       ApplicationStatus.TC_CLARIFICATION_REQUESTED,
-      ApplicationStatus.SHORTLISTED,
+      ApplicationStatus.LAC_REVIEW,      // TC shortlists → straight into LAC review
       ApplicationStatus.NOT_SHORTLISTED,
     ],
     [ApplicationStatus.TC_CLARIFICATION_REQUESTED]: [
       ApplicationStatus.UNDER_TC_REVIEW, // investor responds
     ],
+    // Legacy resting state — TC shortlisting now lands in LAC_REVIEW directly.
+    // The LAC may still act on a SHORTLISTED application as if it were in review.
     [ApplicationStatus.SHORTLISTED]: [
       ApplicationStatus.LAC_REVIEW,
+      ApplicationStatus.LAC_CLARIFICATION_REQUESTED,
+      ApplicationStatus.LAC_APPROVED,
+      ApplicationStatus.LAC_REJECTED,
     ],
     [ApplicationStatus.LAC_REVIEW]: [
       ApplicationStatus.LAC_APPROVED,
       ApplicationStatus.LAC_REJECTED,
-      ApplicationStatus.SHORTLISTED, // REQUEST_MORE_INFO returns to SHORTLISTED
+      ApplicationStatus.LAC_CLARIFICATION_REQUESTED, // REQUEST_MORE_INFO
+    ],
+    [ApplicationStatus.LAC_CLARIFICATION_REQUESTED]: [
+      ApplicationStatus.LAC_REVIEW,      // investor responds
     ],
     [ApplicationStatus.LAC_APPROVED]: [
       ApplicationStatus.EXCO_REVIEW,
@@ -1208,6 +1221,7 @@ export const REFERENCED_STATUSES: ApplicationStatus[] = [
   ApplicationStatus.SHORTLISTED,
   ApplicationStatus.NOT_SHORTLISTED,
   ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_CLARIFICATION_REQUESTED,
   ApplicationStatus.LAC_APPROVED,
   ApplicationStatus.LAC_REJECTED,
   ApplicationStatus.EXCO_REVIEW,

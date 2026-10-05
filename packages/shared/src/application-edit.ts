@@ -81,7 +81,7 @@ const ALWAYS_EDITABLE: readonly string[] = [
  * `closeAt` must not reopen a submitted application (see CLAUDE.md, "a stale
  * window left OPEN with a past closeAt").
  */
-function openUntil(window: ApplicationEditWindow, now: Date): Date | null {
+export function openUntil(window: ApplicationEditWindow, now: Date): Date | null {
   if (!window || window.status !== ApplicationWindowStatus.OPEN) return null;
   const openAt = new Date(window.openAt);
   const closeAt = new Date(window.closeAt);
@@ -127,15 +127,21 @@ export function applicationEditGate(input: {
   }
 
   // A clarification request is an explicit invitation to edit, so it outranks
-  // the schedule — the TC may raise one after the window has closed, and the
-  // applicant has to be able to answer it.
-  if (status === ApplicationStatus.TC_CLARIFICATION_REQUESTED) {
+  // the schedule — either committee may raise one after the window has closed,
+  // and the applicant has to be able to answer it.
+  if (
+    status === ApplicationStatus.TC_CLARIFICATION_REQUESTED ||
+    status === ApplicationStatus.LAC_CLARIFICATION_REQUESTED
+  ) {
+    const committee =
+      status === ApplicationStatus.TC_CLARIFICATION_REQUESTED
+        ? "Technical Committee"
+        : "Land Allocation Committee";
     return {
       editable: true,
       mode: "CLARIFICATION",
       closesAt: null,
-      message:
-        "The Technical Committee has requested clarification. Update the items they raised — your answers go straight back to them.",
+      message: `The ${committee} has requested clarification. Update the items they raised, then send your reply from your dashboard.`,
     };
   }
 

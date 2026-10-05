@@ -85,6 +85,14 @@ describe("applicationEditGate", () => {
     const g = gate(ApplicationStatus.TC_CLARIFICATION_REQUESTED, null);
     expect(g.editable).toBe(true);
     expect(g.mode).toBe("CLARIFICATION");
+    expect(g.message).toContain("Technical Committee");
+  });
+
+  it("honours an LAC clarification request the same way, and names the LAC", () => {
+    const g = gate(ApplicationStatus.LAC_CLARIFICATION_REQUESTED, expiredWindow);
+    expect(g.editable).toBe(true);
+    expect(g.mode).toBe("CLARIFICATION");
+    expect(g.message).toContain("Land Allocation Committee");
   });
 
   it("locks every committee stage", () => {
@@ -92,6 +100,8 @@ describe("applicationEditGate", () => {
       ApplicationStatus.UNDER_TC_REVIEW,
       ApplicationStatus.SHORTLISTED,
       ApplicationStatus.LAC_REVIEW,
+      ApplicationStatus.LAC_APPROVED,
+      ApplicationStatus.LAC_REJECTED,
       ApplicationStatus.EXCO_REVIEW,
       ApplicationStatus.ALLOCATED,
       ApplicationStatus.NOT_SHORTLISTED,

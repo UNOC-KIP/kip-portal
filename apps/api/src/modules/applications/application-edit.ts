@@ -18,7 +18,7 @@ import { Conflict } from "../../errors.js";
  */
 
 /** The window the gate judges against: the most recent OPEN one, or null. */
-async function currentWindow() {
+export async function currentWindow() {
   return ApplicationWindow.findOne({
     where: { status: ApplicationWindowStatus.OPEN },
     order: [["openAt", "DESC"]],

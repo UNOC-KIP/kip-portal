@@ -36,6 +36,7 @@ import { SiteVisitSummary } from "@/components/site-visit-summary";
 import { EoiGuideCallout } from "@/components/eoi-guide-callout";
 import { StartEoiButton } from "./start-eoi-button";
 import { FeeActions } from "./fee-actions";
+import { ClarificationReply } from "./clarification-reply";
 import {
   getInvestorDashboardData,
   listInvestorApplications,
@@ -259,14 +260,16 @@ export default async function InvestorDashboardPage({
         {
           label: "Technical Committee Review",
           sub: "Scoring & shortlisting",
-          done: ["SHORTLISTED", "NOT_SHORTLISTED", "LAC_REVIEW", "LAC_APPROVED", "LAC_REJECTED", "EXCO_REVIEW", "ALLOCATED"].includes(app.status),
+          done: ["SHORTLISTED", "NOT_SHORTLISTED", "LAC_REVIEW", "LAC_CLARIFICATION_REQUESTED", "LAC_APPROVED", "LAC_REJECTED", "EXCO_REVIEW", "ALLOCATED"].includes(app.status),
           active: app.status === "UNDER_TC_REVIEW" || app.status === "TC_CLARIFICATION_REQUESTED",
         },
         {
           label: "Land Allocation Committee",
           sub: "Suitability review",
-          done: ["LAC_APPROVED", "LAC_REJECTED", "EXCO_REVIEW", "ALLOCATED"].includes(app.status),
-          active: app.status === "LAC_REVIEW",
+          // LAC outcomes stay internal until ExCo decides, so the LAC stage
+          // reads as in progress until then.
+          done: ["EXCO_REVIEW", "ALLOCATED"].includes(app.status),
+          active: ["SHORTLISTED", "LAC_REVIEW", "LAC_CLARIFICATION_REQUESTED", "LAC_APPROVED", "LAC_REJECTED"].includes(app.status),
         },
         {
           label: "ExCo Decision",
@@ -330,6 +333,16 @@ export default async function InvestorDashboardPage({
             </p>
           )}
         </div>
+
+        {/* ── A committee asked a question — the one thing that blocks review. */}
+        {app && data.clarification && (
+          <ClarificationReply
+            applicationId={app.id}
+            committee={data.clarification.committee}
+            question={data.clarification.question}
+            askedAt={data.clarification.askedAt}
+          />
+        )}
 
         {/* ── Your applications — switch between them, or start another.
             Investors may run several EOIs at once (different plots or joint-
@@ -953,7 +966,9 @@ export default async function InvestorDashboardPage({
                 <p className="text-xs leading-relaxed text-ink-500">
                   {app.status === "ALLOCATED"
                     ? "Your plot has been allocated. The KIP secretariat will be in touch about lease signing and site handover."
-                    : app.status === "NOT_SHORTLISTED" || app.status === "LAC_REJECTED"
+                    // LAC_REJECTED is deliberately not here — LAC outcomes stay
+                    // internal until the secretariat releases them.
+                    : app.status === "NOT_SHORTLISTED"
                       ? "A decision has been reached on your application. See the details page for the full audit trail."
                       : "Your application is under committee review. You'll be emailed the moment a decision is made or if clarification is needed."}
                 </p>

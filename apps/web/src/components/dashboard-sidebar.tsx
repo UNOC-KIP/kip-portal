@@ -17,6 +17,7 @@ import {
   Users,
   CalendarDays,
   Landmark,
+  Scale,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -40,6 +41,7 @@ const FULL_NAV = [
   { icon: LayoutGrid,     href: "/console",               label: "Dashboard" },
   { icon: FileText,       href: "/console/applications",  label: "Applications" },
   { icon: ClipboardCheck, href: "/console/tc/queue",      label: "TC Review" },
+  { icon: Scale,          href: "/console/lac/queue",     label: "LAC Review" },
   { icon: Megaphone,      href: "/console/communications",label: "Communications" },
   { icon: Smartphone,     href: "/console/land-plots",    label: "Land Plots" },
   { icon: Landmark,       href: "/console/finance/queue", label: "Finance" },
@@ -54,6 +56,11 @@ const TC_NAV = [
   { icon: ClipboardCheck, href: "/console/tc/queue", label: "TC Review" },
 ];
 
+// LAC member: the LAC queue only. (/console itself is ADMIN-only.)
+const LAC_NAV = [
+  { icon: Scale, href: "/console/lac/queue", label: "LAC Review" },
+];
+
 // Finance officer: finance-only workspace, no investor/admin data.
 const FINANCE_NAV = [
   { icon: LayoutGrid, href: "/console/finance",       label: "Dashboard" },
@@ -62,6 +69,7 @@ const FINANCE_NAV = [
 
 function getNavItems(role: string) {
   if (role === "FINANCE_OFFICER") return FINANCE_NAV;
+  if (role === "LAC_MEMBER") return LAC_NAV;
   return TC_ROLES.has(role) ? TC_NAV : FULL_NAV;
 }
 
@@ -70,6 +78,7 @@ function getRoleLabel(role: string) {
     ADMIN: "Administrator",
     TC_MEMBER: "TC Member",
     TC_CHAIR: "TC Chair",
+    LAC_MEMBER: "LAC Member",
     GM_URHC: "GM, URHC",
     EXCO_MEMBER: "ExCo Member",
     FINANCE_OFFICER: "Finance Officer",

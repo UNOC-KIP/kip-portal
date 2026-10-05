@@ -49,6 +49,7 @@ export const SUBMITTED_STATUSES = [
   ApplicationStatus.SHORTLISTED,
   ApplicationStatus.NOT_SHORTLISTED,
   ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_CLARIFICATION_REQUESTED,
   ApplicationStatus.LAC_APPROVED,
   ApplicationStatus.LAC_REJECTED,
   ApplicationStatus.EXCO_REVIEW,
@@ -77,7 +78,9 @@ export function tcStatusLabel(appStatus: string): "Approved" | "Rejected" | "In 
   switch (appStatus) {
     case ApplicationStatus.SHORTLISTED:
     case ApplicationStatus.LAC_REVIEW:
+    case ApplicationStatus.LAC_CLARIFICATION_REQUESTED:
     case ApplicationStatus.LAC_APPROVED:
+    case ApplicationStatus.LAC_REJECTED:
     case ApplicationStatus.EXCO_REVIEW:
     case ApplicationStatus.ALLOCATED:
       return "Approved";
@@ -529,6 +532,7 @@ export function applicationStageLabel(status: string | null | undefined): string
     case ApplicationStatus.SHORTLISTED:               return "Shortlisted";
     case ApplicationStatus.NOT_SHORTLISTED:           return "Not shortlisted";
     case ApplicationStatus.LAC_REVIEW:                return "LAC review";
+    case ApplicationStatus.LAC_CLARIFICATION_REQUESTED:return "LAC clarification";
     case ApplicationStatus.LAC_APPROVED:              return "LAC approved";
     case ApplicationStatus.LAC_REJECTED:              return "LAC rejected";
     case ApplicationStatus.EXCO_REVIEW:               return "ExCo review";
@@ -542,6 +546,7 @@ export function applicationStageLabel(status: string | null | undefined): string
 const SHORTLISTED_PLUS = new Set<string>([
   ApplicationStatus.SHORTLISTED,
   ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_CLARIFICATION_REQUESTED,
   ApplicationStatus.LAC_APPROVED,
   ApplicationStatus.LAC_REJECTED,
   ApplicationStatus.EXCO_REVIEW,
