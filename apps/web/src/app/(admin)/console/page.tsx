@@ -48,7 +48,7 @@ const PIPELINE_STAGES = [
   {
     key: "lac_review",
     label: "LAC Review",
-    statuses: [ApplicationStatus.LAC_REVIEW],
+    statuses: [ApplicationStatus.LAC_REVIEW, ApplicationStatus.LAC_CLARIFICATION_REQUESTED],
     color: "bg-amber-400",
     dotColor: "bg-amber-500",
     textColor: "text-amber-700",

@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 14 September 2026. Update this file in the same commit as any architectural change.
+> Last updated: 5 October 2026. Update this file in the same commit as any architectural change.
+> Committee review made real 5 October 2026 — the TC decision form was a mock that saved nothing; TC decisions, the LAC module (member reviews + one final decision) and the investor's reply to a request for more information now all go through the API's `reviews/` module, gated by one pure set of rules in `@kip/shared` committee.ts. See "Committee review (TC + LAC)".
 > Post-submission editing added 14 September 2026 — submission is no longer the lock; one pure gate keeps a submitted application editable by its applicant until the window closes, and the wizard, the row actions and the API write guards all read it. See "Editing after submission".
 > Invoice-readiness gate added 10 September 2026 — one pure gate (plots + TIN + registered address) closes the portal's "Generate invoice" buttons and the API write together, and the finance CSV now carries the whole billed party. See "Invoice readiness".
 > Finance workspace documented 9 September 2026 — fee invoicing, payment verification, the applicant profile behind an invoice and the proof-of-payment download. See "Finance (application fee)".
@@ -124,10 +125,11 @@ Two layers per portal, each with its own policy file:
 | web | Communications | `/console/communications` | `ADMIN` |
 | web | Admin console | `/console/*` (non-TC) | `ADMIN` |
 | web | TC review | `/console/tc/*` | `TC_MEMBER`, `TC_CHAIR`, `ADMIN` |
+| web | LAC review | `/console/lac/*` | `LAC_MEMBER`, `ADMIN` |
 | both | Post-login router | `/launch` | any authenticated |
 | web | No-workspace | `/unauthorized` | any authenticated |
 
-Post-login in `apps/web`: `/launch` → `homePathForRole()` → INVESTOR→`http://localhost:4002` (NEXT_PUBLIC_PORTAL_URL), ADMIN→`/console`, TC→`/console/tc/queue`, LAC/ExCo→`/unauthorized`.
+Post-login in `apps/web`: `/launch` → `homePathForRole()` → INVESTOR→`http://localhost:4002` (NEXT_PUBLIC_PORTAL_URL), ADMIN→`/console`, TC→`/console/tc/queue`, LAC→`/console/lac/queue`, FINANCE→`/console/finance`, ExCo→`/unauthorized`.
 
 ---
 
@@ -162,17 +164,17 @@ DRAFT
     │  All 6 sections filled; ApplicationWindow must be OPEN
     ▼
 SUBMITTED               ref = KIP-EOI-YYYY-NNNN assigned here
-    │  Window closes
+    │  Window closes — TC decides on SUBMITTED directly (nothing auto-moves it)
     ▼
 UNDER_TC_REVIEW
-    ├─ SHORTLISTED       → LAC_REVIEW
+    ├─ shortlist         → LAC_REVIEW (audit type SHORTLISTED; no resting SHORTLISTED status)
     ├─ NOT_SHORTLISTED   → terminal
-    └─ TC_CLARIFICATION_REQUESTED → back to UNDER_TC_REVIEW
+    └─ TC_CLARIFICATION_REQUESTED → investor replies → UNDER_TC_REVIEW
          ▼
-    LAC_REVIEW
-    ├─ LAC_APPROVED      → EXCO_REVIEW
+    LAC_REVIEW            (legacy SHORTLISTED rows are treated the same)
+    ├─ LAC_APPROVED      → ExCo's queue (EXCO_REVIEW)
     ├─ LAC_REJECTED      → terminal
-    └─ REQUEST_MORE_INFO → new ClarificationRequest row, stays SHORTLISTED
+    └─ LAC_CLARIFICATION_REQUESTED → investor replies → LAC_REVIEW
          ▼
     EXCO_REVIEW
     ├─ ALLOCATED         → terminal (success)
@@ -187,7 +189,8 @@ WITHDRAWN               → terminal (before SUBMITTED)
 3. TC / LAC / ExCo cannot access applications while window is still open → 403
 4. A `SUBMITTED` application stays editable by its applicant while the window is open — see "Editing after submission"
 5. ExCo is one-shot — no reversal
-6. LAC `REQUEST_MORE_INFO` creates a `ClarificationRequest` row; does NOT create a second LAC record
+6. A committee's request for more information creates a `ClarificationRequest` row (`committee` = TC | LAC) and parks the application in that committee's `*_CLARIFICATION_REQUESTED` status; it does NOT create a second LAC record — member reviews survive the round trip
+7. TC and LAC decisions are one-shot from the console; only the admin stage override (`PATCH /applications/:id/status`) moves an application afterwards
 
 ---
 
@@ -217,7 +220,8 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Document` | S3 file metadata |
 | `Payment` | `amount DECIMAL(14,2)`, `currency`, gates DRAFT_PAYMENT_PENDING→DRAFT |
 | `ReviewAction` | append-only audit log |
-| `ClarificationRequest` | LAC REQUEST_MORE_INFO records |
+| `ClarificationRequest` | a committee's request for more information — `committee` (`TC \| LAC`, CHECK), `notes` (the question, shown to the investor verbatim), `requestedById`, `response` + `respondedAt` (the investor's reply). The open one is the newest with `response IS NULL` |
+| `LacReview` | one LAC member's recommendation per application — `recommendation` (`APPROVE \| REJECT \| MORE_INFO`, CHECK), `notes`, `reviewerId`; UNIQUE (`applicationId`, `reviewerId`), revised in place. Never moves a status — the committee's final decision does |
 | `Notification` | **per-recipient delivery row for one `Communication`** — `userId` (nullable: notify-list recipients have no account), `communicationId`, `email`, `channel`, `subject`, `body` (stored already merge-rendered for *this* recipient, so inbox and email match word for word), `status (DeliveryStatus)`, `error` (SMTP failure reason), `sentAt`, `readAt`. Doubles as the investor Messages inbox when `userId` is set and the channel includes the portal. Was an unused table until 30 July 2026 |
 | `Communication` | one admin-composed broadcast — `subject`, `body` (raw markdown-lite), `channel (CommunicationChannel)`, `audience (CommunicationAudience)`, `audienceSummary` (human-readable, from `describeAudience()`), `filters JSONB` (the selection that produced the list), `status (CommunicationStatus)`, `recipientCount` / `sentCount` / `failedCount`, `templateId`, `createdById`, `sentAt`. Recipients are materialised as `Notification` rows at create time |
 | `CommunicationAttachment` | a file uploaded once and **linked** from a broadcast body — `filename`, `storageKey`, `mimeType`, `sizeBytes`, `downloadCount`, `uploadedById`. Deliberately has **no `communicationId`**: it is uploaded while the message is still being composed and one file can be linked from several broadcasts |
@@ -236,7 +240,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `PaymentStatus`: `PENDING | PROOF_UPLOADED | CONFIRMED | FAILED | REFUNDED`
 - `Currency`: `USD | UGX`
 - `DocumentKind`: 24 values — one per "Attach:" bullet in the EOI spec, plus `PAYMENT_PROOF` and `OTHER`. **Backed by a Postgres ENUM type, so adding a value needs a migration** (`ALTER TYPE … ADD VALUE`). Labels in `DOCUMENT_KIND_LABELS`
-- `ReviewActionType`: `ASSIGNED | COMMENTED | REQUESTED_CLARIFICATION | CLARIFICATION_PROVIDED | RECOMMENDED | REJECTED | APPROVED | SHORTLISTED | NOT_SHORTLISTED | LAC_APPROVED | LAC_REJECTED | ALLOCATED | RETURNED_TO_TC | ESCALATED`
+- `ReviewActionType`: `ASSIGNED | COMMENTED | REQUESTED_CLARIFICATION | CLARIFICATION_PROVIDED | RECOMMENDED | REJECTED | APPROVED | SHORTLISTED | NOT_SHORTLISTED | LAC_APPROVED | LAC_REJECTED | ALLOCATED | RETURNED_TO_TC | ESCALATED | ADMIN_STATUS_OVERRIDE` (Postgres ENUM — the last value was missing from the DB until the committee-review migration, so every admin override failed on insert). `RECOMMENDED` = an LAC member review; hidden from investors
 - `ApplicationWindowStatus`: `DRAFT | OPEN | CLOSED | ARCHIVED`
 - `CompanyType`: `LIMITED_LIABILITY_COMPANY | PUBLIC_LIMITED_COMPANY | JOINT_VENTURE | PARTNERSHIP | SOLE_PROPRIETORSHIP | OTHER`
 - `BusinessSector`: `PETROCHEMICALS_REFINING | FERTILISERS_CHEMICALS | LIGHT_MANUFACTURING | AGRO_PROCESSING | LOGISTICS_WAREHOUSING | COMMERCIAL_HOSPITALITY | ICT | OTHER`
@@ -263,7 +267,7 @@ INVESTOR      — create / save / submit own EOI; view own status
 ADMIN         — full read; confirm payments; manage users + windows (not review decisions)
 TC_MEMBER     — list + score + decide SUBMITTED apps (after window closes)
 TC_CHAIR      — TC_MEMBER + assign apps
-LAC_MEMBER    — list + review SHORTLISTED apps
+LAC_MEMBER    — /console/lac: record own recommendation + the committee's final decision on LAC_REVIEW apps
 EXCO_MEMBER   — list + approve/reject LAC_APPROVED apps
 FINANCE_OFFICER — invoice the application fee + verify payment; read the applicant profile behind each invoice. No review decisions
 ```
@@ -291,6 +295,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 | `site-visits/` | `POST /` create booking (INVESTOR); `GET /` list (ADMIN); `PATCH /:id` edit + `DELETE /:id` (owner INVESTOR or ADMIN, **only while status = NEW and the booking window is open** — delete is a hard delete so the investor can immediately re-book); `POST /:id/status` schedule/complete/cancel (ADMIN) — moving to `SCHEDULED` with a `scheduledAt` emails the investor a `siteVisitScheduledEmail` confirmation (best-effort). Zod `superRefine` rejects non-investable zones + land uses that don't belong to the chosen zone |
 | `timeline/` | `POST /` create, `PATCH /:id` update, `DELETE /:id` delete timeline milestones (ADMIN only). Position uniqueness + end-after-start guarded in the service; both portals read the table directly with `FALLBACK_MILESTONES` when empty |
 | `communications/` | admin broadcasts. `POST /` compose + send (ADMIN) — writes the `Communication` + one `Notification` per recipient in one transaction, then drains delivery **detached from the request**; `POST /test` send the draft to the acting admin only (deliberately no `to` field, so it can't relay); `POST /:id/retry` re-queue failed *and* stalled-`PENDING` rows; `DELETE /:id` (blocked while `SENDING`); `POST /templates`, `PATCH /templates/:id`, `DELETE /templates/:id`; `POST /inbox/:id/read` (INVESTOR/ADMIN, owner-checked in the service); `POST /attachments/presign` + `POST /attachments` (ADMIN) and **`GET /attachments/:id`** — the one unauthenticated route, declared above `requireAuth`, 302 to a signed S3 URL. Literal routes are declared before `/:id`. **The recipient list is resolved in the browser and posted** — see the Communications section below |
+| `reviews/` | Committee writes (reads are direct DB, as everywhere). `POST /:applicationId/tc-decision` (TC_MEMBER/TC_CHAIR/ADMIN — `SHORTLIST \| NOT_SHORTLIST \| REQUEST_INFO`); `PUT /:applicationId/lac-review` (LAC_MEMBER only — ADMIN passes `requireRole` per the house rule but the service refuses it, so an admin's view never counts in the tally); `POST /:applicationId/lac-decision` (LAC_MEMBER/ADMIN — `APPROVE \| REJECT \| REQUEST_INFO`); `POST /:applicationId/clarification-reply` (owner INVESTOR, or ADMIN for preview). Every write re-reads the application under `SELECT … FOR UPDATE` and re-runs the shared gate, so two members confirming at once can't both decide. Request-info emails the investor (`clarificationRequestEmail`, best-effort); LAC approve/reject emails nobody |
 | `finance/` | Application-fee invoicing + payment verification (FINANCE_OFFICER or ADMIN, enforced router-wide). `GET /applications` the queue; `POST /payments/:id/invoice/presign` → S3 PUT URL; `POST /payments/:id/invoice/send` (attach-and-send, or `markOnly` when the invoice went out off-platform); `POST /payments/:id/verify` CONFIRMED/FAILED. The two application-scoped downloads live on `applications/` because they are keyed by application: `GET /:id/invoice` (owner, finance or admin) and `GET /:id/proof` (**finance/admin only** — an investor has no business fetching a receipt through this route) |
 | `health/` | complete |
 
@@ -451,6 +456,24 @@ Never re-derive the requirement inline, and never let a portal button offer a ge
 
 ---
 
+## Committee review (TC + LAC)
+
+**Until 5 October 2026 the TC decision form was a mock** — it showed "Decision recorded" and called nothing, and the admin stage override (the only other way forward) failed on a missing enum value, so no application could reach LAC by the normal route. Both are fixed; a console form that doesn't call the API is a bug of the same kind.
+
+**One set of rules — `packages/shared/src/committee.ts`.** Pure, `now` injected, tested in `apps/web/src/lib/committee.test.ts`. The console pages and the API's `reviews/` service both call it:
+- `tcDecisionGate({ status, window, now })` — refuses while the window is live (`openUntil()`, the same date-range check the edit gate uses, so a stale OPEN window doesn't lock anyone out), then allows `SUBMITTED` / `UNDER_TC_REVIEW` only. The TC queue's lock (`getTcQueueView`) uses the same check; the old "unlock once any submitted app exists" dev stopgap is gone.
+- `lacDecisionGate({ status })` — `LAC_REVIEW` (and legacy `SHORTLISTED`). Member recommendations and the final decision share it, so recommendations freeze when the decision is recorded.
+- `tcDecisionTarget()` / `lacDecisionTarget()` map a decision to its status; the tests assert every target is legal in `validTransitions`. `clarificationCommitteeFor()` + `CLARIFICATION_RETURN_STATUS` route an investor's reply back to the committee that asked.
+- `tallyLacReviews()` / `describeLacTally()`, `LAC_QUEUE_STATUSES`, and the Zod request schemas (`tcDecisionSchema`, `lacReviewSchema`, `lacDecisionSchema`, `clarificationReplySchema`; justifications need at least `COMMITTEE_NOTES_MIN` = 20 characters).
+
+**The LAC flow.** Each LAC member records their own recommendation (`LacReview`, visible to the other members, revisable). Then one LAC member *or* an ADMIN records the committee's single decision — the console warns (does not block) when no member has reviewed, because the committee may have met off-platform. Approve → `LAC_APPROVED`, which is ExCo's queue.
+
+**LAC outcomes are internal until ExCo.** The portal maps `LAC_APPROVED` / `LAC_REJECTED` to "LAC Review", drops them (and `RECOMMENDED`) from the investor's activity feed, and the dashboard tracker keeps the LAC stage in progress until `EXCO_REVIEW`. The secretariat releases an LAC rejection through Communications — there is no automatic release yet, so a rejected investor sees "LAC Review" until told.
+
+**Requests for more information are a round trip.** The committee's question (its `notes`, shown verbatim) → `ClarificationRequest` + `*_CLARIFICATION_REQUESTED` + email → the edit gate opens in `CLARIFICATION` mode (both committees) so the investor can fix sections and attachments → the investor sends a written reply from the dashboard card (`clarification-reply.tsx`) → back to the committee. The reply is the trigger; editing alone does not return the application.
+
+**Console surfaces.** `/console/lac/queue` (tabs: To review / Awaiting investor / Decided, plus a "Your review" column) and `/console/lac/[ref]`; `/console/tc/[ref]` now records real decisions. Both review pages share `applications/application-review-body.tsx` (the application) and `components/committee/committee-panels.tsx` (member reviews, requests for more information, decisions with reasons, audit trail). All three forms are one client component, `components/committee/decision-form.tsx`, with a second confirmation step for committee decisions. Reads: `lib/admin/committee-queries.ts` (server-only) → `committee-mappers.ts` (pure, tested).
+
 ## Editing after submission
 
 **The application window is the lock, not the submit button.** An investor may keep changing a `SUBMITTED` application — sections, joint-venture partners, attachments — for as long as the `ApplicationWindow` is OPEN and `now` is inside its range. Submitting early used to freeze an application while the call still had weeks to run, which turned every typo into a Request for Clarification.
@@ -461,7 +484,7 @@ One pure function decides it — **`applicationEditGate()` in `packages/shared/s
 |---|---|---|
 | `DRAFT` | `DRAFT_PAYMENT_PENDING` / `DRAFT` | editable with or without an open window (they just can't submit) |
 | `AMEND` | `SUBMITTED` **and** a genuinely open window | changes land immediately; nothing is resubmitted |
-| `CLARIFICATION` | `TC_CLARIFICATION_REQUESTED` | outranks the schedule — the TC may ask after the window shuts |
+| `CLARIFICATION` | `TC_CLARIFICATION_REQUESTED` / `LAC_CLARIFICATION_REQUESTED` | outranks the schedule — either committee may ask after the window shuts |
 | `STAFF` | actor is `ADMIN` | console raw-JSON corrections + EOI preview, at any stage |
 | `LOCKED` | everything else | read-only |
 
@@ -569,7 +592,7 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 |---|---|
 | `packages/db/src/index.ts` | Sequelize singleton + 19 model inits + associations |
 | `packages/db/src/models/` | 19 model files |
-| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones, communications, eoi-document-kinds) |
+| `packages/db/migrations/` | All applied migrations (initial, lac-pipeline, investor-org-tin, user-status, payment-unique-index, registration-profile-fields, inquiries, soft-delete, site-visit-bookings, user-password-changed-at, timeline-milestones, communications, eoi-document-kinds, …, committee-review) |
 | `packages/db/seed.ts` | Raw pg seed — idempotent. Section payloads are Zod-validated on write (see EOI module) |
 | `packages/shared/src/enums.ts` | All enums — source of truth |
 | `packages/shared/src/timeline.ts` | `TimelineMilestoneKind`, `TimelineMilestoneStatus`, `computeTimeline()` (active = last started, manual status overrides win), `findMilestoneOfKind()`, `siteVisitBookingGate()` (**the single site-visit booking gate** — see "Site-visit booking window"), `longDate()` (EAT), `FALLBACK_MILESTONES` (published Phase 2 schedule — seed data + render fallback). Tested in `apps/portal/src/lib/timeline.test.ts` |
@@ -578,6 +601,9 @@ Window: "Phase 1 — Round 1: Priority Industries" — `OPEN`, Jan–Jun 2026. `
 | `packages/shared/src/schemas/application.ts` | **The EOI, in executable form** — six section schemas transcribed from the Master Content Specification, the `notApplicable` mechanism (`requireUnlessNA`), EOI form enums + label maps, `ugandanEmploymentPercentages()`, `crossSectionIssues()`, `EOI_SECTION_ORDER`/`_LABELS`, `updateSectionSchema` (the `complete` flag), and the status transition table |
 | `packages/shared/src/application-edit.ts` | **The single application-edit gate** — `applicationEditGate()` (`DRAFT` / `AMEND` / `CLARIFICATION` / `STAFF` / `LOCKED`) and `canEditPlots()`. Pure, `now` injected; read by the API write guards, the EOI wizard, the applications list and the dashboard. See "Editing after submission". Tested in `apps/portal/src/lib/application-edit.test.ts` |
 | `apps/api/src/modules/applications/application-edit.ts` | The API's half of that gate — `editGateFor()` reads the live OPEN window, `assertApplicationEditable()` throws `Conflict(gate.message)`. Used by `applications/` **and** `documents/` so attachments follow the sections they belong to |
+| `packages/shared/src/committee.ts` | **The committee review rules** — `tcDecisionGate()`, `lacDecisionGate()`, decision → status targets, clarification routing, `tallyLacReviews()`, role lists, request schemas. Pure; read by the API `reviews/` service and the console. See "Committee review (TC + LAC)" |
+| `apps/api/src/modules/reviews/` | TC decision, LAC member review, LAC final decision, investor clarification reply — row-locked, gate-checked, audit-logged |
+| `apps/web/src/app/(admin)/console/lac/` | LAC workspace — `queue/` and `[ref]/` (member reviews, your-review form, committee decision form). Guarded by `lac/layout.tsx` + `LAC_ROLES` |
 | `packages/shared/src/eoi-preview.ts` | Admin EOI preview policy — `EOI_PREVIEW_ROLES`, `canPreviewEoi()`, `previewOrgLegalName()`, `isPreviewOrgName()`. Pure; read by all three apps |
 | `apps/portal/src/components/admin-preview-banner.tsx` | Banner shown on every investor-portal page while a preview role is signed in — warns that the data is real |
 | `packages/shared/src/eoi-documents.ts` | The attachment checklist — `EOI_DOCUMENT_REQUIREMENTS` (kind, clause, descriptor, required, multiple, applicant category, N/A allowed), `documentRequirementsFor()`, `missingRequiredDocuments()`, `validateEoiFile()`, `EOI_MAX_FILE_BYTES` (5 MB, PDF only). Pure |
@@ -758,6 +784,8 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Narrow `getFinanceRows()` to submitted applications only — the merge with applications that already have a `Payment` is what keeps early-invoiced applicants visible to the people billing them
 - Expose `GET /applications/:id/proof` to `INVESTOR`, or proxy a proof/invoice through the API — finance/admin only, and downloads are presigned S3 URLs
 - Render a stored `companyType`/`businessSector` raw in the finance profile — use `COMPANY_TYPE_LABELS` / `BUSINESS_SECTOR_LABELS`
+- Build a committee form that doesn't call the API, or decide whether a committee may act anywhere but `tcDecisionGate()` / `lacDecisionGate()` — the console and the API must share one rule
+- Count an ADMIN's view as an LAC member recommendation, or email the investor an LAC approve/reject — LAC outcomes are internal until ExCo
 - Give `FINANCE_OFFICER` a review decision, or let verifying a payment move an application's status — finance flags the `Payment` row and nothing else
 - Query `@kip/db` from a client component or directly inside a page
 - One-layer route protection — need both middleware policy entry AND `requireRole()`

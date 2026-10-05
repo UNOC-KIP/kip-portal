@@ -8,6 +8,7 @@ import {
   Payment,
   ReviewAction,
   SiteVisitBooking,
+  ClarificationRequest,
   Document, ApplicationPlot,} from "@kip/db";
 import {
   ApplicationWindowStatus,
@@ -16,6 +17,8 @@ import {
   COMPANY_TYPE_LABELS,
   BUSINESS_SECTOR_LABELS,
   applicationEditGate,
+  clarificationCommitteeFor,
+  REVIEW_COMMITTEE_LABELS,
   type ApplicationEditGate,
   type CompanyType,
   type BusinessSector,
@@ -56,8 +59,11 @@ export function statusBadgeProps(status: string): { variant: StatusVariant; labe
     case "SHORTLISTED":                return { variant: "tc-approved",       label: "Shortlisted" };
     case "NOT_SHORTLISTED":            return { variant: "tc-rejected",       label: "Not Shortlisted" };
     case "LAC_REVIEW":                 return { variant: "tc-in-progress",    label: "LAC Review" };
-    case "LAC_APPROVED":               return { variant: "tc-approved",       label: "LAC Approved" };
-    case "LAC_REJECTED":               return { variant: "tc-rejected",       label: "Rejected" };
+    case "LAC_CLARIFICATION_REQUESTED":return { variant: "status-pending",    label: "Clarification Needed" };
+    // LAC outcomes stay internal until ExCo decides; the secretariat releases
+    // them. Both read as still under review to the investor.
+    case "LAC_APPROVED":               return { variant: "tc-in-progress",    label: "LAC Review" };
+    case "LAC_REJECTED":               return { variant: "tc-in-progress",    label: "LAC Review" };
     case "EXCO_REVIEW":                return { variant: "tc-in-progress",    label: "ExCo Review" };
     case "ALLOCATED":                  return { variant: "plot-allocated",    label: "Allocated" };
     case "WITHDRAWN":                  return { variant: "window-closed",     label: "Withdrawn" };
@@ -71,8 +77,8 @@ const ACTION_TEXT: Partial<Record<ReviewActionType, string>> = {
   [ReviewActionType.ASSIGNED]:               "Application assigned for review",
   [ReviewActionType.SHORTLISTED]:            "Shortlisted by Technical Committee",
   [ReviewActionType.NOT_SHORTLISTED]:        "Not shortlisted by Technical Committee",
-  [ReviewActionType.LAC_APPROVED]:           "Approved by Land Allocation Committee",
-  [ReviewActionType.LAC_REJECTED]:           "Rejected by Land Allocation Committee",
+  // LAC_APPROVED / LAC_REJECTED are deliberately absent — LAC outcomes stay
+  // internal until ExCo decides. Member recommendations (RECOMMENDED) too.
   [ReviewActionType.ALLOCATED]:              "Land plot allocated — welcome to KIP",
   [ReviewActionType.REQUESTED_CLARIFICATION]: "Clarification requested",
   [ReviewActionType.CLARIFICATION_PROVIDED]: "Clarification submitted",
@@ -172,6 +178,8 @@ export type DashboardData = {
   edit: ApplicationEditGate | null
   /** True while the investor is still on the auto-generated password. */
   mustChangePassword: boolean
+  /** The committee's open request for more information, awaiting the investor's reply. */
+  clarification: { committee: string; question: string; askedAt: string } | null
 }
 
 /** Lightweight per-application summary for the dashboard switcher / list. */
@@ -354,6 +362,16 @@ export async function getInvestorDashboardData(
     ? buildAuditTrail(appWith?.reviewActions ?? [], payment, app.submittedAt ?? null)
     : [];
 
+  // An open clarification parks the application in a *_CLARIFICATION_REQUESTED
+  // status; the newest unanswered request from that committee is the question.
+  const clarificationCommittee = app ? clarificationCommitteeFor(app.status) : null;
+  const openClarification = app && clarificationCommittee
+    ? await ClarificationRequest.findOne({
+        where: { applicationId: app.id, committee: clarificationCommittee, response: null },
+        order: [["createdAt", "DESC"]],
+      })
+    : null;
+
   return {
     orgName: org?.legalName ?? appWith?.investorOrg?.legalName ?? null,
     billing: {
@@ -408,6 +426,14 @@ export async function getInvestorDashboardData(
         })
       : null,
     mustChangePassword: user ? user.passwordChangedAt == null : false,
+    clarification: clarificationCommittee
+      ? {
+          committee: REVIEW_COMMITTEE_LABELS[clarificationCommittee],
+          // Older TC requests predate the request row — still invite a reply.
+          question: openClarification?.notes ?? "The committee needs more information about your application. Check your email for details.",
+          askedAt: (openClarification?.createdAt ?? new Date()).toISOString(),
+        }
+      : null,
   } satisfies DashboardData;
 }
 

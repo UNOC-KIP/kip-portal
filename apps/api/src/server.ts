@@ -18,6 +18,7 @@ import { siteVisitsRouter } from "./modules/site-visits/site-visits.router.js";
 import { timelineRouter } from "./modules/timeline/timeline.router.js";
 import { communicationsRouter } from "./modules/communications/communications.router.js";
 import { financeRouter } from "./modules/finance/finance.router.js";
+import { reviewsRouter } from "./modules/reviews/reviews.router.js";
 
 export function createServer(): Application {
   const app = express();
@@ -46,6 +47,7 @@ export function createServer(): Application {
   app.use("/site-visits", siteVisitsRouter);
   app.use("/communications", communicationsRouter);
   app.use("/finance", financeRouter);
+  app.use("/reviews", reviewsRouter);
 
   app.use(errorHandler);
 

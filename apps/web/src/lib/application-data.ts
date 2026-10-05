@@ -35,6 +35,7 @@ export function statusBadgeProps(status: string): { variant: StatusVariant; labe
     case "SHORTLISTED":                return { variant: "tc-approved",       label: "Shortlisted" };
     case "NOT_SHORTLISTED":            return { variant: "tc-rejected",       label: "Not Shortlisted" };
     case "LAC_REVIEW":                 return { variant: "tc-in-progress",    label: "LAC Review" };
+    case "LAC_CLARIFICATION_REQUESTED":return { variant: "status-pending",    label: "LAC Clarification Needed" };
     case "LAC_APPROVED":               return { variant: "tc-approved",       label: "LAC Approved" };
     case "LAC_REJECTED":               return { variant: "tc-rejected",       label: "Rejected" };
     case "EXCO_REVIEW":                return { variant: "tc-in-progress",    label: "ExCo Review" };

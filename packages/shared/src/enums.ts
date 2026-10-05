@@ -13,6 +13,7 @@ export const ApplicationStatus = {
   SHORTLISTED:                 "SHORTLISTED",
   NOT_SHORTLISTED:             "NOT_SHORTLISTED",
   LAC_REVIEW:                  "LAC_REVIEW",
+  LAC_CLARIFICATION_REQUESTED: "LAC_CLARIFICATION_REQUESTED",
   LAC_APPROVED:                "LAC_APPROVED",
   LAC_REJECTED:                "LAC_REJECTED",
   EXCO_REVIEW:                 "EXCO_REVIEW",

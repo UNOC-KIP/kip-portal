@@ -32,6 +32,7 @@ import {
   ApplicationStatus,
   ApplicationWindowStatus,
   DOCUMENT_KIND_LABELS,
+  openUntil,
   formatFileSize,
   PaymentMethod,
   PaymentStatus,
@@ -428,19 +429,16 @@ export type TcQueueView = {
 
 /**
  * TC queue plus the window-lock gate. TC access opens once the submission
- * window closes (CLAUDE.md business rule). As a dev stopgap until the
- * window-close workflow is wired (Phase 3, an API write path), the queue also
- * unlocks once review has begun — i.e. when any submitted application exists —
- * so seeded pipelines are visible during development.
+ * window closes (CLAUDE.md rule 3) — the same `openUntil()` check the API's
+ * `tcDecisionGate` applies, so the queue is locked exactly when decisions are
+ * refused. A stale window left OPEN with a past `closeAt` does not lock it.
  */
 export async function getTcQueueView(now: Date = new Date()): Promise<TcQueueView> {
   const [apps, activeWindow] = await Promise.all([
     getTcQueue(now),
     ApplicationWindow.findOne({ where: { status: ApplicationWindowStatus.OPEN }, order: [["openAt", "DESC"]] }),
   ]);
-  const windowOpenInFuture = activeWindow
-    ? new Date(activeWindow.closeAt).getTime() > now.getTime()
-    : false;
+  const liveUntil = openUntil(activeWindow, now);
 
   let tcDeadlineLabel = "—";
   if (activeWindow) {
@@ -451,7 +449,7 @@ export async function getTcQueueView(now: Date = new Date()): Promise<TcQueueVie
 
   return {
     apps,
-    locked: windowOpenInFuture && apps.length === 0,
+    locked: liveUntil !== null,
     windowCloseLabel: activeWindow ? formatShortDate(activeWindow.closeAt) : "—",
     tcDeadlineLabel,
   };
@@ -623,6 +621,7 @@ const ACTIVITY_TEXT: Partial<Record<ReviewActionType, string>> = {
   [ReviewActionType.ALLOCATED]:               "land allocated by ExCo",
   [ReviewActionType.REQUESTED_CLARIFICATION]: "clarification requested",
   [ReviewActionType.CLARIFICATION_PROVIDED]:  "clarification provided",
+  [ReviewActionType.RECOMMENDED]:             "LAC member recommendation recorded",
   [ReviewActionType.ADMIN_STATUS_OVERRIDE]:   "stage overridden by admin",
 };
 
@@ -1165,6 +1164,7 @@ import {
 const SHORTLISTED_PLUS_STATUSES = [
   ApplicationStatus.SHORTLISTED,
   ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_CLARIFICATION_REQUESTED,
   ApplicationStatus.LAC_APPROVED,
   ApplicationStatus.LAC_REJECTED,
   ApplicationStatus.EXCO_REVIEW,
@@ -1176,6 +1176,7 @@ const IN_REVIEW_STATUSES = new Set<string>([
   ApplicationStatus.TC_CLARIFICATION_REQUESTED,
   ApplicationStatus.SHORTLISTED,
   ApplicationStatus.LAC_REVIEW,
+  ApplicationStatus.LAC_CLARIFICATION_REQUESTED,
   ApplicationStatus.LAC_APPROVED,
   ApplicationStatus.EXCO_REVIEW,
 ]);

@@ -22,6 +22,7 @@ import { Notification } from './models/notification'
 import { Inquiry } from './models/inquiry'
 import { NotifySignup } from './models/notify-signup'
 import { SiteVisitBooking } from './models/site-visit-booking'
+import { LacReview } from './models/lac-review'
 import { TimelineMilestone } from './models/timeline-milestone'
 import { Communication } from './models/communication'
 import { CommunicationTemplate } from './models/communication-template'
@@ -74,6 +75,7 @@ Notification.initModel(sequelize)
 Inquiry.initModel(sequelize)
 NotifySignup.initModel(sequelize)
 SiteVisitBooking.initModel(sequelize)
+LacReview.initModel(sequelize)
 TimelineMilestone.initModel(sequelize)
 CommunicationTemplate.initModel(sequelize)
 CommunicationAttachment.initModel(sequelize)
@@ -132,6 +134,10 @@ User.hasMany(ClarificationRequest, {
 })
 ClarificationRequest.belongsTo(User, { foreignKey: 'requestedById', as: 'requestedBy' })
 
+Application.hasMany(LacReview, { foreignKey: 'applicationId', as: 'lacReviews' })
+LacReview.belongsTo(Application, { foreignKey: 'applicationId' })
+LacReview.belongsTo(User, { foreignKey: 'reviewerId', as: 'reviewer' })
+
 User.hasMany(Notification, { foreignKey: 'userId', as: 'notifications' })
 Notification.belongsTo(User, { foreignKey: 'userId' })
 
@@ -182,6 +188,7 @@ export {
   Inquiry,
   NotifySignup,
   SiteVisitBooking,
+  LacReview,
   TimelineMilestone,
   Communication,
   CommunicationTemplate,

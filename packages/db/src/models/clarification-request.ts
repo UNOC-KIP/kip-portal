@@ -14,6 +14,8 @@ export class ClarificationRequest extends Model<
   declare id: CreationOptional<string>
   declare applicationId: string
   declare requestedById: string
+  /** Which committee asked: `TC` or `LAC`. The investor's reply returns the application to it. */
+  declare committee: CreationOptional<string>
   declare notes: string
   declare response: CreationOptional<string | null>
   declare respondedAt: CreationOptional<Date | null>
@@ -26,6 +28,7 @@ export class ClarificationRequest extends Model<
         id: { type: DataTypes.UUID, primaryKey: true, defaultValue: DataTypes.UUIDV4 },
         applicationId: { type: DataTypes.UUID, allowNull: false },
         requestedById: { type: DataTypes.UUID, allowNull: false },
+        committee: { type: DataTypes.STRING, allowNull: false, defaultValue: 'TC' },
         notes: { type: DataTypes.TEXT, allowNull: false },
         response: { type: DataTypes.TEXT, allowNull: true },
         respondedAt: { type: DataTypes.DATE, allowNull: true },

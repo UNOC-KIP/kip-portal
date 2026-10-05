@@ -5,6 +5,7 @@ import {
   roleSatisfies,
   STAFF_ROLES,
   TC_ROLES,
+  LAC_ROLES,
   ADMIN_ONLY,
 } from "./rbac";
 
@@ -24,7 +25,7 @@ describe("homePathForRole", () => {
     expect(homePathForRole("ADMIN")).toBe("/console");
     expect(homePathForRole("TC_MEMBER")).toBe("/console/tc/queue");
     expect(homePathForRole("TC_CHAIR")).toBe("/console/tc/queue");
-    expect(homePathForRole("LAC_MEMBER")).toBe("/unauthorized");
+    expect(homePathForRole("LAC_MEMBER")).toBe("/console/lac/queue");
     expect(homePathForRole("EXCO_MEMBER")).toBe("/unauthorized");
   });
   it("sends unknown/empty to sign-in", () => {
@@ -37,6 +38,8 @@ describe("allowedRolesForPath", () => {
   it("matches the most specific prefix first", () => {
     expect(allowedRolesForPath("/console/tc/queue")).toBe(TC_ROLES);
     expect(allowedRolesForPath("/console/tc/KIP-EOI-2026-0001")).toBe(TC_ROLES);
+    expect(allowedRolesForPath("/console/lac/queue")).toBe(LAC_ROLES);
+    expect(allowedRolesForPath("/console/lac/KIP-EOI-2026-0001")).toBe(LAC_ROLES);
     expect(allowedRolesForPath("/console")).toBe(ADMIN_ONLY);
     expect(allowedRolesForPath("/console/users")).toBe(ADMIN_ONLY);
     expect(allowedRolesForPath("/console/bank-transfers")).toBe(ADMIN_ONLY);
@@ -54,6 +57,13 @@ describe("allowedRolesForPath", () => {
 });
 
 describe("roleSatisfies", () => {
+  it("LAC members enter only the LAC area; admin enters it too", () => {
+    expect(roleSatisfies(LAC_ROLES, "LAC_MEMBER")).toBe(true);
+    expect(roleSatisfies(LAC_ROLES, "ADMIN")).toBe(true);
+    expect(roleSatisfies(LAC_ROLES, "TC_MEMBER")).toBe(false);
+    expect(roleSatisfies(TC_ROLES, "LAC_MEMBER")).toBe(false);
+    expect(roleSatisfies(ADMIN_ONLY, "LAC_MEMBER")).toBe(false);
+  });
   it("admin can enter the TC area; investors cannot enter admin", () => {
     expect(roleSatisfies(TC_ROLES, "ADMIN")).toBe(true);
     expect(roleSatisfies(ADMIN_ONLY, "INVESTOR")).toBe(false);
