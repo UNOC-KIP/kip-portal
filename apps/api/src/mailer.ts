@@ -645,3 +645,54 @@ export function clarificationRequestEmail(opts: {
     </p>
   `);
 }
+
+const STAFF_ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Administrator",
+  TC_CHAIR: "Technical Committee Chair",
+  TC_MEMBER: "Technical Committee Member",
+  LAC_MEMBER: "Land Allocation Committee Member",
+  EXCO_MEMBER: "ExCo Member",
+  FINANCE_OFFICER: "Finance Officer",
+};
+
+/**
+ * Login details for a newly invited staff member — the staff counterpart of
+ * the investor `credentialsEmail`. Sent straight from the API so the password
+ * never has to pass through the inviting admin or a webhook.
+ */
+export function staffWelcomeEmail(opts: {
+  name: string;
+  email: string;
+  role: string;
+  tempPassword: string;
+  signInUrl: string;
+}): string {
+  const field = (label: string, value: string, mono = false) => `
+    <p style="margin:0 0 6px;color:#71717a;font-size:12px;text-transform:uppercase;letter-spacing:0.5px">${label}</p>
+    <p style="margin:0 0 16px;color:#09090b;font-size:${mono ? "16px;font-weight:700;font-family:Consolas,Menlo,monospace" : "14px;font-weight:600"}">${escapeHtml(value)}</p>`;
+  return shell(`
+    <p style="margin:0 0 16px;color:#09090b;font-size:16px;font-weight:600">Your KIP Admin Console account</p>
+    <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6">
+      Dear <strong>${escapeHtml(opts.name)}</strong>, an account has been created for you on the
+      Kabalega Industrial Park Admin Console. Use the details below to sign in.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0"
+           style="background:#f9fafb;border:1px solid #e4e4e7;border-radius:8px;margin-bottom:28px">
+      <tr><td style="padding:20px 24px 4px">
+        ${field("Role", STAFF_ROLE_LABELS[opts.role] ?? opts.role)}
+        ${field("Email", opts.email)}
+        ${field("Temporary password", opts.tempPassword, true)}
+      </td></tr>
+    </table>
+    <p style="margin:0 0 28px">
+      <a href="${escapeHtml(opts.signInUrl)}/sign-in"
+         style="display:inline-block;background:#000;color:#fff;font-size:14px;font-weight:600;padding:12px 28px;border-radius:8px;text-decoration:none">
+        Sign in to the Admin Console
+      </a>
+    </p>
+    <p style="margin:0;color:#a1a1aa;font-size:12px;line-height:1.6">
+      Keep this password private. If you did not expect this email, or need a new password,
+      contact Support.Kip@unoc.com.
+    </p>
+  `);
+}
