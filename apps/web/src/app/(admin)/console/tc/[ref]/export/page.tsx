@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAdminApplicationDetail } from "@/lib/admin/queries";
 import { requireRole } from "@/lib/rbac-server";
-import { ADMIN_ONLY } from "@/lib/rbac";
-import { ApplicationExport } from "../../application-export";
+import { TC_ROLES } from "@/lib/rbac";
+import { ApplicationExport } from "../../../applications/application-export";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +12,11 @@ export async function generateMetadata({ params }: { params: { ref: string } }):
   return { title: `EOI ${decodeURIComponent(params.ref)}` };
 }
 
-// One applicant's EOI as a print-ready dossier — see ApplicationExport.
-export default async function AdminApplicationExportPage({ params }: { params: { ref: string } }) {
-  await requireRole(ADMIN_ONLY);
+// Same access as the TC review page: TC_ROLES, also enforced by the tc/ layout guard.
+export default async function TcApplicationExportPage({ params }: { params: { ref: string } }) {
+  await requireRole(TC_ROLES);
   const ref = decodeURIComponent(params.ref);
   const app = await getAdminApplicationDetail(ref);
   if (!app) notFound();
-  return <ApplicationExport app={app} backHref={`/console/applications/${encodeURIComponent(ref)}`} />;
+  return <ApplicationExport app={app} backHref={`/console/tc/${encodeURIComponent(ref)}`} />;
 }

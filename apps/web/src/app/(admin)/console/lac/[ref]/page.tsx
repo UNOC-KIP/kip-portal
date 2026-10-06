@@ -17,6 +17,7 @@ import { statusBadgeProps } from "@/lib/application-data";
 import { requireRole } from "@/lib/rbac-server";
 import { LAC_ROLES } from "@/lib/rbac";
 import { ApplicationReviewBody } from "../../applications/application-review-body";
+import { ExportEoiLink } from "../../applications/export-eoi-link";
 import { LacDecisionForm, LacReviewForm } from "./lac-forms";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,12 @@ export default async function LacReviewPage({ params }: { params: { ref: string 
             { label: "LAC Review Queue", href: "/console/lac/queue" },
             { label: app.reference ?? ref },
           ]}
-          action={<StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>}
+          action={
+            <div className="flex flex-wrap items-center gap-2">
+              <ExportEoiLink href={`/console/lac/${encodeURIComponent(ref)}/export`} />
+              <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
+            </div>
+          }
         />
 
         <div className="mb-2">
