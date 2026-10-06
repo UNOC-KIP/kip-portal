@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { FileDown } from "lucide-react";
 import {
   ApplicationStatus,
   FINAL_OUTCOME_STATUSES,
@@ -90,6 +92,13 @@ export default async function AdminApplicationDetailPage({
           ]}
           action={
             <div className="flex flex-wrap items-center gap-2">
+              <Link
+                href={`/console/applications/${encodeURIComponent(ref)}/export`}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-ink-200 bg-white px-3 text-sm font-medium text-ink-700 transition hover:bg-ink-50"
+              >
+                <FileDown className="h-4 w-4" />
+                Export EOI
+              </Link>
               <DeleteApplicationButton
                 applicationId={app.id}
                 reference={app.reference ?? ref}

@@ -79,6 +79,12 @@ const COLUMNS: DataTableColumn<Record<string, unknown>>[] = [
         >
           View →
         </Link>
+        <Link
+          href={`/console/applications/${encodeURIComponent(row.ref === "(draft)" ? String(row.id) : String(row.ref))}/export`}
+          className="text-xs font-semibold text-ink-600 hover:underline"
+        >
+          Export
+        </Link>
         <DeleteApplicationButton
           applicationId={String(row.id)}
           reference={String(row.ref)}

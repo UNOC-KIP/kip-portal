@@ -717,6 +717,8 @@ export type AdminApplicationDetail = {
   status: string;
   orgName: string;
   lotReference: string;
+  /** Formatted submission time — null while the application is a draft. */
+  submittedAt: string | null;
   landHa: string;
   sectionsComplete: number;
   totalSections: number;
@@ -870,6 +872,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     status: a.status,
     orgName: a.investorOrg?.legalName ?? "—",
     lotReference: a.lotReference,
+    submittedAt: a.submittedAt ? formatDateTime(a.submittedAt) : null,
     landHa: hectaresFromSqm(landSizeSqm(sections)),
     sectionsComplete: sectionList.filter((s) => s.complete).length,
     totalSections: sectionList.length,
