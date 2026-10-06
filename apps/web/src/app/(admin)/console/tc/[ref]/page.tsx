@@ -15,6 +15,7 @@ import { statusBadgeProps } from "@/lib/application-data";
 import { requireRole } from "@/lib/rbac-server";
 import { TC_ROLES } from "@/lib/rbac";
 import { ApplicationReviewBody } from "../../applications/application-review-body";
+import { ExportEoiLink } from "../../applications/export-eoi-link";
 import { TcDecisionForm } from "./tc-decision-form";
 import { AiScreeningButton } from "./ai-screening-button";
 
@@ -41,6 +42,7 @@ export default async function TcReviewPage({ params }: { params: { ref: string }
           ]}
           action={
             <div className="flex flex-wrap items-center gap-2">
+              <ExportEoiLink href={`/console/tc/${encodeURIComponent(ref)}/export`} />
               <AiScreeningButton />
               <StatusBadge variant={badge.variant}>{badge.label}</StatusBadge>
             </div>

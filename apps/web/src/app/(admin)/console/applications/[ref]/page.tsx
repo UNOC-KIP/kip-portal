@@ -16,6 +16,7 @@ import { DeleteApplicationButton } from "../delete-application-button";
 import { DocumentList } from "../document-list";
 import { ApplicationSectionsView } from "../application-sections-view";
 import { EditApplicantButton } from "../edit-applicant-button";
+import { ExportEoiLink } from "../export-eoi-link";
 import { StatusOverrideControl } from "../status-override-control";
 import type { UserEditData } from "../../users/[id]/edit-user-dialog";
 import { SectionEditButton } from "./section-edit-button";
@@ -90,6 +91,7 @@ export default async function AdminApplicationDetailPage({
           ]}
           action={
             <div className="flex flex-wrap items-center gap-2">
+              <ExportEoiLink href={`/console/applications/${encodeURIComponent(ref)}/export`} />
               <DeleteApplicationButton
                 applicationId={app.id}
                 reference={app.reference ?? ref}
