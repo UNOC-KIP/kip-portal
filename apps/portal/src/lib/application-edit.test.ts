@@ -5,6 +5,8 @@ import {
   UserRole,
   applicationEditGate,
   canEditPlots,
+  submissionDeadline,
+  SUBMISSION_EXTENDABLE_STATUSES,
   type ApplicationEditWindow,
 } from "@kip/shared";
 
@@ -147,5 +149,59 @@ describe("canEditPlots", () => {
     expect(canEditPlots(gate(ApplicationStatus.SUBMITTED, null, UserRole.ADMIN))).toBe(
       true,
     );
+  });
+});
+
+describe("per-application submission extension", () => {
+  const until = "2026-09-20T23:59:59+03:00";
+  const spent = "2026-09-01T23:59:59+03:00";
+
+  it("lets a draft be submitted by its own deadline after the window has closed", () => {
+    expect(submissionDeadline({ window: null, extendedUntil: until, now })?.toISOString()).toBe(
+      new Date(until).toISOString(),
+    );
+    const g = applicationEditGate({ status: ApplicationStatus.DRAFT, window: expiredWindow, extendedUntil: until, now });
+    expect(g.mode).toBe("DRAFT");
+    expect(g.closesAt).toBe(new Date(until).toISOString());
+    expect(g.message).toMatch(/extended your submission deadline/i);
+  });
+
+  it("reopens a submitted application for amendment until the extension ends", () => {
+    const g = applicationEditGate({ status: ApplicationStatus.SUBMITTED, window: null, extendedUntil: until, now });
+    expect(g.editable).toBe(true);
+    expect(g.mode).toBe("AMEND");
+    expect(g.message).toMatch(/given you until/i);
+  });
+
+  it("ignores a spent extension — the application locks as normal", () => {
+    expect(submissionDeadline({ window: null, extendedUntil: spent, now })).toBeNull();
+    expect(
+      applicationEditGate({ status: ApplicationStatus.SUBMITTED, window: null, extendedUntil: spent, now }).editable,
+    ).toBe(false);
+  });
+
+  it("uses whichever deadline is later while the window is still open", () => {
+    // Window closes 15 Sep; an extension to 20 Sep wins…
+    expect(submissionDeadline({ window: openWindow, extendedUntil: until, now })?.toISOString()).toBe(
+      new Date(until).toISOString(),
+    );
+    // …but an extension earlier than the window never shortens it.
+    expect(
+      submissionDeadline({ window: openWindow, extendedUntil: "2026-09-12T00:00:00+03:00", now })?.toISOString(),
+    ).toBe(new Date("2026-09-15T23:59:59+03:00").toISOString());
+    expect(
+      applicationEditGate({
+        status: ApplicationStatus.SUBMITTED,
+        window: openWindow,
+        extendedUntil: "2026-09-12T00:00:00+03:00",
+        now,
+      }).message,
+    ).toMatch(/window closes/i);
+  });
+
+  it("does not reopen an application that has left the applicant's hands", () => {
+    const g = applicationEditGate({ status: ApplicationStatus.LAC_REVIEW, window: null, extendedUntil: until, now });
+    expect(g.editable).toBe(false);
+    expect(SUBMISSION_EXTENDABLE_STATUSES).not.toContain(ApplicationStatus.LAC_REVIEW);
   });
 });

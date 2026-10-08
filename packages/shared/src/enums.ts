@@ -101,6 +101,8 @@ export const ReviewActionType = {
   RETURNED_TO_TC:          "RETURNED_TO_TC",
   ESCALATED:               "ESCALATED",
   ADMIN_STATUS_OVERRIDE:   "ADMIN_STATUS_OVERRIDE",
+  /** ADMIN gave one application its own submission deadline (or removed it). */
+  SUBMISSION_EXTENDED:     "SUBMISSION_EXTENDED",
 } as const;
 export type ReviewActionType = (typeof ReviewActionType)[keyof typeof ReviewActionType];
 

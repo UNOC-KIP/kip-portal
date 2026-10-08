@@ -28,7 +28,7 @@ export async function currentWindow() {
 
 /** Resolve the gate for an application, reading the live window. */
 export async function editGateFor(
-  app: { status: string },
+  app: { status: string; submissionExtendedUntil: Date | null },
   actor: { role: string },
   now: Date = new Date(),
 ): Promise<ApplicationEditGate> {
@@ -36,6 +36,7 @@ export async function editGateFor(
     status: app.status,
     role: actor.role,
     window: await currentWindow(),
+    extendedUntil: app.submissionExtendedUntil,
     now,
   });
 }
@@ -46,7 +47,7 @@ export async function editGateFor(
  * same sentence the portal shows in its read-only banner.
  */
 export async function assertApplicationEditable(
-  app: { status: string },
+  app: { status: string; submissionExtendedUntil: Date | null },
   actor: { role: string },
 ): Promise<ApplicationEditGate> {
   const gate = await editGateFor(app, actor);

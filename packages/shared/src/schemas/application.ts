@@ -1237,6 +1237,16 @@ export const adminOverrideStatusSchema = z.object({
 });
 export type AdminOverrideStatusInput = z.infer<typeof adminOverrideStatusSchema>;
 
+/**
+ * Admin per-application submission extension — PUT /applications/:id/submission-extension.
+ * `until: null` removes the extension. See `submissionDeadline()`.
+ */
+export const submissionExtensionSchema = z.object({
+  until: z.string().datetime({ offset: true }).nullable(),
+  notes: z.string().trim().max(1000).optional(),
+});
+export type SubmissionExtensionInput = z.infer<typeof submissionExtensionSchema>;
+
 // ─── Joint-venture partners ──────────────────────────────────────────────────
 //
 // A JV application is several companies applying together. Each co-venturer is

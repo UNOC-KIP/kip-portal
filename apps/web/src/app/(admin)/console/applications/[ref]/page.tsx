@@ -4,6 +4,8 @@ import {
   FINAL_OUTCOME_STATUSES,
   COMPANY_TYPE_LABELS,
   BUSINESS_SECTOR_LABELS,
+  longDate,
+  SUBMISSION_EXTENDABLE_STATUSES,
 } from "@kip/shared";
 import { AdminTopbar } from "@/components/admin-topbar";
 import { PageHeader } from "@/components/page-header";
@@ -18,6 +20,7 @@ import { ApplicationSectionsView } from "../application-sections-view";
 import { EditApplicantButton } from "../edit-applicant-button";
 import { ExportEoiLink } from "../export-eoi-link";
 import { StatusOverrideControl } from "../status-override-control";
+import { SubmissionExtensionControl } from "../submission-extension-control";
 import type { UserEditData } from "../../users/[id]/edit-user-dialog";
 import { SectionEditButton } from "./section-edit-button";
 
@@ -54,6 +57,9 @@ export default async function AdminApplicationDetailPage({
     label: statusBadgeProps(v).label,
   }));
   const isFinal = FINAL_OUTCOME_STATUSES.includes(app.status as ApplicationStatus);
+  const extendable = SUBMISSION_EXTENDABLE_STATUSES.includes(app.status);
+  const extensionActive =
+    app.submissionExtendedUntil != null && new Date(app.submissionExtendedUntil).getTime() > Date.now();
 
   const applicantInitial: UserEditData | null = app.owner
     ? {
@@ -128,6 +134,22 @@ export default async function AdminApplicationDetailPage({
                 options={statusOptions}
                 locked={isFinal}
                 lockedReason={`This application has a final outcome (${badge.label}) — its stage can no longer be overridden.`}
+              />
+            </div>
+
+            {/* Per-application submission deadline */}
+            <div className="rounded-xl border border-ink-200 bg-white p-5">
+              <h2 className="mb-1 text-sm font-bold text-ink-700">Submission Deadline</h2>
+              <p className="mb-4 text-xs text-ink-500">
+                Give this applicant their own deadline to submit or amend after the application window has
+                closed. Nobody else is affected.
+              </p>
+              <SubmissionExtensionControl
+                applicationId={app.id}
+                currentLabel={app.submissionExtendedUntil ? longDate(app.submissionExtendedUntil) : null}
+                active={extensionActive}
+                allowed={extendable}
+                blockedReason={`This application is at ${badge.label} — it has left the applicant's hands, so an extension would not reopen it.`}
               />
             </div>
 

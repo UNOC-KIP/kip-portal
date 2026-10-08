@@ -19,7 +19,7 @@
  */
 import { z } from "zod";
 import { ApplicationStatus, UserRole } from "./enums";
-import { openUntil, type ApplicationEditWindow } from "./application-edit";
+import { extensionUntil, openUntil, type ApplicationEditWindow } from "./application-edit";
 import { longDate } from "./timeline";
 
 // ─── Vocabulary ──────────────────────────────────────────────────────────────
@@ -154,6 +154,8 @@ export type CommitteeGate = {
 export function tcDecisionGate(input: {
   status: string;
   window: ApplicationEditWindow;
+  /** The application's own submission extension, if any. */
+  extendedUntil?: string | Date | null;
   now: Date;
 }): CommitteeGate {
   const closeAt = openUntil(input.window, input.now);
@@ -161,6 +163,15 @@ export function tcDecisionGate(input: {
     return {
       open: false,
       reason: `The application window is open until ${longDate(closeAt)}. The Technical Committee can review applications once it closes.`,
+    };
+  }
+  // An applicant given extra time is still writing their application; the
+  // committee waits for it exactly as it waits for the window.
+  const extension = extensionUntil(input.extendedUntil, input.now);
+  if (extension) {
+    return {
+      open: false,
+      reason: `This applicant has been given until ${longDate(extension)} to submit or amend. The Technical Committee can decide once that extension ends.`,
     };
   }
   if (TC_DECIDABLE_STATUSES.includes(input.status)) return { open: true, reason: null };

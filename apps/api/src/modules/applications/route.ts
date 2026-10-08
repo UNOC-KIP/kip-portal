@@ -11,6 +11,7 @@ import {
   createApplicationSchema,
   updateSectionSchema,
   adminOverrideStatusSchema,
+  submissionExtensionSchema,
   savePartnersSchema,
   setApplicationPlotsSchema,
 } from "@kip/shared";
@@ -26,6 +27,7 @@ import {
   saveSection,
   submissionBlockers,
   overrideApplicationStatus,
+  setSubmissionExtension,
   savePartners,
   setApplicationPlots,
 } from "./applications.service.js";
@@ -258,6 +260,28 @@ applicationsRouter.patch(
       const input = adminOverrideStatusSchema.parse(req.body);
       const app = await overrideApplicationStatus(id, req.user!, input);
       res.json(app);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * PUT /applications/:id/submission-extension — per-application deadline (ADMIN only).
+ *
+ * Body `{ until: ISO datetime | null, notes? }`. Lets one applicant submit or
+ * amend after the window has closed; `null` removes the extension.
+ */
+applicationsRouter.put(
+  "/:id/submission-extension",
+  requireRole(UserRole.ADMIN),
+  async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!id) throw BadRequest("id required");
+      const input = submissionExtensionSchema.parse(req.body);
+      const app = await setSubmissionExtension(id, req.user!, input);
+      res.json({ id: app.id, submissionExtendedUntil: app.submissionExtendedUntil });
     } catch (e) {
       next(e);
     }

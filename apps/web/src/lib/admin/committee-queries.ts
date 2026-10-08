@@ -105,11 +105,11 @@ export type CommitteeContext = {
  * gates, member reviews, clarification history, and decisions with reasons.
  */
 export async function getCommitteeContext(
-  applicationId: string,
-  status: string,
+  app: { id: string; status: string; submissionExtendedUntil: string | null },
   viewerId: string,
   now: Date = new Date(),
 ): Promise<CommitteeContext> {
+  const { id: applicationId, status } = app;
   const [window, reviews, clarifications, actions] = await Promise.all([
     currentWindow(),
     LacReview.findAll({
@@ -132,7 +132,7 @@ export async function getCommitteeContext(
   const mine = reviews.find((r) => r.reviewerId === viewerId);
 
   return {
-    tcGate: tcDecisionGate({ status, window, now }),
+    tcGate: tcDecisionGate({ status, window, extendedUntil: app.submissionExtendedUntil, now }),
     lacGate: lacDecisionGate({ status }),
     lacReviews: reviews.map((row) => {
       const r = row as LacReview & { reviewer?: User };

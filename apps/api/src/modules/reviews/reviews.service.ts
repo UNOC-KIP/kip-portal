@@ -134,7 +134,12 @@ export async function recordTcDecision(
 
   const app = await sequelize.transaction(async (t) => {
     const app = await lockApplication(applicationId, t);
-    const gate = tcDecisionGate({ status: app.status, window, now: new Date() });
+    const gate = tcDecisionGate({
+      status: app.status,
+      window,
+      extendedUntil: app.submissionExtendedUntil,
+      now: new Date(),
+    });
     if (!gate.open) throw Conflict(gate.reason ?? "The TC cannot act on this application.");
 
     await transition(app, tcDecisionTarget(input.decision), actor, TC_ACTION_TYPE[input.decision], input.notes, t);

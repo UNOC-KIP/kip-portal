@@ -17,6 +17,7 @@ import {
   COMPANY_TYPE_LABELS,
   BUSINESS_SECTOR_LABELS,
   applicationEditGate,
+  submissionDeadline,
   clarificationCommitteeFor,
   REVIEW_COMMITTEE_LABELS,
   type ApplicationEditGate,
@@ -82,6 +83,7 @@ const ACTION_TEXT: Partial<Record<ReviewActionType, string>> = {
   [ReviewActionType.ALLOCATED]:              "Land plot allocated — welcome to KIP",
   [ReviewActionType.REQUESTED_CLARIFICATION]: "Clarification requested",
   [ReviewActionType.CLARIFICATION_PROVIDED]: "Clarification submitted",
+  [ReviewActionType.SUBMISSION_EXTENDED]:    "Submission deadline updated by the secretariat",
 };
 
 const ACTOR_TEXT: Partial<Record<UserRole, string>> = {
@@ -328,6 +330,16 @@ export async function getInvestorDashboardData(
     ],
   });
 
+  // The deadline this applicant is working to: the window's close, or their own
+  // per-application extension when the secretariat has given one.
+  const deadline = submissionDeadline({
+    window: activeWindow
+      ? { status: ApplicationWindowStatus.OPEN, openAt: activeWindow.openAt, closeAt: activeWindow.closeAt }
+      : null,
+    extendedUntil: app?.submissionExtendedUntil,
+    now,
+  });
+
   // Payment + documents both hang off the application; fetch them together.
   const [payment, documents, plotCount] = app
     ? await Promise.all([
@@ -407,8 +419,10 @@ export async function getInvestorDashboardData(
       sizeBytes: d.sizeBytes,
       uploadedAt: d.uploadedAt.toISOString(),
     })),
-    windowCloseAt: windowIsOpen ? activeWindow!.closeAt.toISOString() : null,
-    windowName:    windowIsOpen ? activeWindow!.name : null,
+    // An applicant on a per-application extension sees their own deadline, so
+    // the EOI journey and countdown stay open for them after the window closes.
+    windowCloseAt: deadline ? deadline.toISOString() : null,
+    windowName:    windowIsOpen ? activeWindow!.name : deadline ? "Extended submission" : null,
     edit: app
       ? applicationEditGate({
           status: app.status,
@@ -422,6 +436,7 @@ export async function getInvestorDashboardData(
                 closeAt: activeWindow.closeAt,
               }
             : null,
+          extendedUntil: app.submissionExtendedUntil,
           now,
         })
       : null,
@@ -528,6 +543,7 @@ export async function listInvestorApplications(
         status: app.status,
         role: actor?.role,
         window: openWindow,
+        extendedUntil: app.submissionExtendedUntil,
         now,
       }),
     } satisfies ApplicationSummary;
