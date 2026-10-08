@@ -54,6 +54,21 @@ describe("tcDecisionGate", () => {
     }
   });
 
+  it("waits for an applicant still inside their own submission extension", () => {
+    const g = tcDecisionGate({
+      status: ApplicationStatus.SUBMITTED,
+      window: null,
+      extendedUntil: "2026-10-20T23:59:59+03:00",
+      now,
+    });
+    expect(g.open).toBe(false);
+    expect(g.reason).toMatch(/extension/);
+    // A spent extension no longer holds the committee back.
+    expect(
+      tcDecisionGate({ status: ApplicationStatus.SUBMITTED, window: null, extendedUntil: "2026-10-01T00:00:00+03:00", now }).open,
+    ).toBe(true);
+  });
+
   it("is one-shot: closed once the TC has decided", () => {
     for (const status of [
       ApplicationStatus.LAC_REVIEW,

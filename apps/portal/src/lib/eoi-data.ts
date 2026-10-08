@@ -252,6 +252,7 @@ export async function getEoiWizardData(
     status: application.status,
     role: user.role,
     window: openWindow,
+    extendedUntil: application.submissionExtendedUntil,
     now: new Date(),
   });
 

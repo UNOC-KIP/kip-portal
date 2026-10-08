@@ -29,7 +29,7 @@ export default async function LacReviewPage({ params }: { params: { ref: string 
   const app = await getAdminApplicationDetail(ref);
   if (!app) notFound();
 
-  const committee = await getCommitteeContext(app.id, app.status, session.user.id);
+  const committee = await getCommitteeContext(app, session.user.id);
   const badge = statusBadgeProps(app.status);
   const gate = committee.lacGate;
   const isMember = LAC_REVIEW_ROLES.includes(role);

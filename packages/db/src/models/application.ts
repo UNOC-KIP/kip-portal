@@ -19,6 +19,8 @@ export class Application extends Model<
   declare ownerUserId: string
   declare investorOrgId: string
   declare submittedAt: CreationOptional<Date | null>
+  /** Per-application submission deadline set by ADMIN — see applicationEditGate. */
+  declare submissionExtendedUntil: CreationOptional<Date | null>
   declare decisionAt: CreationOptional<Date | null>
   declare decisionLetter: CreationOptional<string | null>
   declare createdAt: CreationOptional<Date>
@@ -40,6 +42,7 @@ export class Application extends Model<
         ownerUserId: { type: DataTypes.UUID, allowNull: false },
         investorOrgId: { type: DataTypes.UUID, allowNull: false },
         submittedAt: { type: DataTypes.DATE, allowNull: true },
+        submissionExtendedUntil: { type: DataTypes.DATE, allowNull: true },
         decisionAt: { type: DataTypes.DATE, allowNull: true },
         decisionLetter: { type: DataTypes.STRING, allowNull: true },
         createdAt: DataTypes.DATE,

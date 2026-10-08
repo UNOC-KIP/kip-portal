@@ -20,6 +20,9 @@ import {
   UserRole,
   UNASSIGNED_LOT_REFERENCE,
   canPreviewEoi,
+  extensionUntil,
+  SUBMISSION_EXTENDABLE_STATUSES,
+  submissionDeadline,
   canTransition,
   crossSectionIssues,
   formatReference,
@@ -36,6 +39,7 @@ import {
   canEditPlots,
   type ApplicantCategory,
   type AdminOverrideStatusInput,
+  type SubmissionExtensionInput,
   type SavePartnersInput,
   type SetApplicationPlotsInput,
 } from "@kip/shared";
@@ -118,7 +122,7 @@ export async function saveSection(
   input: { section: EoiSection; payload: Record<string, unknown>; complete: boolean },
 ): Promise<ApplicationSection> {
   const app = await Application.findByPk(applicationId, {
-    attributes: ["id", "ownerUserId", "status"],
+    attributes: ["id", "ownerUserId", "status", "submissionExtendedUntil"],
   });
   if (!app) throw NotFound("Application");
 
@@ -474,33 +478,42 @@ export async function submitApplication(
     );
   }
 
-  // Window: there must be an OPEN window and now must be within its bounds.
+  // Window: there must be an OPEN window and now must be within its bounds —
+  // or this application must carry a live per-application extension
+  // (`submissionDeadline()`, the same rule the portal's edit gate reads).
   //
-  // A preview actor may submit against a window that is closed or out of range,
-  // but a window row must still exist — the reference number is drawn from its
-  // year and its `sequenceCounter`, and there is nowhere else to get one. Note
-  // that this consumes a real number from that window's sequence.
+  // A preview actor, or an applicant on an extension, may submit against a
+  // window that is closed or out of range, but a window row must still exist —
+  // the reference number is drawn from its year and its `sequenceCounter`, and
+  // there is nowhere else to get one. Note that this consumes a real number
+  // from that window's sequence.
+  const now = new Date();
   const preview = canPreviewEoi(actor.role);
+  const openWindow = await ApplicationWindow.findOne({
+    where: { status: ApplicationWindowStatus.OPEN },
+    order: [["openAt", "DESC"]],
+  });
+  const extended = extensionUntil(app.submissionExtendedUntil, now) != null;
   const window =
-    (await ApplicationWindow.findOne({
-      where: { status: ApplicationWindowStatus.OPEN },
-      order: [["openAt", "DESC"]],
-    })) ??
-    (preview
+    openWindow ??
+    (preview || extended
       ? await ApplicationWindow.findOne({ order: [["openAt", "DESC"]] })
       : null);
 
   if (!window) {
     throw Conflict(
-      preview
-        ? "No application window exists to draw a reference number from. Create one in the admin console to test submission."
+      preview || extended
+        ? "No application window exists to draw a reference number from. Create one in the admin console first."
         : "No open application window",
     );
   }
 
-  const now = new Date();
-  if (!preview && (now < window.openAt || now > window.closeAt)) {
-    throw Forbidden("The application window is closed");
+  if (!preview && !submissionDeadline({ window: openWindow, extendedUntil: app.submissionExtendedUntil, now })) {
+    throw Forbidden(
+      app.submissionExtendedUntil
+        ? "Your submission extension has ended"
+        : "The application window is closed",
+    );
   }
 
   return sequelize.transaction(async (t) => {
@@ -525,6 +538,56 @@ export async function submitApplication(
   });
 }
 
+
+/**
+ * Per-application submission extension — PUT /applications/:id/submission-extension
+ * (ADMIN only, enforced at the route).
+ *
+ * Gives one applicant until `until` to submit (a draft) or amend (a submitted
+ * application) after the window has closed for everyone else. `until: null`
+ * removes it. The value is read by `submissionDeadline()` in @kip/shared, so the
+ * submit guard, the edit gate, the TC decision gate and the portal all move
+ * together. Audited as SUBMISSION_EXTENDED.
+ */
+export async function setSubmissionExtension(
+  applicationId: string,
+  actor: { id: string; role: string },
+  input: SubmissionExtensionInput,
+): Promise<Application> {
+  const app = await Application.findByPk(applicationId);
+  if (!app) throw NotFound("Application");
+
+  const until = input.until ? new Date(input.until) : null;
+  if (until) {
+    if (until <= new Date()) throw BadRequest("The extended deadline must be in the future");
+    if (!SUBMISSION_EXTENDABLE_STATUSES.includes(app.status)) {
+      throw Conflict(
+        `Only a draft or submitted application can be given more time (this one is ${app.status}).`,
+      );
+    }
+  } else if (!app.submissionExtendedUntil) {
+    throw BadRequest("This application has no submission extension to remove");
+  }
+
+  return sequelize.transaction(async (t) => {
+    await app.update({ submissionExtendedUntil: until }, { transaction: t });
+    const summary = until
+      ? `Submission deadline extended to ${until.toISOString()}`
+      : "Submission extension removed";
+    await ReviewAction.create(
+      {
+        applicationId: app.id,
+        actorUserId: actor.id,
+        type: ReviewActionType.SUBMISSION_EXTENDED,
+        fromStatus: app.status,
+        toStatus: app.status,
+        notes: input.notes ? `${summary}. ${input.notes}` : summary,
+      },
+      { transaction: t },
+    );
+    return app;
+  });
+}
 
 /**
  * Admin stage override — PATCH /applications/:id/status (ADMIN only, enforced at
@@ -611,7 +674,7 @@ export async function savePartners(
   input: SavePartnersInput,
 ): Promise<ApplicationPartner[]> {
   const app = await Application.findByPk(applicationId, {
-    attributes: ["id", "ownerUserId", "status"],
+    attributes: ["id", "ownerUserId", "status", "submissionExtendedUntil"],
   });
   if (!app) throw NotFound("Application");
   if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {
@@ -683,7 +746,7 @@ export async function setApplicationPlots(
   input: SetApplicationPlotsInput,
 ): Promise<Application> {
   const app = await Application.findByPk(applicationId, {
-    attributes: ["id", "ownerUserId", "status", "lotReference", "plotId"],
+    attributes: ["id", "ownerUserId", "status", "submissionExtendedUntil", "lotReference", "plotId"],
   });
   if (!app) throw NotFound("Application");
   if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {

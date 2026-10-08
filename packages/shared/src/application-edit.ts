@@ -90,17 +90,68 @@ export function openUntil(window: ApplicationEditWindow, now: Date): Date | null
 }
 
 /**
+ * Stages a per-application extension means anything for — the applicant is
+ * still writing. Past these the application is with a committee, and an
+ * extension would not hand it back. Read by the API and the console control.
+ */
+export const SUBMISSION_EXTENDABLE_STATUSES: readonly string[] = [
+  ApplicationStatus.DRAFT_PAYMENT_PENDING,
+  ApplicationStatus.DRAFT,
+  ApplicationStatus.SUBMITTED,
+];
+
+/**
+ * A per-application extension, if it is still running. ADMIN sets
+ * `Application.submissionExtendedUntil` to give one applicant time the window
+ * no longer gives everyone; a past value is spent and means nothing.
+ */
+export function extensionUntil(
+  extendedUntil: string | Date | null | undefined,
+  now: Date,
+): Date | null {
+  if (!extendedUntil) return null;
+  const until = new Date(extendedUntil);
+  return until > now ? until : null;
+}
+
+/**
+ * The instant this application must be submitted (or amended) by, if one is
+ * live right now: the later of the open window's close and the application's
+ * own extension. Null means the schedule has closed for this application.
+ *
+ * The single answer to "may this applicant still submit?" — the API's submit
+ * guard, the edit gate below, the TC decision gate and the investor dashboard
+ * all read it, so an extension opens all of them together.
+ */
+export function submissionDeadline(input: {
+  window: ApplicationEditWindow;
+  extendedUntil?: string | Date | null;
+  now: Date;
+}): Date | null {
+  const windowClose = openUntil(input.window, input.now);
+  const extension = extensionUntil(input.extendedUntil, input.now);
+  if (windowClose && extension) return extension > windowClose ? extension : windowClose;
+  return windowClose ?? extension;
+}
+
+/**
  * May this actor edit this application right now?
  *
  * @param window the most recent OPEN `ApplicationWindow`, or null when none is.
+ * @param extendedUntil the application's own `submissionExtendedUntil`, if any.
  */
 export function applicationEditGate(input: {
   status: string;
   role?: string | null;
   window: ApplicationEditWindow;
+  extendedUntil?: string | Date | null;
   now: Date;
 }): ApplicationEditGate {
   const { status, role, window, now } = input;
+  const deadline = submissionDeadline({ window, extendedUntil: input.extendedUntil, now });
+  // Whether the deadline in force is this application's own, not the window's —
+  // only the wording differs.
+  const extended = deadline != null && deadline.getTime() !== openUntil(window, now)?.getTime();
 
   // ADMIN keeps write access at every stage: the console's raw-JSON section
   // editor is the correction path when an application is stuck, and the EOI
@@ -115,13 +166,14 @@ export function applicationEditGate(input: {
   }
 
   if (ALWAYS_EDITABLE.includes(status)) {
-    const closeAt = openUntil(window, now);
     return {
       editable: true,
       mode: "DRAFT",
-      closesAt: closeAt ? closeAt.toISOString() : null,
-      message: closeAt
-        ? `This application is a draft. It must be submitted by ${longDate(closeAt)}.`
+      closesAt: deadline ? deadline.toISOString() : null,
+      message: deadline
+        ? extended
+          ? `This application is a draft. The secretariat has extended your submission deadline to ${longDate(deadline)}.`
+          : `This application is a draft. It must be submitted by ${longDate(deadline)}.`
         : "This application is a draft and has not been submitted.",
     };
   }
@@ -148,13 +200,14 @@ export function applicationEditGate(input: {
   // The change this whole module exists for: a submitted application stays the
   // applicant's until the call closes.
   if (status === ApplicationStatus.SUBMITTED) {
-    const closeAt = openUntil(window, now);
-    if (closeAt) {
+    if (deadline) {
       return {
         editable: true,
         mode: "AMEND",
-        closesAt: closeAt.toISOString(),
-        message: `Your application has been submitted, and you can still change it until the window closes on ${longDate(closeAt)}. Edits are saved straight away — there is nothing to submit again.`,
+        closesAt: deadline.toISOString(),
+        message: extended
+          ? `Your application has been submitted, and the secretariat has given you until ${longDate(deadline)} to change it. Edits are saved straight away — there is nothing to submit again.`
+          : `Your application has been submitted, and you can still change it until the window closes on ${longDate(deadline)}. Edits are saved straight away — there is nothing to submit again.`,
       };
     }
     return {

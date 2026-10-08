@@ -29,7 +29,7 @@ async function loadApplicationFor(
   actor: Actor,
 ): Promise<Application> {
   const app = await Application.findByPk(applicationId, {
-    attributes: ["id", "ownerUserId", "status"],
+    attributes: ["id", "ownerUserId", "status", "submissionExtendedUntil"],
   });
   if (!app) throw NotFound("Application");
   if (app.ownerUserId !== actor.id && actor.role !== UserRole.ADMIN) {

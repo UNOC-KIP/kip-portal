@@ -623,6 +623,7 @@ const ACTIVITY_TEXT: Partial<Record<ReviewActionType, string>> = {
   [ReviewActionType.CLARIFICATION_PROVIDED]:  "clarification provided",
   [ReviewActionType.RECOMMENDED]:             "LAC member recommendation recorded",
   [ReviewActionType.ADMIN_STATUS_OVERRIDE]:   "stage overridden by admin",
+  [ReviewActionType.SUBMISSION_EXTENDED]:     "submission deadline changed by admin",
 };
 
 export async function getAdminDashboard(): Promise<AdminDashboard> {
@@ -719,6 +720,8 @@ export type AdminApplicationDetail = {
   lotReference: string;
   /** Formatted submission time — null while the application is a draft. */
   submittedAt: string | null;
+  /** ISO per-application submission deadline set by ADMIN, or null. May be in the past (spent). */
+  submissionExtendedUntil: string | null;
   landHa: string;
   sectionsComplete: number;
   totalSections: number;
@@ -873,6 +876,7 @@ export async function getAdminApplicationDetail(ref: string): Promise<AdminAppli
     orgName: a.investorOrg?.legalName ?? "—",
     lotReference: a.lotReference,
     submittedAt: a.submittedAt ? formatDateTime(a.submittedAt) : null,
+    submissionExtendedUntil: a.submissionExtendedUntil ? a.submissionExtendedUntil.toISOString() : null,
     landHa: hectaresFromSqm(landSizeSqm(sections)),
     sectionsComplete: sectionList.filter((s) => s.complete).length,
     totalSections: sectionList.length,

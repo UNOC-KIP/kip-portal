@@ -1,5 +1,6 @@
 # CLAUDE.md — KIP Investor Portal
-> Last updated: 5 October 2026. Update this file in the same commit as any architectural change.
+> Last updated: 8 October 2026. Update this file in the same commit as any architectural change.
+> Per-application submission extension added 8 October 2026 — ADMIN can give one applicant their own deadline past the window's close (`Application.submissionExtendedUntil`); the edit gate, the submit guard, the TC gate and the portal dashboard all read `submissionDeadline()`. See "Per-application submission extension".
 > Committee review made real 5 October 2026 — the TC decision form was a mock that saved nothing; TC decisions, the LAC module (member reviews + one final decision) and the investor's reply to a request for more information now all go through the API's `reviews/` module, gated by one pure set of rules in `@kip/shared` committee.ts. See "Committee review (TC + LAC)".
 > Post-submission editing added 14 September 2026 — submission is no longer the lock; one pure gate keeps a submitted application editable by its applicant until the window closes, and the wizard, the row actions and the API write guards all read it. See "Editing after submission".
 > Invoice-readiness gate added 10 September 2026 — one pure gate (plots + TIN + registered address) closes the portal's "Generate invoice" buttons and the API write together, and the finance CSV now carries the whole billed party. See "Invoice readiness".
@@ -215,7 +216,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 | `Account`, `Session`, `VerificationToken` | NextAuth tables |
 | `InvestorOrg` | `legalName`, `tradingName`, `registrationNumber`, `ursbRegistrationNumber`, `companyType (CompanyType)`, `businessSector (BusinessSector)`, `countryOfIncorporation`, `tin`, `address`, `phone`, `email` — company-official contact, distinct from the rep's on `User` |
 | `ApplicationWindow` | open/close period, `sequenceCounter` |
-| `Application` | central EOI record |
+| `Application` | central EOI record — `submissionExtendedUntil` (nullable TIMESTAMPTZ): ADMIN's per-application deadline past the window's close, see "Per-application submission extension" |
 | `ApplicationSection` | one row per section, `payload` JSON |
 | `Document` | S3 file metadata |
 | `Payment` | `amount DECIMAL(14,2)`, `currency`, gates DRAFT_PAYMENT_PENDING→DRAFT |
@@ -240,7 +241,7 @@ Format: `KIP-EOI-YYYY-NNNN` — assigned only at SUBMITTED transition inside a t
 - `PaymentStatus`: `PENDING | PROOF_UPLOADED | CONFIRMED | FAILED | REFUNDED`
 - `Currency`: `USD | UGX`
 - `DocumentKind`: 24 values — one per "Attach:" bullet in the EOI spec, plus `PAYMENT_PROOF` and `OTHER`. **Backed by a Postgres ENUM type, so adding a value needs a migration** (`ALTER TYPE … ADD VALUE`). Labels in `DOCUMENT_KIND_LABELS`
-- `ReviewActionType`: `ASSIGNED | COMMENTED | REQUESTED_CLARIFICATION | CLARIFICATION_PROVIDED | RECOMMENDED | REJECTED | APPROVED | SHORTLISTED | NOT_SHORTLISTED | LAC_APPROVED | LAC_REJECTED | ALLOCATED | RETURNED_TO_TC | ESCALATED | ADMIN_STATUS_OVERRIDE` (Postgres ENUM — the last value was missing from the DB until the committee-review migration, so every admin override failed on insert). `RECOMMENDED` = an LAC member review; hidden from investors
+- `ReviewActionType`: `ASSIGNED | COMMENTED | REQUESTED_CLARIFICATION | CLARIFICATION_PROVIDED | RECOMMENDED | REJECTED | APPROVED | SHORTLISTED | NOT_SHORTLISTED | LAC_APPROVED | LAC_REJECTED | ALLOCATED | RETURNED_TO_TC | ESCALATED | ADMIN_STATUS_OVERRIDE | SUBMISSION_EXTENDED` (Postgres ENUM — the last value was missing from the DB until the committee-review migration, so every admin override failed on insert). `RECOMMENDED` = an LAC member review; hidden from investors
 - `ApplicationWindowStatus`: `DRAFT | OPEN | CLOSED | ARCHIVED`
 - `CompanyType`: `LIMITED_LIABILITY_COMPANY | PUBLIC_LIMITED_COMPANY | JOINT_VENTURE | PARTNERSHIP | SOLE_PROPRIETORSHIP | OTHER`
 - `BusinessSector`: `PETROCHEMICALS_REFINING | FERTILISERS_CHEMICALS | LIGHT_MANUFACTURING | AGRO_PROCESSING | LOGISTICS_WAREHOUSING | COMMERCIAL_HOSPITALITY | ICT | OTHER`
@@ -286,7 +287,7 @@ Service pattern: fetch → guard status → `sequelize.transaction()` → fire w
 
 | Module | Status |
 |---|---|
-| `applications/` | create draft, get, `PUT /:id/section` (owner or ADMIN — **`complete` flag splits draft saves from completion**), `GET /:id/blockers` (dry run of the submit guard), submit (DRAFT→SUBMITTED assigns ref); `PUT /:id/partners` + `PUT /:id/plots`; `DELETE /:id` soft delete + payments (ADMIN only). Every write above is fronted by `assertApplicationEditable()` — see "Editing after submission" |
+| `applications/` | create draft, get, `PUT /:id/section` (owner or ADMIN — **`complete` flag splits draft saves from completion**), `GET /:id/blockers` (dry run of the submit guard), submit (DRAFT→SUBMITTED assigns ref); `PUT /:id/partners` + `PUT /:id/plots`; `PUT /:id/submission-extension` (ADMIN only — `{ until: ISO | null, notes? }`, audited as `SUBMISSION_EXTENDED`); `DELETE /:id` soft delete + payments (ADMIN only). Every write above is fronted by `assertApplicationEditable()` — see "Editing after submission" |
 | `documents/` | EOI attachments. `POST /presign` → S3 PUT URL; `POST /` registers the row **after** the upload succeeds; `GET /?applicationId=`; `GET /:id/download`; `DELETE /:id`. Owner-or-ADMIN, PDF-only, 5 MB. Payment proof is rejected here — it belongs to `payments/`. Add/remove follows the application's edit gate, not a status list of its own |
 | `payments/` | initiate only |
 | `users/` | **Self-service (any authenticated user, declared before `/:id`):** `PATCH /me` (own rep details + own org contact block — never email/role/status/legal identity); `POST /me/password` (verify current → set new, stamps `passwordChangedAt`, best-effort confirmation email). **ADMIN only:** `POST /staff` (create staff — emails the login details + temp password via `staffWelcomeEmail`; the response carries `tempPassword` **only** when that email failed, as the admin's fallback); `PATCH /:id` edit user + org (role changes staff→staff only); `DELETE /:id` soft delete (guards: not self, not last admin; cascades to own applications + payments, org if orphaned); `POST /:id/approve` + `POST /:id/reject`; `POST /:id/reset-password` (ACTIVE accounts only — generates a new temp password, clears `passwordChangedAt`, emails it to the login address; plaintext never returned to the admin or any webhook) |
@@ -499,6 +500,18 @@ Four consumers read that one gate, which is the point — the fields the portal 
 **Plots are the one exception, and `canEditPlots()` is where it is written down.** Submitting prices the fee per plot (`computeApplicationFee`) and hands finance an invoice that may already have been sent and paid, so `setApplicationPlots()` refuses during `AMEND` and the wizard's `PlotPicker` is disabled with a pointer to the secretariat. ADMIN can still correct a selection.
 
 **An amendment does not re-run the submit guard.** Draft saves stay available (`complete: false` still clears `completedAt`), so an investor mid-edit never loses work — which means an applicant *can* leave a submitted application with a section they emptied. That is deliberate: `submissionBlockers()` is a gate on the SUBMITTED *transition*, and re-running it on every keystroke would break save-and-resume. "Check my application" (`GET /:id/blockers`) stays available throughout the amendment window, and an incomplete application is exactly what TC review and `TC_CLARIFICATION_REQUESTED` exist to catch.
+
+## Per-application submission extension
+
+**The window is the deadline for everyone — unless ADMIN gives one applicant their own.** `Application.submissionExtendedUntil` (set from the "Submission Deadline" card on `/console/applications/[ref]`, `submission-extension-control.tsx` → `PUT /applications/:id/submission-extension`) lets that one application be submitted (a draft) or amended (`SUBMITTED`) after the window has closed. Nobody else is affected and the window is not touched. The date picker means end of that day, Kampala time.
+
+**One rule — `submissionDeadline({ window, extendedUntil, now })` in `@kip/shared` application-edit.ts**: the later of the open window's close and a still-future extension, or null. A past extension is spent and means nothing; an extension earlier than the window never shortens it. Consumers:
+- **`applicationEditGate()`** takes `extendedUntil`, so `DRAFT` / `AMEND` modes, the wizard, the applications list, and the API's write guards (sections, partners, plots, documents) all follow it. Every API caller of `assertApplicationEditable()` must select `submissionExtendedUntil` — a missing attribute silently ignores the extension.
+- **`submitApplication()`** accepts a submit when `submissionDeadline()` is live, falling back to the most recent window of any status for the reference number (same as preview).
+- **`tcDecisionGate()`** takes `extendedUntil` and refuses while it is live — the TC waits for an applicant still writing, exactly as it waits for the window.
+- **The investor dashboard** reports the extended deadline as `windowCloseAt`, so the EOI journey and countdown stay open for that applicant.
+
+Only `SUBMISSION_EXTENDABLE_STATUSES` (`DRAFT_PAYMENT_PENDING`, `DRAFT`, `SUBMITTED`) can take one — past those the application is with a committee, and the way back is a request for more information. Plots stay locked during an extension's `AMEND` mode, as in the window (`canEditPlots()`). Tested in `apps/portal/src/lib/application-edit.test.ts` and `apps/web/src/lib/committee.test.ts`.
 
 ## Site-visit booking window
 
@@ -779,6 +792,7 @@ Before committing a data-layer change: `pnpm --filter @kip/web typecheck && pnpm
 - Write `User.investorOrgId` on a staff account — the preview sandbox org hangs off the `Application`, which is what keeps admins out of investor reports
 - Assume an investor has an `Application` — registration creates none; `POST /applications` from the dashboard does
 - Treat `SUBMITTED` as read-only to the applicant, or re-derive editability from a status list — call `applicationEditGate()`, the one gate the wizard, the row actions and the API write guards share. The window closing is the lock
+- Re-derive "may this applicant still submit?" from the window alone — call `submissionDeadline()`, which includes the application's own `submissionExtendedUntil`; reopening the whole window to help one applicant reopens it for everyone
 - Let an amendment change the plot selection — the fee is priced per plot and the invoice may already be out; `canEditPlots()` is the exception and the secretariat handles the rest
 - Give the documents module its own editable-status list — it delegates to `assertApplicationEditable()`, so an attachment can never outlive the section that refers to it
 - Re-derive the invoice requirements inline, or let a portal "Generate invoice" button offer what the API refuses — call `invoiceBlockers()`, the one gate the API guard and both portal buttons share
