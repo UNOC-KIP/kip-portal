@@ -51,6 +51,7 @@ export default function SignUpPage() {
     repDesignation: "",
     repEmail: "",
     repPhone: "",
+    website: "", // honeypot — hidden from people, filled by form bots
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -116,6 +117,7 @@ export default function SignUpPage() {
           repDesignation: form.repDesignation.trim(),
           repEmail: form.repEmail.trim(),
           repPhone: form.repPhone.trim(),
+          website: form.website,
         }),
       });
 
@@ -209,6 +211,16 @@ export default function SignUpPage() {
                 </p>
 
                 <form onSubmit={handleSubmit} className="mt-8 space-y-8" noValidate>
+                  <input
+                    type="text"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    aria-hidden="true"
+                    value={form.website}
+                    onChange={(e) => set("website", e.target.value)}
+                    className="absolute -left-[9999px] h-0 w-0 opacity-0"
+                  />
                   <div>
                     <h3 className="mb-4 border-b border-brand-500 pb-1 text-sm font-bold uppercase tracking-wider text-brand-600">
                       Company Identity

@@ -6,11 +6,26 @@ import { sequelize, User, InvestorOrg } from "@kip/db";
 import { CompanyType, BusinessSector, UserRole, UserStatus } from "@kip/shared";
 import { fireWebhook } from "@/lib/webhooks";
 import { credentialsEmail, portalUrl, sendMail } from "@/lib/mailer";
+import {
+  HONEYPOT_FIELD,
+  clientIp,
+  containsLink,
+  createRateLimiter,
+} from "@/lib/signup-guard";
+
+// Every registration sends an email from the shared Support.Kip mailbox, so
+// these limits protect its ~30/min quota as much as the user table.
+const perIp = createRateLimiter(5, 60 * 60_000);
+const perMailbox = createRateLimiter(2, 24 * 60 * 60_000);
+const allSignups = createRateLimiter(60, 60 * 60_000);
+
+const NO_LINKS = "Links are not allowed here";
 
 const optionalText = (max: number, message: string) =>
   z
     .string()
     .max(max, message)
+    .refine((v) => !containsLink(v), NO_LINKS)
     .optional()
     .or(z.literal("").transform(() => undefined));
 
@@ -24,7 +39,8 @@ const registerSchema = z.object({
   companyName: z
     .string()
     .min(2, "Company name must be at least 2 characters")
-    .max(200, "Company name is too long"),
+    .max(200, "Company name is too long")
+    .refine((v) => !containsLink(v), NO_LINKS),
   tradingName: optionalText(200, "Trading name is too long"),
   country: z.string().min(1, "Country is required"),
   companyType: z.nativeEnum(CompanyType, {
@@ -37,17 +53,34 @@ const registerSchema = z.object({
   repName: z
     .string()
     .min(2, "Full name is required")
-    .max(150, "Name is too long"),
+    .max(150, "Name is too long")
+    .refine((v) => !containsLink(v), NO_LINKS),
   repDesignation: z
     .string()
     .min(2, "Designation is required")
-    .max(100, "Designation is too long"),
+    .max(100, "Designation is too long")
+    .refine((v) => !containsLink(v), NO_LINKS),
   repEmail: z.string().email("Enter a valid email address"),
   repPhone: z
     .string()
     .min(7, "Enter a valid phone number")
-    .max(20, "Phone number is too long"),
+    .max(20, "Phone number is too long")
+    .regex(/^[0-9+()\-.\s]+$/, "Enter a valid phone number"),
+  [HONEYPOT_FIELD]: z.string().optional(),
 });
+
+/** `a.b+7@gmail.com` → `ab@gmail.com` — one real inbox, however many aliases. */
+function mailboxKey(email: string): string {
+  const [local = "", domain = ""] = email.split("@");
+  const base = local.split("+")[0] ?? "";
+  return `${domain === "gmail.com" || domain === "googlemail.com" ? base.replace(/\./g, "") : base}@${domain}`;
+}
+
+const tooMany = () =>
+  NextResponse.json(
+    { error: "Too many registration attempts. Please try again later." },
+    { status: 429 },
+  );
 
 /** Same shape as `generatePassword()` in apps/api/src/modules/users/users.service.ts */
 function generatePassword(): string {
@@ -55,6 +88,13 @@ function generatePassword(): string {
 }
 
 export async function POST(req: NextRequest) {
+  const now = Date.now();
+  const ip = clientIp(req.headers.get("x-forwarded-for"), req.headers.get("x-real-ip"));
+  if (!perIp(ip, now) || !allSignups("all", now)) {
+    console.warn("[register] rate limited", { ip });
+    return tooMany();
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -72,6 +112,17 @@ export async function POST(req: NextRequest) {
 
   const data = result.data;
   const normalizedRepEmail = data.repEmail.toLowerCase().trim();
+
+  // Honeypot filled → a bot. Answer like a success so it learns nothing.
+  if (data[HONEYPOT_FIELD]) {
+    console.warn("[register] honeypot tripped", { ip, email: normalizedRepEmail });
+    return NextResponse.json({ ok: true, emailSent: true }, { status: 201 });
+  }
+
+  if (!perMailbox(mailboxKey(normalizedRepEmail), now)) {
+    console.warn("[register] mailbox limit", { ip, email: normalizedRepEmail });
+    return tooMany();
+  }
 
   const existing = await User.findOne({ where: { email: normalizedRepEmail } });
   if (existing) {
